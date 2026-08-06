@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ContentType {
+  movie
+  series
+}
+
+model User {
+  id           String          @id @default(uuid())
+  email        String          @unique
+  passwordHash String
+  username     String          @unique
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  
+  // Relations
+  watchProgresses WatchProgress[]
+  myListItems     MyListItem[]
+}
+
+model Title {
+  id              String          @id @default(uuid())
+  title           String
+  description     String          @db.Text
+  contentType     ContentType
+  genre           String
+  releaseYear     Int
+  rating          String
+  durationMinutes Int?            // Only for movies; series duration comes from episodes
+  thumbnailUrl    String
+  heroImageUrl    String?
+  playbackUrl     String?         // Only for movies; series use Episode.playbackUrl
+  isOriginal      Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  seasons         Season[]
+  watchProgresses WatchProgress[]
+  myListItems     MyListItem[]
+
+  @@index([contentType])
+  @@index([genre])
+}
+
+model Season {
+  id           String    @id @default(uuid())
+  titleId      String
+  title        Title     @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  seasonNumber Int
+  synopsis     String?   @db.Text
+  
+  // Relations
+  episodes     Episode[]
+}
+
+model Episode {
+  id              String          @id @default(uuid())
+  seasonId        String
+  season          Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  episodeNumber   Int
+  title           String
+  description     String          @db.Text
+  durationMinutes Int
+  thumbnailUrl    String
+  playbackUrl     String
+
+  // Relations
+  watchProgresses WatchProgress[]
+}
+
+model WatchProgress {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  titleId         String
+  title           Title     @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  episodeId       String?   // Null if it's a movie
+  episode         Episode?  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  progressSeconds Int
+  completed       Boolean   @default(false)
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model MyListItem {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  titleId   String
+  title     Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+  addedAt   DateTime @default(now())
+
+  @@index([userId])
+}
