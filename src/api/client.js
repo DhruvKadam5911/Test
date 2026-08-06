@@ -1,20 +1,14 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-export async function request(endpoint, options = {}, token = null) {
+export async function request(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
-  
-  const headers = {
-    "Content-Type": "application/json",
-    ...options.headers,
-  };
-
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
 
   const config = {
     ...options,
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
   };
 
   try {
@@ -37,9 +31,9 @@ export async function request(endpoint, options = {}, token = null) {
 }
 
 export const api = {
-  get: (endpoint, token) => request(endpoint, { method: "GET" }, token),
-  post: (endpoint, body, token) => request(endpoint, { method: "POST", body: JSON.stringify(body) }, token),
-  delete: (endpoint, token) => request(endpoint, { method: "DELETE" }, token),
+  get: (endpoint) => request(endpoint, { method: "GET" }),
+  post: (endpoint, body) => request(endpoint, { method: "POST", body: JSON.stringify(body) }),
+  delete: (endpoint) => request(endpoint, { method: "DELETE" }),
 };
 
 export default api;

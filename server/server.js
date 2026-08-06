@@ -3,10 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import prisma from "./src/config/db.js";
 
-import authRoutes from "./src/routes/auth.js";
 import titlesRoutes from "./src/routes/titles.js";
-import progressRoutes from "./src/routes/progress.js";
-import mylistRoutes from "./src/routes/mylist.js";
 
 dotenv.config();
 
@@ -45,10 +42,7 @@ app.get("/", (req, res) => {
     health: "/health",
     frontendUrl: "http://localhost:5173",
     endpoints: {
-      auth: "/auth",
       titles: "/titles",
-      progress: "/progress",
-      mylist: "/mylist",
     },
   });
 });
@@ -64,10 +58,7 @@ app.get("/health", async (req, res) => {
 });
 
 // API Routes Mounting
-app.use("/auth", authRoutes);
 app.use("/titles", titlesRoutes);
-app.use("/progress", progressRoutes);
-app.use("/mylist", mylistRoutes);
 
 // Global 404 Handler
 app.use((req, res) => {

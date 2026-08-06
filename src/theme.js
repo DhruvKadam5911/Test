@@ -15,3 +15,22 @@ export const colors = {
 
 export const displayFont = "'Inter', system-ui, sans-serif";
 export const bodyFont = "'Inter', system-ui, sans-serif";
+
+export const FALLBACK_GRADIENT = "linear-gradient(135deg, #3A1F22, #17141A)";
+
+function isCssGradient(value) {
+  return /^(linear|radial|conic)-gradient\(/.test(value) || value.startsWith("url(");
+}
+
+// Thumbnail/hero fields hold either a CSS gradient placeholder or a real image URL.
+// Used as a `background` shorthand value (e.g. card thumbnails, player poster).
+export function resolveBackground(value, fallback = FALLBACK_GRADIENT) {
+  if (!value) return fallback;
+  return isCssGradient(value) ? value : `url("${value}") center/cover no-repeat`;
+}
+
+// Used as a `background-image` value paired with separate backgroundSize/backgroundPosition (e.g. hero banner).
+export function resolveBackgroundImage(value, fallback = FALLBACK_GRADIENT) {
+  if (!value) return fallback;
+  return isCssGradient(value) ? value : `url("${value}")`;
+}
