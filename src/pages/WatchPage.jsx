@@ -486,7 +486,7 @@ export default function WatchPage() {
       {/* Footer */}
       <footer className="px-6 md:px-10 py-8 w-full mt-12" style={{ borderTop: `1px solid ${colors.ring}` }}>
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <OnionLogo height={40} />
+          <OnionLogo height={56} />
           <div className="flex gap-5">
             {["About", "Creators", "Help", "Terms"].map((l) => (
               <span key={l} style={{ fontSize: 12.5, color: colors.textMuted, cursor: "pointer" }}>{l}</span>

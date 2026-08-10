@@ -90,7 +90,7 @@ export default function ContentRow({ title, items, size = "md", rank = false, lo
 
         <div
           ref={scrollerRef}
-          className="flex gap-3.5 overflow-x-auto px-6 md:px-10 pt-2 pb-10"
+          className="flex gap-3.5 overflow-x-auto px-6 md:px-10 pt-2 pb-32"
           style={{ scrollbarWidth: "none" }}
         >
           {loading ? (

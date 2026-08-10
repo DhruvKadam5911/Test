@@ -26,6 +26,12 @@ export default function ContentCard({ item, size = "md", rank }) {
   const w = size === "lg" ? 260 : 200;
   const h = size === "lg" ? 146 : 112;
 
+  // Rank digit sizing — glyph width is estimated from font size. Only a small
+  // sliver tucks behind the poster; most of the digit stands out to the left.
+  const rankFontSize = h * 0.85;
+  const rankGlyphWidth = rankFontSize * 0.62;
+  const rankOverlap = rankGlyphWidth * 0.2;
+
   const titleObj = (item && typeof item.title === "object" ? item.title : item) || {};
   const displayTitle = titleObj.title || "Untitled";
   const displaySub = titleObj.genre ? `${titleObj.genre} • ${titleObj.releaseYear || ""}` : titleObj.contentType || "";
@@ -40,19 +46,23 @@ export default function ContentCard({ item, size = "md", rank }) {
   return (
     <div
       className="relative flex-shrink-0"
-      style={{ width: w, marginLeft: rank ? 30 : 0 }}
+      style={{ width: w, marginLeft: rank ? Math.ceil(rankGlyphWidth - rankOverlap) + 12 : 0 }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
       {/* Static base card — always visible, defines row height, works without hover (touch devices) */}
       <div className="relative" style={{ width: w, height: h }}>
-        {/* Rank digit for Top 10 style rows — scoped to image height so it doesn't bleed into the caption below */}
+        {/* Rank digit for Top 10 style rows — scoped to image height (bottom:0 here means
+            image bottom, not the caption below it) so it never bleeds into the title text.
+            Positioned so roughly half its own width tucks behind the poster (zIndex 1 < 2),
+            classic Top 10 styling — half hidden under the card, half visible in the gutter. */}
         {rank && (
           <span
-            className="absolute -left-7 bottom-0 pointer-events-none select-none leading-none"
+            className="absolute bottom-0 pointer-events-none select-none leading-none"
             style={{
+              right: `calc(100% - ${rankOverlap}px)`,
               fontFamily: bodyFont,
-              fontSize: h * 0.95,
+              fontSize: rankFontSize,
               fontWeight: 800,
               color: colors.bg,
               WebkitTextStroke: `2.5px ${colors.accentLight}`,

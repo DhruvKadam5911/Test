@@ -45,7 +45,7 @@ export default function AppNavbar({ onSearchChange }) {
     >
       <div className="flex items-center gap-10 md:gap-12">
         <Link to="/" style={{ textDecoration: "none" }}>
-          <OnionLogo height={44} />
+          <OnionLogo height={84} />
         </Link>
         <div className="hidden md:flex items-center gap-7">
           <Link to="/" style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted, textDecoration: "none" }}>Browse</Link>

@@ -1,4 +1,5 @@
 import prisma from "../config/db.js";
+import { resolvePlaybackUrl } from "../services/videoProvider.js";
 
 // GET /titles
 export async function getTitles(req, res) {
@@ -120,7 +121,8 @@ export async function getPlaybackUrl(req, res) {
     }
 
     if (title.contentType === "movie") {
-      return res.status(200).json({ playbackUrl: title.playbackUrl });
+      const playbackUrl = await resolvePlaybackUrl(title.playbackUrl);
+      return res.status(200).json({ playbackUrl });
     }
 
     // Series playback
@@ -136,7 +138,8 @@ export async function getPlaybackUrl(req, res) {
       return res.status(404).json({ error: "Episode not found." });
     }
 
-    return res.status(200).json({ playbackUrl: episode.playbackUrl });
+    const playbackUrl = await resolvePlaybackUrl(episode.playbackUrl);
+    return res.status(200).json({ playbackUrl });
   } catch (error) {
     console.error("getPlaybackUrl error:", error);
     return res.status(500).json({ error: "Failed to fetch playback stream URL." });
