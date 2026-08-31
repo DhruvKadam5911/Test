@@ -25,3 +25,8 @@ server/.env
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
+.env*
+# ...but the template must be tracked; it is the only record of which keys exist.
+!.env.example

@@ -11,23 +11,30 @@
 `package.json` files and separate dependency trees, so a single project would have to install
 both to build either.
 
-| Project | Root directory | Framework | Serves |
-|---------|----------------|-----------|--------|
-| `onion-tv` | *(repo root)* | Vite | The SPA — static build in `dist/` |
-| `onion-tv-api` | `server` | Other / Node | The Express app as one serverless function |
+| Project | Root directory | Live at | Serves |
+|---------|----------------|---------|--------|
+| `onion-tv` | *(repo root)* | https://onion-tv.vercel.app | The SPA — static build in `dist/` |
+| `onion-tv-api` | `server` | https://onion-tv-api.vercel.app | The Express app as one serverless function |
+
+Both are deployed under the `sudospades-projects` Vercel scope.
 
 The database is **Neon** (managed Postgres). Vercel functions cannot reach a local Postgres, so
 `DATABASE_URL` must point at Neon, not `localhost`.
 
 ```
-Browser ──► onion-tv.vercel.app        (static SPA)
+Browser ──► onion-tv.vercel.app        (static SPA)          ✅ live
                  │ VITE_API_URL
                  ▼
-            onion-tv-api.vercel.app    (serverless Express)
+            onion-tv-api.vercel.app    (serverless Express)  ✅ live
                  │ DATABASE_URL (pooled)
                  ▼
-              Neon Postgres
+              Neon Postgres                                  ❌ not provisioned
 ```
+
+**Current state:** both projects are deployed and wired to each other. `VITE_API_URL`,
+`CORS_ORIGINS` and `JWT_SECRET` are set. The only thing missing is the database — until
+`DATABASE_URL` and `DIRECT_URL` are set on the API project, `/health` returns 500 and the site
+renders its "Couldn't load…" row.
 
 ---
 
@@ -74,7 +81,9 @@ Vite inlines `VITE_*` at build time, so **changing this requires a redeploy**, n
 
 ---
 
-## 4. First deploy
+## 4. Finishing the deploy
+
+Steps 3–5 below are already done. What remains is 1 and 2.
 
 1. **Create the Neon project** at [neon.tech](https://neon.tech) and copy both connection
    strings (pooled and direct) from its dashboard.
@@ -92,22 +101,23 @@ Vite inlines `VITE_*` at build time, so **changing this requires a redeploy**, n
    > `seed.js` **deletes every row in all six tables** before inserting. Only ever run it
    > against a database whose contents you are willing to lose.
 
-3. **Deploy the API**, from `server/`:
+3. **Set the two database variables** on the API project, from `server/`:
 
    ```bash
-   npx vercel --prod
+   printf '<neon-pooled>' | npx vercel env add DATABASE_URL production
    ```
-
-   Then set `DATABASE_URL`, `DIRECT_URL` and `JWT_SECRET` on that project and redeploy.
-
-4. **Deploy the frontend**, from the repo root, with `VITE_API_URL` set to the API's URL:
 
    ```bash
-   npx vercel --prod
+   printf '<neon-direct>' | npx vercel env add DIRECT_URL production
    ```
 
-5. **Close the loop on CORS:** set `CORS_ORIGINS` on the API project to the frontend's URL and
-   redeploy the API. Until this is done the deployed site will load but show error rows.
+   Then redeploy so the function picks them up: `npx vercel deploy --prod --yes`.
+
+4. ~~Deploy the frontend with `VITE_API_URL`~~ — done. Note Vite inlines the value at build
+   time, so pointing at a different API means a rebuild, not just an env change.
+
+5. ~~Set `CORS_ORIGINS` on the API~~ — done, and verified: the frontend's origin receives
+   `Access-Control-Allow-Origin`, an unlisted origin receives none.
 
 ---
 
