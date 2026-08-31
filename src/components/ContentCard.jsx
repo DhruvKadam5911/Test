@@ -82,7 +82,7 @@ export default function ContentCard({ item, size = "md", rank }) {
           className="absolute inset-0 overflow-hidden cursor-pointer"
           style={{ borderRadius: 6, background, zIndex: 2 }}
         >
-          <div className="absolute inset-0 flex items-center justify-center" style={{ opacity: hover ? 0 : 1, transition: "opacity 150ms ease", background: "rgba(12,8,18,0.15)" }}>
+          <div className="absolute inset-0 flex items-center justify-center" style={{ opacity: hover ? 0 : 1, transition: "opacity 300ms ease", background: "rgba(12,8,18,0.15)" }}>
             <div className="flex items-center justify-center" style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(243,240,245,0.92)" }}>
               <Play size={14} color={colors.bg} fill={colors.bg} style={{ marginLeft: 1 }} />
             </div>
@@ -107,7 +107,11 @@ export default function ContentCard({ item, size = "md", rank }) {
           transform: hover ? "scale(1.28) translateY(-10%)" : "scale(1) translateY(0)",
           opacity: hover ? 1 : 0,
           boxShadow: hover ? "0 22px 44px rgba(0,0,0,0.65)" : "none",
-          transition: "transform 260ms cubic-bezier(.2,.8,.2,1), opacity 200ms ease, box-shadow 260ms ease",
+          // Slower and softer than it was. At 260ms on a curve that front-loads
+          // most of the movement, the card arrived before the eye had followed
+          // it, which reads as a jump rather than an expansion.
+          transition:
+            "transform 420ms cubic-bezier(.25,.46,.45,.94), opacity 300ms ease, box-shadow 420ms ease",
           zIndex: hover ? 40 : -1,
           pointerEvents: hover ? "auto" : "none",
         }}

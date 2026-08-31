@@ -4,8 +4,11 @@ import { colors, bodyFont } from "../theme";
 import SmallRing from "./shared/SmallRing";
 import ContentCard, { CardSkeleton } from "./ContentCard";
 
-// The cards expand downwards on hover, and the scroller clips, so room has to
-// be reserved below them. Devices without hover never expand a card, and that
+// The cards expand on hover and the scroller clips them — `overflow-x: auto`
+// forces `overflow-y` to `auto` too, there is no way to have one without the
+// other — so room has to be reserved on every side they grow into. Below is the
+// most of it, but the card also lifts as it scales, and 8px of padding-top left
+// its top edge shaved off. Devices without hover never expand a card, and that
 // reserved strip is then just dead space under every row — five rows of it is
 // most of a phone screen's worth of empty scrolling.
 const HOVER_CAPABLE =
@@ -99,7 +102,7 @@ export default function ContentRow({ title, items, size = "md", rank = false, lo
 
         <div
           ref={scrollerRef}
-          className={`flex gap-3.5 overflow-x-auto px-6 md:px-10 pt-2 ${HOVER_CAPABLE ? "pb-32" : "pb-3"}`}
+          className={`flex gap-3.5 overflow-x-auto ${HOVER_CAPABLE ? "px-8 md:px-12 pt-10 pb-32" : "px-6 md:px-10 pt-2 pb-3"}`}
           style={{ scrollbarWidth: "none" }}
         >
           {loading ? (
