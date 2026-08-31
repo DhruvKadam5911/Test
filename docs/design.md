@@ -168,7 +168,7 @@ the whole list lunging forward; clearing them first makes it a push through the 
 | 880ms | Each hands over to that letter's anchor points |
 | 1120ms | Guides fade in; the outlines draw between the anchors (staggered 90ms per letter) |
 | 1820ms | Scaffolding clears and the wireframe thickens into the solid wordmark |
-| 2240ms | The onion mark joins it |
+| 2240ms | The onion mark joins it, at `MARK_HEIGHT` 280 — the source raster pads the bulb heavily, so its box runs about twice the letter height for the mark to read as the larger element |
 | 2760ms | Fade out → `onDone()` at 3180ms |
 
 **The letterforms are geometry, not type.** `splash/wordmarkGeometry.js` authors "onion" as

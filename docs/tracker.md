@@ -130,6 +130,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Desktop splash: onion mark enlarged from 200 to 280 and the gap tightened, so it reads as the dominant element beside the wordmark rather than matching it |
 | 2026-08-31 | — | **Live on Vercel.** Neon provisioned, schema migrated and catalog seeded, both projects deployed and wired. Verified end to end: health, catalog, home page and a cold `/watch/:id` deep link |
 | 2026-08-31 | — | Deployment prep for Vercel + Neon: the Express app split from its listener, a serverless entry added, Prisma given a Linux binary target and a `directUrl` for pooled connections, CORS origins made env-driven, and `docs/deployment.md` written. **Not yet deployed — needs a Neon database** |
 | 2026-08-31 | — | Plan 1.7: README rewritten to point at `docs/`, unused import dropped, and the stray `#7C3FC4` replaced with `colors.accent` via a new `withAlpha()` helper. **StudioPage still undecided (D3)** |

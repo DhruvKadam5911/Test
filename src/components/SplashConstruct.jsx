@@ -40,10 +40,10 @@ const T = {
 const DRAW_MS = 700;
 const SOLID_MS = 420;
 const FADE_MS = 420;
-// Sized against the rendered letters, not guessed: x-height plus stroke comes
-// out around 145px at the wordmark's max width, and the mark carries internal
-// padding in the source raster, so it needs to be taller to read as equal.
-const MARK_HEIGHT = 200;
+// Sized against the rendered letters. The source raster carries a lot of
+// transparent padding around the bulb, so the box has to be roughly twice the
+// letter height for the mark to read as the larger element.
+const MARK_HEIGHT = 280;
 
 const S = { CLUSTER: 0, SPREAD: 1, ANCHORS: 2, DRAW: 3, SOLID: 4, MARK: 5 };
 
@@ -89,7 +89,7 @@ export default function SplashConstruct({ onDone }) {
     >
       <div className="flex items-center" // The SVG carries 30 units of its own left padding for the guides, which
           // already reads as ~36px of gap, so this stays small.
-          style={{ gap: 6 }}>
+          style={{ gap: 2 }}>
         {/* The mark's space is reserved from the start, so it fading in at the
             end cannot shift the wordmark sideways. */}
         <div style={{ width: MARK_HEIGHT * 0.37, flexShrink: 0 }}>
