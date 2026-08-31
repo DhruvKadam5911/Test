@@ -300,10 +300,19 @@ npm run import:tmdb:bulk -- --provider Netflix,"Amazon Prime Video" --genre Horr
 | `--details` | Also fetch runtime and certification — two extra requests per title |
 | `--playback` | Stream URL attached to every imported title |
 | `--out` | Write INSERTs to a file instead of the database |
+| `--chunk` | Split `--out` into files of *n* statements, so each one will paste into a browser SQL console |
 
 - **`--region` does not select Indian films.** It only says where a title is *available*, so a
   popularity sort still returns global hits. `--country IN` selects films made in India across
   every Indian language (7,002 of them); `--language hi` narrows further to Hindi (2,576).
+- **TMDB serves at most 500 discover pages** (10,000 titles) per query, whatever `total_pages`
+  claims. Broad queries have to be split by language, country or genre to get past that — which
+  is also why a platform filter matters: Hollywood alone is 478,215 titles unfiltered, and
+  unreachable.
+- **A failed page is skipped, not fatal.** TMDB returns intermittent 503s that outlast the
+  client's backoff; aborting the run would cost hours of progress for one blip. Six consecutive
+  failures does stop it, on the grounds that TMDB is then genuinely down. The run reports how
+  many pages it lost.
 - **One request per 20 titles.** Genre names come from the ids the listing already returns, so
   no per-title call is needed. `--details` is opt-in because it turns a 25-request import into a
   2,000-request one.

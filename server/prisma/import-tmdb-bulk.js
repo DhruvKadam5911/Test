@@ -34,14 +34,19 @@ Usage: node prisma/import-tmdb-bulk.js [options]
   --details            Also fetch runtime and certification (2 extra calls each)
   --playback <url>     Stream URL to attach to every imported title
   --out <file.sql>     Write INSERTs to a file instead of the database
+  --chunk <n>          Split --out into files of n statements, for paste limits
 `;
 
 const PAGE_SIZE = 20;
+// TMDB refuses discover past page 500, whatever total_pages claims.
+const MAX_PAGE = 500;
+// TMDB's 503s come in bursts; this many in a row means it is genuinely down.
+const MAX_CONSECUTIVE_FAILURES = 6;
 
 function parseArgs(argv) {
   const args = {
     providers: [], genres: [], region: "IN", country: null, language: null,
-    pages: 3, details: false, playback: null, out: null,
+    pages: 3, details: false, playback: null, out: null, chunk: null,
   };
   const rest = argv.slice(2);
   const list = (v) => v.split(",").map((s) => s.trim()).filter(Boolean);
@@ -57,10 +62,15 @@ function parseArgs(argv) {
     else if (a === "--details") args.details = true;
     else if (a === "--playback") args.playback = rest[++i];
     else if (a === "--out") args.out = rest[++i];
+    else if (a === "--chunk") args.chunk = Number(rest[++i]);
     else throw new Error(`Unknown option: ${a}`);
   }
 
   if (!Number.isFinite(args.pages) || args.pages < 1) throw new Error("--pages must be a positive number.");
+  if (args.pages > MAX_PAGE) {
+    console.warn(`⚠️  TMDB serves at most ${MAX_PAGE} pages; asking for ${args.pages}. Capping.`);
+    args.pages = MAX_PAGE;
+  }
   return args;
 }
 
@@ -114,20 +124,42 @@ async function main() {
 
   const rows = [];
   const seen = new Set();
+  let failures = 0;
+  let consecutiveFailures = 0;
+  let lastFailure = null;
 
   for (let page = 1; page <= args.pages; page++) {
-    const data = await discoverMovies({
-      page,
-      watch_region: args.region,
-      with_watch_providers: providerIds.join("|") || undefined,
-      with_genres: genreIds.join(",") || undefined,
-      // watch_region only says where a film is *available*. Origin country and
-      // original language are what select the cinema itself — without one of
-      // them a popularity sort returns global hits, not local ones.
-      with_origin_country: args.country || undefined,
-      with_original_language: args.language || undefined,
-      sort_by: "popularity.desc",
-    });
+    let data;
+    try {
+      data = await discoverMovies({
+        page,
+        watch_region: args.region,
+        with_watch_providers: providerIds.join("|") || undefined,
+        with_genres: genreIds.join(",") || undefined,
+        // watch_region only says where a film is *available*. Origin country
+        // and original language select the cinema itself — without one of them
+        // a popularity sort returns global hits, not local ones.
+        with_origin_country: args.country || undefined,
+        with_original_language: args.language || undefined,
+        sort_by: "popularity.desc",
+      });
+    } catch (err) {
+      // One bad page should cost 20 titles, not the whole run — TMDB returns
+      // intermittent 503s that outlast the client's backoff. Skip and carry on,
+      // but give up if it is properly down rather than grinding through
+      // hundreds of failures.
+      failures++;
+      consecutiveFailures++;
+      lastFailure = err.message;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        console.warn(`
+⚠️  Gave up at page ${page}: ${err.message}`);
+        console.warn(`   ${consecutiveFailures} pages failed in a row — TMDB looks unavailable.`);
+        break;
+      }
+      continue;
+    }
+    consecutiveFailures = 0;
 
     if (page === 1) {
       const available = Math.min(data.total_results, data.total_pages * PAGE_SIZE);
@@ -173,16 +205,34 @@ async function main() {
   }
   process.stdout.write("\n");
 
+  if (failures) {
+    console.log(`   ${failures} page(s) failed and were skipped — last: ${lastFailure}`);
+  }
+
   // releaseYear is NOT NULL; a title TMDB has no date for cannot be stored.
   const usable = rows.filter((r) => r.releaseYear !== null);
   const dropped = rows.length - usable.length;
   if (dropped) console.log(`   skipped ${dropped} with no release date`);
 
   if (args.out) {
-    const sql = usable.map((r) => `-- ${r.title} (${r.releaseYear})\n${toInsert(r)}`).join("\n\n");
-    fs.writeFileSync(args.out, sql + "\n");
-    console.log(`\n✅ Wrote ${usable.length} INSERTs to ${args.out}`);
-    console.log("   Run it against your database — the file only inserts, it clears nothing.");
+    const render = (list) =>
+      list.map((r) => `-- ${r.title} (${r.releaseYear})\n${toInsert(r)}`).join("\n\n") + "\n";
+
+    if (!args.chunk) {
+      fs.writeFileSync(args.out, render(usable));
+      console.log(`\n✅ Wrote ${usable.length} INSERTs to ${args.out}`);
+    } else {
+      // A multi-megabyte file will not paste into a browser SQL console, so
+      // split it into pieces that will.
+      const stem = args.out.replace(/\.sql$/i, "");
+      let part = 0;
+      for (let i = 0; i < usable.length; i += args.chunk) {
+        part++;
+        fs.writeFileSync(`${stem}-${part}.sql`, render(usable.slice(i, i + args.chunk)));
+      }
+      console.log(`\n✅ Wrote ${usable.length} INSERTs across ${part} files: ${stem}-1.sql …`);
+    }
+    console.log("   Run them against your database — they only insert, nothing is cleared.");
     return;
   }
 

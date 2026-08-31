@@ -41,15 +41,39 @@ async function tmdbGet(path, params = {}) {
     if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
   }
 
-  const res = await fetch(url);
-  if (!res.ok) {
+  // Rate limits and short maintenance windows are routine on a long import, and
+  // losing an hour's progress to one 503 is not acceptable. Retry those; fail
+  // fast on anything that will not fix itself, like a bad key.
+  const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+  let lastError;
+
+  // Five attempts backing off 1s, 2s, 4s, 8s — about 15s of patience. A four
+  // attempt, 3.5s budget was not enough to ride out a real TMDB maintenance
+  // blip observed mid-import.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** (attempt - 1)));
+    }
+
+    let res;
+    try {
+      res = await fetch(url);
+    } catch (err) {
+      lastError = err; // network blip
+      continue;
+    }
+
+    if (res.ok) return res.json();
+
     // TMDB puts a human-readable reason in the body; surface it rather than a bare status.
     const detail = await res.json().catch(() => null);
-    throw new Error(
+    lastError = new Error(
       `TMDB ${path} failed: ${res.status}${detail?.status_message ? ` — ${detail.status_message}` : ""}`
     );
+    if (!RETRYABLE.has(res.status)) throw lastError;
   }
-  return res.json();
+
+  throw lastError;
 }
 
 /** Search movies by name. `year` narrows it when a title has been remade. */
