@@ -294,6 +294,29 @@ it likes and re-running a slice is harmless. The response reports `added`, `skip
 A Vercel cron in `server/vercel.json` calls it daily at 03:00 UTC. Sorted by popularity, a small
 daily slice picks up new releases without needing a stored cursor.
 
+### Removing duplicate rows
+
+`GET /admin/dedupe` clears up what the bulk SQL imports left behind. The Bollywood, Pollywood and
+Hollywood files were generated separately, each de-duplicating only against the catalog as it stood
+when it was written, so a film in two slices was inserted twice and shows twice in search.
+
+Same `CRON_SECRET` guard as the refresh. **It is a dry run unless called with `?apply=true`** —
+deleting catalog rows is not something a mistyped URL should be able to do.
+
+Rows are grouped by title (case-insensitive) and release year. Within a group the row kept is the
+playable one, then an original, then the oldest — whose id is what any existing link points at. A
+duplicate is only deleted when nothing would be lost with it: no stream, no seasons, and nothing on
+anyone's list or watch history. Anything else is reported in `keptDespiteDuplicate` and left alone.
+
+The response reports `scanned`, `duplicateGroups`, `removable`, `deleted` and `keptDespiteDuplicate`.
+
+### The `Uncategorised` genre
+
+TMDB gives some films no genre, and the importer labels those `Uncategorised`. It is a bookkeeping
+value, not a shelf anyone would browse, so `/titles/genres` and `/titles/trending` exclude it — it
+gets no row on the home page and can no longer turn up as the hero. The titles stay in the catalog
+and are still returned by `/titles/search` and by an explicit `/titles?genre=Uncategorised`.
+
 ### Importing real titles
 
 `prisma/import-tmdb.js` adds a real film from TMDB, with its backdrop, synopsis, runtime,

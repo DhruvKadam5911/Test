@@ -130,6 +130,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | `GET /admin/dedupe` added, and `Uncategorised` no longer gets a home-page row or the hero. The three bulk SQL files each de-duplicated only against the catalog as it stood when written, so films in two slices (Sholay, for one) were inserted twice |
 | 2026-08-31 | — | The catalog is now actually reachable: server-side search across all titles, `/titles/genres`, and rows that fetch their own genre lazily. The page was showing ~110 of 7,656 titles |
 | 2026-08-31 | — | Catalog now refreshes itself: `GET /admin/refresh` imports server-side behind `CRON_SECRET`, with a daily Vercel cron. Used it to load 4,807 Hollywood titles into the live database without any SQL. Live catalog is 7,656 titles, 89% with artwork |
 | 2026-08-31 | — | Bulk import hardened for long runs: retries with backoff, failed pages skipped rather than aborting, chunked output, and TMDB's 500-page ceiling enforced. Generated 7,415 titles across Bollywood, Pollywood and Hollywood |

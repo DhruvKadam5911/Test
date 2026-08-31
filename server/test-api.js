@@ -95,6 +95,13 @@ async function runTests() {
     }
     console.log("✅ Admin refresh refuses unauthenticated calls (401).");
 
+    console.log("\nTesting GET /admin/dedupe without a secret ...");
+    const dedupeRes = await fetch(`${BASE_URL}/admin/dedupe`);
+    if (dedupeRes.status !== 401) {
+      throw new Error(`Admin dedupe should refuse unauthenticated calls, got ${dedupeRes.status}`);
+    }
+    console.log("✅ Admin dedupe refuses unauthenticated calls (401).");
+
     console.log("\n🎉 All tests passed successfully!");
   } catch (error) {
     console.error("\n❌ Test failed with error:", error.message);

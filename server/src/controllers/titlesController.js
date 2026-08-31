@@ -19,6 +19,13 @@ const CARD_FIELDS = {
 // Guards against a client asking for the whole catalog in one response.
 const MAX_LIMIT = 100;
 
+// TMDB gives some films no genre at all, and the importer labels those
+// "Uncategorised". It is a bookkeeping value, not a shelf anyone would browse,
+// so it is hidden from the home page's rows and from the hero. The titles
+// themselves stay in the catalog and are still returned by search and by an
+// explicit ?genre=Uncategorised request.
+const PLACEHOLDER_GENRE = "Uncategorised";
+
 
 // GET /titles
 export async function getTitles(req, res) {
@@ -49,6 +56,7 @@ export async function getTitles(req, res) {
 export async function getTrending(req, res) {
   try {
     const trending = await prisma.title.findMany({
+      where: { genre: { not: PLACEHOLDER_GENRE } },
       take: 10,
       orderBy: { createdAt: "desc" },
       select: CARD_FIELDS,
@@ -100,6 +108,7 @@ export async function getGenreList(req, res) {
     // to group it in the browser.
     const grouped = await prisma.title.groupBy({
       by: ["genre"],
+      where: { genre: { not: PLACEHOLDER_GENRE } },
       _count: { genre: true },
       orderBy: { _count: { genre: "desc" } },
     });

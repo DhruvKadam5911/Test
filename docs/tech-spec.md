@@ -149,7 +149,7 @@ and leaves them all reading `undefined`.
 | `VIDEO_PROVIDER` | no | `cloudflare` or `jwplayer`. **Blank = pass the DB `playbackUrl` through unchanged.** Setting it without implementing the provider block throws on every playback request |
 | `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_STREAM_API_TOKEN` | no | For `VIDEO_PROVIDER=cloudflare` |
 | `JWPLAYER_API_KEY` / `JWPLAYER_API_SECRET` | no | For `VIDEO_PROVIDER=jwplayer` |
-| `CRON_SECRET` | no | Guards `/admin/refresh`. **Unset means the route refuses everything** |
+| `CRON_SECRET` | no | Guards `/admin/refresh` and `/admin/dedupe`. **Unset means both routes refuse everything** |
 
 ---
 

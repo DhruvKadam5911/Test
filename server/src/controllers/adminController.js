@@ -1,4 +1,5 @@
 import { importSlice, MAX_PAGE } from "../services/catalogImport.js";
+import { dedupeTitles } from "../services/catalogCleanup.js";
 import { isTmdbConfigured } from "../services/tmdb.js";
 
 /*
@@ -60,5 +61,26 @@ export async function refreshCatalog(req, res) {
   } catch (error) {
     console.error("refreshCatalog error:", error);
     return res.status(500).json({ error: error.message || "Catalog refresh failed." });
+  }
+}
+
+/*
+ * GET /admin/dedupe
+ *
+ * Reports the duplicate rows the bulk imports left behind. Dry run by default —
+ * it only deletes when called with ?apply=true, because deleting catalog rows
+ * is not something a mistyped URL should be able to do.
+ */
+export async function dedupe(req, res) {
+  if (!authorised(req)) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
+
+  try {
+    const result = await dedupeTitles({ apply: req.query.apply === "true" });
+    return res.status(200).json({ status: "ok", ...result });
+  } catch (error) {
+    console.error("dedupe error:", error);
+    return res.status(500).json({ error: error.message || "Dedupe failed." });
   }
 }
