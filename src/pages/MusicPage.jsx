@@ -9,8 +9,12 @@ import api from "../api/client";
  *
  * Playback is YouTube's embedded player, which is the licensed way to play this
  * catalogue: YouTube serves the ads and the rights holders get paid. Nothing
- * here touches an audio file, and the player stays visible — hiding it to make
- * an audio-only app is against the terms it is allowed under.
+ * here touches an audio file.
+ *
+ * It reads as a music player — the artwork is the whole left half, big and
+ * still — but the player itself is never covered or hidden. YouTube's terms
+ * forbid obscuring any part of it, and an app that breaks that gets its key
+ * revoked. So the video sits beside the artwork rather than under it.
  */
 
 const IFRAME_API = "https://www.youtube.com/iframe_api";
@@ -193,10 +197,26 @@ export default function MusicPage() {
           )}
         </div>
 
-        {/* The player itself. Kept visible — hiding it is not allowed. */}
         <div className="mt-7 rounded overflow-hidden" style={{ background: colors.bgElevated, border: `1px solid ${colors.ring}` }}>
-          <div className="w-full" style={{ aspectRatio: "16 / 9", background: "#000" }}>
-            <div ref={mountRef} className="w-full h-full" />
+          <div className="flex flex-col sm:flex-row">
+            {/* The artwork carries the page: big, still, and what the eye goes to. */}
+            <div
+              className="w-full sm:w-[280px] flex-shrink-0"
+              style={{
+                aspectRatio: "1 / 1",
+                background: track?.artworkUrl
+                  ? `url(${track.artworkUrl}) center/cover no-repeat`
+                  : colors.bg,
+              }}
+            />
+
+            {/* The player. Small, but never covered — YouTube's terms do not
+                allow obscuring any part of it, and a key that does gets pulled. */}
+            <div className="flex-1 flex items-center justify-center" style={{ background: "#000", minHeight: 180 }}>
+              <div style={{ width: "100%", maxWidth: 360, aspectRatio: "16 / 9" }}>
+                <div ref={mountRef} className="w-full h-full" />
+              </div>
+            </div>
           </div>
 
           <div style={{ padding: 18 }}>
