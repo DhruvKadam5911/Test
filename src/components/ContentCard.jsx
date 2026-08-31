@@ -3,9 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { Play, ThumbsUp, ChevronDown } from "lucide-react";
 import { colors, bodyFont, resolveBackground } from "../theme";
 
+const WIDTHS = { sm: 156, md: 200, lg: 260 };
+const HEIGHTS = { sm: 88, md: 112, lg: 146 };
+
 export function CardSkeleton({ size = "md" }) {
-  const w = size === "lg" ? 260 : 200;
-  const h = size === "lg" ? 146 : 112;
+  const w = WIDTHS[size] ?? WIDTHS.md;
+  const h = HEIGHTS[size] ?? HEIGHTS.md;
 
   return (
     <div className="flex-shrink-0 animate-pulse" style={{ width: w }}>
@@ -23,8 +26,8 @@ export default function ContentCard({ item, size = "md", rank }) {
   const [liked, setLiked] = useState(false);
   const navigate = useNavigate();
 
-  const w = size === "lg" ? 260 : 200;
-  const h = size === "lg" ? 146 : 112;
+  const w = WIDTHS[size] ?? WIDTHS.md;
+  const h = HEIGHTS[size] ?? HEIGHTS.md;
 
   // Rank digit sizing — glyph width is estimated from font size. Only a small
   // sliver tucks behind the poster; most of the digit stands out to the left.

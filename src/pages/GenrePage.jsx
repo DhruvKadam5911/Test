@@ -15,6 +15,10 @@ import api from "../api/client";
 
 const PAGE_SIZE = 40;
 
+// A 200px card leaves a phone showing one per row and 127px of nothing beside
+// it. Two narrower ones fit.
+const NARROW = "(max-width: 640px)";
+
 export default function GenrePage() {
   const { genre } = useParams();
   const name = decodeURIComponent(genre || "");
@@ -23,6 +27,17 @@ export default function GenrePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [exhausted, setExhausted] = useState(false);
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia?.(NARROW);
+    if (!query) return;
+    const onChange = (e) => setNarrow(e.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
 
   const load = async (offset) => {
     setLoading(true);
@@ -61,7 +76,7 @@ export default function GenrePage() {
 
         <div className="mt-7 flex flex-wrap gap-3.5">
           {items.map((item) => (
-            <ContentCard key={item.id} item={item} size="md" />
+            <ContentCard key={item.id} item={item} size={narrow ? "sm" : "md"} />
           ))}
         </div>
 

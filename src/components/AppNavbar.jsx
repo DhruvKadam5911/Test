@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Search, Bell, X, Music2, ChevronDown } from "lucide-react";
+import { Search, Bell, X, Music2, ChevronDown, LayoutGrid } from "lucide-react";
 import { colors } from "../theme";
 import OnionLogo from "./shared/OnionLogo";
 import api from "../api/client";
@@ -35,7 +35,6 @@ export default function AppNavbar({ value, onSearchChange }) {
   const [genres, setGenres] = useState(null);
 
   const searchInputRef = useRef(null);
-  const categoriesRef = useRef(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60);
@@ -63,10 +62,14 @@ export default function AppNavbar({ value, onSearchChange }) {
 
   // A menu that only closes on a second click on the trigger is a menu people
   // leave open by accident.
+  //
+  // Matched by attribute rather than by ref: the trigger and the menu are
+  // separate elements on a phone, and there are two of each — one set for the
+  // wide layout, one for the narrow — so no single ref covers them.
   useEffect(() => {
     if (!categoriesOpen) return;
     const onDown = (e) => {
-      if (!categoriesRef.current?.contains(e.target)) setCategoriesOpen(false);
+      if (!e.target.closest?.("[data-categories]")) setCategoriesOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -84,6 +87,26 @@ export default function AppNavbar({ value, onSearchChange }) {
     onSearchChange?.(v);
   };
 
+  const categoryList =
+    genres === null ? (
+      <div style={{ padding: "8px 10px", fontSize: 13, color: colors.textMuted }}>Loading…</div>
+    ) : (
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-2">
+        {genres.map(({ genre, count }) => (
+          <Link
+            key={genre}
+            to={`/genre/${encodeURIComponent(genre)}`}
+            onClick={() => setCategoriesOpen(false)}
+            className="flex items-center justify-between rounded"
+            style={{ fontSize: 13, color: colors.text, textDecoration: "none", padding: "7px 10px" }}
+          >
+            <span className="truncate">{genre}</span>
+            <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 8 }}>{count.toLocaleString()}</span>
+          </Link>
+        ))}
+      </div>
+    );
+
   return (
     <nav
       className="flex items-center justify-between px-6 md:px-10 py-4 sticky top-0 z-40 w-full transition-colors duration-300"
@@ -98,7 +121,7 @@ export default function AppNavbar({ value, onSearchChange }) {
         <div className="hidden md:flex items-center gap-7">
           <Link to="/" style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted, textDecoration: "none" }}>Browse</Link>
 
-          <div ref={categoriesRef} style={{ position: "relative" }}>
+          <div data-categories style={{ position: "relative" }}>
             <button
               onClick={() => setCategoriesOpen((open) => !open)}
               className="flex items-center gap-1"
@@ -113,24 +136,7 @@ export default function AppNavbar({ value, onSearchChange }) {
                 className="absolute left-0 mt-3 rounded"
                 style={{ background: colors.bgElevated, border: `1px solid ${colors.ring}`, padding: 8, minWidth: 520, boxShadow: "0 18px 40px rgba(0,0,0,0.6)", zIndex: 50 }}
               >
-                {genres === null ? (
-                  <div style={{ padding: "8px 10px", fontSize: 13, color: colors.textMuted }}>Loading…</div>
-                ) : (
-                  <div className="grid grid-cols-3 gap-x-2">
-                    {genres.map(({ genre, count }) => (
-                      <Link
-                        key={genre}
-                        to={`/genre/${encodeURIComponent(genre)}`}
-                        onClick={() => setCategoriesOpen(false)}
-                        className="flex items-center justify-between rounded"
-                        style={{ fontSize: 13, color: colors.text, textDecoration: "none", padding: "7px 10px" }}
-                      >
-                        <span className="truncate">{genre}</span>
-                        <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 8 }}>{count.toLocaleString()}</span>
-                      </Link>
-                    ))}
-                  </div>
-                )}
+                {categoryList}
               </div>
             )}
           </div>
@@ -174,8 +180,31 @@ export default function AppNavbar({ value, onSearchChange }) {
           )}
         </div>
 
+        <Link to="/music" className="md:hidden flex" aria-label="Music">
+          <Music2 size={18} color={colors.textMuted} />
+        </Link>
+        <button
+          onClick={() => setCategoriesOpen((open) => !open)}
+          data-categories
+          className="md:hidden flex"
+          aria-label="Categories"
+          style={{ background: "none", border: "none", cursor: "pointer" }}
+        >
+          <LayoutGrid size={18} color={colors.textMuted} />
+        </button>
+
         <Bell size={18} color={colors.textMuted} style={{ cursor: "pointer" }} className="hidden md:block" />
       </div>
+
+      {categoriesOpen && (
+        <div
+          data-categories
+          className="md:hidden absolute left-3 right-3 rounded"
+          style={{ top: "100%", background: colors.bgElevated, border: `1px solid ${colors.ring}`, padding: 8, boxShadow: "0 18px 40px rgba(0,0,0,0.6)", zIndex: 50, maxHeight: "70vh", overflowY: "auto" }}
+        >
+          {categoryList}
+        </div>
+      )}
     </nav>
   );
 }
