@@ -40,10 +40,20 @@ const T = {
 const DRAW_MS = 700;
 const SOLID_MS = 420;
 const FADE_MS = 420;
-// Sized against the rendered letters. The source raster carries a lot of
-// transparent padding around the bulb, so the box has to be roughly twice the
-// letter height for the mark to read as the larger element.
-const MARK_HEIGHT = 280;
+// The wordmark is sized in viewport units, so the mark has to be derived from
+// the same basis. A fixed pixel height would look correct on one screen and
+// tower over the letters on a narrower one — at 768 a fixed 360 put the mark
+// at 4.2x the letter height against 3.0x on desktop.
+const WORDMARK_VW = 0.66;
+const WORDMARK_MAX_PX = 720;
+// Mark height as a fraction of the wordmark's width. The source raster carries
+// a lot of transparent padding around the bulb, so this runs high for the mark
+// to read as the larger element.
+const MARK_TO_WORDMARK = 0.5;
+
+function wordmarkWidth() {
+  return Math.min(window.innerWidth * WORDMARK_VW, WORDMARK_MAX_PX);
+}
 
 const S = { CLUSTER: 0, SPREAD: 1, ANCHORS: 2, DRAW: 3, SOLID: 4, MARK: 5 };
 
@@ -52,6 +62,9 @@ const CLUSTER_RADIUS = 30;
 const CENTRE = [WORDMARK_WIDTH / 2, 50];
 
 export default function SplashConstruct({ onDone }) {
+  // Resolved once, like the breakpoint: the intro is over in three seconds and
+  // resizing mid-animation would rescale the lockup underneath itself.
+  const [markHeight] = useState(() => wordmarkWidth() * MARK_TO_WORDMARK);
   const [stage, setStage] = useState(S.CLUSTER);
   const [seeds, setSeeds] = useState(1);
   const [visible, setVisible] = useState(true);
@@ -92,9 +105,9 @@ export default function SplashConstruct({ onDone }) {
           style={{ gap: 2 }}>
         {/* The mark's space is reserved from the start, so it fading in at the
             end cannot shift the wordmark sideways. */}
-        <div style={{ width: MARK_HEIGHT * 0.37, flexShrink: 0 }}>
+        <div style={{ width: markHeight * 0.37, flexShrink: 0 }}>
           <OnionMark
-            height={MARK_HEIGHT}
+            height={markHeight}
             style={{
               opacity: stage >= S.MARK ? 1 : 0,
               transform: stage >= S.MARK ? "scale(1)" : "scale(0.4)",
@@ -105,7 +118,7 @@ export default function SplashConstruct({ onDone }) {
 
         <svg
           viewBox={`-30 -40 ${WORDMARK_WIDTH + 60} 180`}
-          style={{ width: "min(66vw, 720px)", overflow: "visible" }}
+          style={{ width: wordmarkWidth(), overflow: "visible" }}
           aria-label="onion"
         >
           {/* Construction guides */}

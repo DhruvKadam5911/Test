@@ -191,7 +191,7 @@ the whole list lunging forward; clearing them first makes it a push through the 
 | 880ms | Each hands over to that letter's anchor points |
 | 1120ms | Guides fade in; the outlines draw between the anchors (staggered 90ms per letter) |
 | 1820ms | Scaffolding clears and the wireframe thickens into the solid wordmark |
-| 2240ms | The onion mark joins it, at `MARK_HEIGHT` 280 — the source raster pads the bulb heavily, so its box runs about twice the letter height for the mark to read as the larger element |
+| 2240ms | The onion mark joins it, at half the wordmark's width — the source raster pads the bulb heavily, so its box runs about three times the letter height for the mark to read as the larger element |
 | 2760ms | Fade out → `onDone()` at 3180ms |
 
 **One wordmark, drawn everywhere.** `shared/OnionWordmark.jsx` renders the same paths
@@ -214,6 +214,12 @@ fixed dot. Do not add a separate filled copy of the wordmark for the solid stage
 
 **The mark's space is reserved from the start** so its late fade-in cannot shift the wordmark
 sideways — the same rule as the wheel's marker.
+
+**The mark is sized from the wordmark's own basis, not in fixed pixels.** The wordmark's width is
+`min(66vw, 720px)`, so a fixed mark height only looks right at one window size: at 768 a fixed
+360 put the mark at 4.2x the letter height against 3.0x on desktop. Both now come from
+`wordmarkWidth()`, which holds the ratio at 2.98 everywhere. Resolved once at mount, like the
+breakpoint — resizing mid-animation would rescale the lockup underneath itself.
 
 **The names start clear of the marker, not at a fixed offset.** `PickerWheel` takes `markerLeft`
 and `labelLeft`, and `SplashWheel` derives the latter from the mark's rendered width. Resizing
