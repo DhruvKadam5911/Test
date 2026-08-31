@@ -26,6 +26,21 @@ import { discoverMovies, discoverTv, getGenres, imageUrl, isTmdbConfigured } fro
 
 const sql = neon(process.env.BACKFILL_URL || process.env.DATABASE_URL);
 
+/**
+ * One statement, retried. The HTTP endpoint drops the occasional connection —
+ * a single `fetch failed` killed a run that had nothing else wrong with it.
+ */
+async function query(text, params = []) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await sql.query(text, params);
+    } catch (err) {
+      if (attempt === 4) throw err;
+      await new Promise((r) => setTimeout(r, attempt * 3000));
+    }
+  }
+}
+
 const MAX_PAGE = 500;
 const PAGE_SIZE = 20;
 const MAX_REACHABLE = MAX_PAGE * PAGE_SIZE;
@@ -65,7 +80,7 @@ let failedPages = 0;
 async function loadExisting() {
   // Paged because the HTTP driver returns the whole result at once.
   for (let offset = 0; ; offset += 5000) {
-    const rows = await sql.query('select title from "Title" order by title limit 5000 offset $1', [offset]);
+    const rows = await query('select title from "Title" order by title limit 5000 offset $1', [offset]);
     for (const r of rows) known.add(r.title.trim().toLowerCase());
     if (rows.length < 5000) break;
   }
@@ -94,7 +109,7 @@ async function insertBatch(rows) {
   });
 
   const columns = ["id", ...COLUMNS, "updatedAt"].map((c) => `"${c}"`).join(", ");
-  await sql.query(`INSERT INTO "Title" (${columns}) VALUES ${tuples.join(", ")}`, params);
+  await query(`INSERT INTO "Title" (${columns}) VALUES ${tuples.join(", ")}`, params);
   return rows.length;
 }
 
@@ -232,7 +247,7 @@ async function main() {
     }
   }
 
-  const finished = await sql.query('select count(*)::int as n from "Title"');
+  const finished = await query('select count(*)::int as n from "Title"');
   console.log(`\n✅ ${added.toLocaleString()} titles added. Catalog is now ${finished[0].n.toLocaleString()}.`);
   if (failedPages) console.log(`   ${failedPages} page(s) failed and were skipped — re-run to pick them up.`);
   console.log("⚠️  None of these have a stream, so they browse and search but do not play.");
