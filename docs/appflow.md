@@ -134,7 +134,7 @@ series  → GET /titles/:id/playback?episodeId={activeEpisode.id}
         ↓
 server: resolvePlaybackUrl(storedUrl)
         ↓
-{ playbackUrl }  →  <video src autoPlay controls> replaces the poster surface
+{ playbackUrl }  →  <video src autoPlay> replaces the poster; the custom bar stays
 ```
 
 On failure the current code shows a browser `alert()` — see `tech-spec.md` T5.
@@ -152,11 +152,23 @@ null, so it disappears once video is playing.
 Changing season or episode resets `currentTimeSec`, clears `playbackUrl` and sets
 `isPlaying` false, so the user must press play again for the new episode.
 
-### Scrubber
+### Transport bar
 
-Driven by a `setInterval` simulation, not by the `<video>` element's `timeupdate`.
-Duration comes from `activeEpisode.durationMinutes` (series) or `titleData.durationMinutes`
-(movie), falling back to 48 minutes. This is a known mismatch — `tech-spec.md` T4.
+The custom bar **is** the player's control surface — the `<video>` renders without native
+`controls`, and the bar sits over both the poster and the video.
+
+| Control | Wired to |
+|---------|----------|
+| Scrubber position | `onTimeUpdate` on the element (skipped while dragging, so the drag owns the playhead) |
+| Scrubber drag | `seekTo()` — sets state *and* `video.currentTime` |
+| Duration | `onLoadedMetadata` → the element's real `duration`; falls back to `durationMinutes` before metadata arrives |
+| Play / pause | `video.play()` / `video.pause()`; `onPlay`/`onPause`/`onEnded` feed `isPlaying` back |
+| Mute | `video.muted` |
+| Fullscreen | `requestFullscreen()` on the player container |
+
+Before a stream is fetched there is no element, so the bar falls back to a `setInterval`
+preview against the catalog's estimated duration. That timer is gated on `!playbackUrl` — it
+must never run alongside the element or the two fight over `currentTimeSec`.
 
 ---
 

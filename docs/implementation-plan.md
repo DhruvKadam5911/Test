@@ -47,13 +47,23 @@ re-invoking the effect, not a second soundtrack — the first context is closed 
 heard. Suppressing those logs would mean defeating StrictMode's second pass, which is not worth
 doing.
 
-### 1.2 Bind the scrubber to the real video element — *P0*
+### 1.2 Bind the scrubber to the real video element — DONE 2026-08-31
 `src/pages/WatchPage.jsx`
 
-Replace the `setInterval` simulation with `timeupdate` / `loadedmetadata` / `ended` listeners on
-a `videoRef`. Keep the simulation only for the pre-play poster state, or drop it entirely.
+**What was found:** the bar and the `<video>` never coexisted — the bar rendered under
+`{!playbackUrl && …}` and the element under `{playbackUrl ? …}`, with native `controls` on. So
+this was not a listener swap: the bar had to become the actual control surface.
 
-**Verify:** play a title, seek — the scrubber and the video agree.
+**What was done:** native `controls` removed, the bar now renders over both poster and video,
+and every control is wired to the element — `timeupdate`/`loadedmetadata`/`play`/`pause`/`ended`
+in, `seekTo()`/`play()`/`pause()`/`muted`/`requestFullscreen()` out. Duration comes from the
+element, falling back to `durationMinutes` only until metadata arrives. The `setInterval` is
+gated on `!playbackUrl` so it can never run alongside the element.
+
+**Verified:** the seeded sample URLs return 403 on this network, so a local clip was generated
+with ffmpeg to exercise the element. Duration read 20s (not the catalog's 52-minute estimate),
+the label tracked playback (`00:02 / 00:20` at `currentTime` 2.34), dragging to 75% moved the
+element to 15.34s, the play button paused and resumed it, and mute flipped `video.muted`.
 
 ### 1.3 Replace `alert()` with in-UI error state — *P0*
 `src/pages/WatchPage.jsx` — playback fetch failure should render inside the player surface with

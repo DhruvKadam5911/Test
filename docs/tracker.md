@@ -17,7 +17,7 @@
 | **Backend** | ✅ Runs on :5000, database healthy |
 | **Smoke test** | ✅ All 5 checks pass |
 | **Catalog** | 3 seeded titles |
-| **Current phase** | Phase 1 — Stabilise (1.1 done; 1.2–1.7 open) |
+| **Current phase** | Phase 1 — Stabilise (1.1, 1.2 done; 1.3–1.7 open) |
 
 ---
 
@@ -43,8 +43,8 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | Watch page metadata | ✅ | |
 | Season / episode picker | ✅ | |
 | More Like This | ✅ | Same-genre recommendations |
-| Video playback | ✅ | HTML5 `<video>`, MP4 only |
-| Scrubber | 🟡 | `setInterval` simulation, not bound to the video — plan 1.2 |
+| Video playback | ✅ | HTML5 `<video>`, MP4 only. Native controls off — the custom bar drives play/pause, seek, mute and fullscreen |
+| Scrubber | ✅ | Bound to the element via `timeupdate` / `loadedmetadata`; dragging seeks, and duration comes from the video (plan 1.2, 2026-08-31) |
 | Playback error UX | 🟡 | Browser `alert()` — plan 1.3 |
 | Pool-fetch error UX | ⛔ | Fails silently, rows just vanish — plan 1.6 |
 | 404 route | ⛔ | Unmatched paths render blank |
@@ -91,7 +91,8 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 |---|--------|
 | H1 | **`prisma/seed.js` deletes all six tables before inserting.** Never run it against real data |
 | H2 | `fetchPool()` failures are console-only; the UI shows no error, rows simply disappear |
-| H3 | The scrubber time is fake. Do not build watch-progress persistence on it before plan 1.2 |
+| H3 | The scrubber is real during playback, but falls back to a `setInterval` preview *before* a stream is fetched. That preview timer is gated on `!playbackUrl` — never let it run alongside the element |
+| H3b | Google's `gtv-videos-bucket` sample URLs in the seed data return **403** from some networks. If playback fails with `MEDIA_ELEMENT_ERROR`, check the network before suspecting the player |
 | H4 | `data/videos.js` is legacy — `videos`, `heroVideo`, `continueWatching`, `trending` are all empty. Only `gradients` is live. Do not read data from it |
 | H5 | `StudioPage.jsx` looks like a feature but is unrouted and simulated |
 | H6 | Setting `VIDEO_PROVIDER` in `.env` without implementing the branch breaks **all** playback |
@@ -106,7 +107,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 
 ## Technical debt
 
-Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved 2026-08-31**, nine open.
+Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 and T4 resolved 2026-08-31**, eight open.
 
 ---
 
@@ -127,6 +128,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Plan 1.2: the transport bar is now the real control surface — scrubber, duration, play/pause, mute and fullscreen all drive and follow the `<video>` element; the simulation is confined to the pre-play poster |
 | 2026-08-31 | — | Splash breakpoint moved to 768px: tablets join desktop on the wordmark intro, leaving the wheel to phones |
 | 2026-08-31 | — | Splash split by viewport: the original mark-swoop + written wordmark intro on the wider breakpoint, the wheel below it. `SplashIntro` is now a shell that picks a variant and owns the AudioContext; soundtracks moved to `components/splash/` so the component modules stay Fast-Refresh clean. Mr Bedfort restored to the font link for the desktop wordmark |
 | 2026-08-31 | — | Splash finishes with a Netflix-style push: once the wheel lands, the mark drops in bigger (152px) on an overshoot curve, the losing platforms clear, and the lockup zooms 11x into the homepage. Spin shortened to 2000ms to keep the splash the same length |

@@ -52,6 +52,11 @@ export default function WatchPage() {
   const [hoverTimeSec, setHoverTimeSec] = useState(0);
   const [hoverXPos, setHoverXPos] = useState(0);
   const scrubberRef = useRef(null);
+  const videoRef = useRef(null);
+  const playerRef = useRef(null);
+  // The element's real duration, once it has metadata. The catalog's
+  // durationMinutes is only an estimate and is often a minute or two out.
+  const [videoDurationSec, setVideoDurationSec] = useState(0);
 
   // Fetch Title Details from API
   const fetchTitleDetails = async () => {
@@ -86,7 +91,7 @@ export default function WatchPage() {
   const activeEpisode = activeSeason ? activeSeason.episodes[activeEpisodeIdx] : null;
 
   const durationMinutes = isSeries && activeEpisode ? activeEpisode.durationMinutes : titleData?.durationMinutes || 48;
-  const durationSec = parseDurationToSeconds(durationMinutes);
+  const durationSec = videoDurationSec || parseDurationToSeconds(durationMinutes);
 
   const currentDisplayTitle = isSeries && activeEpisode ? activeEpisode.title : titleData?.title;
   const currentDisplayDescription = isSeries && activeEpisode ? activeEpisode.description : titleData?.description;
@@ -109,14 +114,17 @@ export default function WatchPage() {
   // Reset playback position on episode change
   useEffect(() => {
     setCurrentTimeSec(0);
+    setVideoDurationSec(0);
     setPlaybackUrl(null);
     setIsPlaying(false);
   }, [activeEpisodeIdx, selectedSeasonIdx, videoId]);
 
-  // Simulated Playback Timer (drives the pre-play preview scrubber)
+  // Preview-only timer. Once a stream is loaded the <video> element drives the
+  // scrubber through timeupdate, so this must not run alongside it or the two
+  // fight over currentTimeSec.
   useEffect(() => {
     let interval = null;
-    if (isPlaying && !isDragging) {
+    if (isPlaying && !isDragging && !playbackUrl) {
       interval = setInterval(() => {
         setCurrentTimeSec((prev) => {
           if (prev >= durationSec) {
@@ -130,7 +138,41 @@ export default function WatchPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isPlaying, isDragging, durationSec]);
+  }, [isPlaying, isDragging, durationSec, playbackUrl]);
+
+  // Every path that moves the playhead goes through here, so the bar and the
+  // element can never disagree about where we are.
+  const seekTo = (sec) => {
+    setCurrentTimeSec(sec);
+    const video = videoRef.current;
+    if (video && Number.isFinite(video.duration)) {
+      video.currentTime = Math.min(sec, video.duration);
+    }
+  };
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) {
+      // No stream yet — this is the poster preview, so just move the mock.
+      setIsPlaying((p) => !p);
+      return;
+    }
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
+  };
+
+  const toggleMute = () => {
+    const next = !isMuted;
+    setIsMuted(next);
+    if (videoRef.current) videoRef.current.muted = next;
+  };
+
+  const toggleFullscreen = () => {
+    const el = playerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  };
 
   // Scrubber Event Handlers
   const calculateSecFromX = (clientX) => {
@@ -144,7 +186,7 @@ export default function WatchPage() {
   const handleScrubberMouseDown = (e) => {
     setIsDragging(true);
     const { sec, offsetX } = calculateSecFromX(e.clientX);
-    setCurrentTimeSec(sec);
+    seekTo(sec);
     setHoverTimeSec(sec);
     setHoverXPos(offsetX);
   };
@@ -155,7 +197,7 @@ export default function WatchPage() {
     setHoverTimeSec(sec);
     setHoverXPos(offsetX);
     if (isDragging) {
-      setCurrentTimeSec(sec);
+      seekTo(sec);
     }
   };
 
@@ -163,7 +205,7 @@ export default function WatchPage() {
     const handleGlobalMouseMove = (e) => {
       if (isDragging) {
         const { sec, offsetX } = calculateSecFromX(e.clientX);
-        setCurrentTimeSec(sec);
+        seekTo(sec);
         setHoverTimeSec(sec);
         setHoverXPos(offsetX);
       }
@@ -223,15 +265,31 @@ export default function WatchPage() {
           <div className="lg:col-span-8 w-full min-w-0 space-y-6">
 
             {/* 16:9 Video Player */}
-            <div className="relative aspect-video rounded-lg overflow-hidden flex items-center justify-center w-full select-none" style={{ background: resolveBackground(titleData.thumbnailUrl), border: `1px solid ${colors.ring}` }}>
+            <div ref={playerRef} className="relative aspect-video rounded-lg overflow-hidden flex items-center justify-center w-full select-none" style={{ background: resolveBackground(titleData.thumbnailUrl), border: `1px solid ${colors.ring}` }}>
 
-              {/* If playbackUrl is fetched, render real HTML5 video tag or player surface */}
+              {/* Once a stream is loaded the element is the source of truth for
+                  time, duration and play state — the bar below reflects it.
+                  Native controls are off because that bar replaces them. */}
               {playbackUrl ? (
                 <video
+                  ref={videoRef}
                   src={playbackUrl}
-                  controls
                   autoPlay
+                  playsInline
+                  muted={isMuted}
                   className="w-full h-full object-cover"
+                  onLoadedMetadata={(e) => {
+                    const d = e.currentTarget.duration;
+                    if (Number.isFinite(d) && d > 0) setVideoDurationSec(d);
+                  }}
+                  onTimeUpdate={(e) => {
+                    // Dragging owns the playhead until the user lets go.
+                    if (!isDragging) setCurrentTimeSec(e.currentTarget.currentTime);
+                  }}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                  onClick={togglePlay}
                 />
               ) : (
                 <>
@@ -360,11 +418,11 @@ export default function WatchPage() {
                 </div>
               )}
 
-              {/* Bottom Control Bar */}
-              {!playbackUrl && (
+              {/* Bottom Control Bar — shown over the poster and over the video */}
+              {(
                 <div className="absolute bottom-0 left-0 right-0 p-3.5 flex items-center justify-between z-10" style={{ background: "linear-gradient(to top, rgba(12,8,18,0.95), transparent)" }}>
                   <div className="flex items-center gap-3 flex-1 mr-4 min-w-0">
-                    <button onClick={() => setIsPlaying(!isPlaying)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                    <button onClick={togglePlay} style={{ background: "none", border: "none", cursor: "pointer" }}>
                       {isPlaying ? <Pause size={16} color={colors.text} /> : <Play size={16} color={colors.text} />}
                     </button>
 
@@ -401,11 +459,13 @@ export default function WatchPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setIsMuted(!isMuted)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                    <button onClick={toggleMute} style={{ background: "none", border: "none", cursor: "pointer" }}>
                       {isMuted ? <VolumeX size={16} color={colors.textMuted} /> : <Volume2 size={16} color={colors.text} />}
                     </button>
                     <span style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted }}>1080p</span>
-                    <Maximize2 size={16} color={colors.textMuted} />
+                    <button onClick={toggleFullscreen} style={{ background: "none", border: "none", cursor: "pointer", display: "flex" }} aria-label="Fullscreen">
+                      <Maximize2 size={16} color={colors.textMuted} />
+                    </button>
                   </div>
                 </div>
               )}

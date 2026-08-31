@@ -200,7 +200,6 @@ Expect all five checks green, ending in `🎉 All tests passed successfully!`
 |---|-------|----------|--------|
 | T2 | CORS `allowedOrigins` is built, but the callback allows every origin unconditionally | `server.js` | The allowlist is decorative — fully permissive |
 | T3 | Hero description is a hardcoded string while truncated, ignoring `featuredTitle.description` | `Home.jsx` | Wrong copy for any title that isn't *Undertow* |
-| T4 | Player progress is a `setInterval` simulation, not bound to the `<video>` element | `WatchPage.jsx` | Scrubber and real playback disagree once video starts |
 | T5 | `alert()` used for playback errors | `WatchPage.jsx` | Breaks the visual language |
 | T6 | Unused `import { argv } from "process"` | `server/test-api.js:1` | Lint noise |
 | T7 | Root `README.md` is the unmodified Vite template | `README.md` | Misleading first impression |
@@ -208,6 +207,7 @@ Expect all five checks green, ending in `🎉 All tests passed successfully!`
 | T9 | No auth on `/titles/:id/playback` despite the "(Requires Auth)" comment | `titlesController.js` | Stream URLs are public |
 | T10 | Mixed `.tsx`/`.jsx` with `tsc -b` in the build | root | Build can fail on TS errors in a mostly-JS codebase |
 
-**Resolved:** T1 (splash `AudioContext` lifecycle) — fixed 2026-08-31, see implementation-plan.md 1.1.
+**Resolved:** T1 (splash `AudioContext` lifecycle) and T4 (simulated scrubber) — both fixed
+2026-08-31, see implementation-plan.md 1.1 and 1.2.
 
 Fixes are sequenced in [implementation-plan.md](implementation-plan.md); status lives in [tracker.md](tracker.md).
