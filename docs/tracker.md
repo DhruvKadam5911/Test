@@ -131,6 +131,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | `93e472b` | The wheel's lockup now glides to the centre of the frame before the zoom, so the push travels through the logo instead of past the side of it. Applies to both the phone splash and the watch-page ident |
 | 2026-08-31 | — | The wheel intro now plays as a brand ident inside the player before every video. `SplashWheel` gained `fullscreen` and `itemHeight` props so the same component serves the splash and the pre-roll |
 | 2026-08-31 | — | Removed the click-to-enable-sound gate from the splash. On the live domain a first-time visitor got a black screen and a permission prompt; the intro now runs silently when autoplay is blocked |
 | 2026-08-31 | — | Desktop splash: onion mark enlarged from 200 to 280 and the gap tightened, so it reads as the dominant element beside the wordmark rather than matching it |

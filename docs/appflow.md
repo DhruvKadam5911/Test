@@ -153,7 +153,8 @@ unchanged `src`.
 A resolved stream is **not** handed to the player immediately. It is held in `pendingPlaybackUrl`
 while `SplashWheel` plays inside the 16:9 box — the same wheel the phone splash uses, rendered
 inline at `IDENT_ITEM_HEIGHT` instead of full screen. Its `onDone` promotes the URL and starts
-playback. Roughly 3.4s from clicking play to the first frame.
+playback. Roughly 3.9s from clicking play to the first frame: the wheel settles on Onion, the
+lockup glides to the centre of the frame, then the camera pushes through it into the video.
 
 Holding the URL is the point: mounting the video behind the ident would start its audio
 underneath. The transport bar and the poster's play button are both hidden while it runs.

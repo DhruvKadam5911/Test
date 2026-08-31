@@ -155,12 +155,24 @@ The wheel *is* the intro, and the brand mark arrives at the end of it.
 | 2000ms | Locks on **Onion**, crisp | C major chime chord (C5/E5/G5/C6, 20ms strum) + noise transient + feedback-delay tail |
 | 2000–2560ms | Arrow slides out; `OnionMark` (152px) drops in — scaling from 0.3 with a rotation and a blur, on an overshoot curve so it lands stamped rather than faded (`MARK_SWAP_MS`) | — |
 | 2380ms | `isolate` — the losing platforms blur and fade out, leaving only the lockup | — |
-| 2620ms | The push begins: the whole stage scales to `ZOOM_SCALE` (11x) on an accelerating curve, origin measured at the lockup's centre | — |
+| 2560ms | The lockup glides to the middle of the frame over `CENTRE_MS` | — |
+| 3020ms | The push begins: the whole stage scales to `ZOOM_SCALE` (11x) on an accelerating curve, origin measured at the lockup's centre | — |
 | 2920ms | Background starts dissolving, revealing the app already mounted behind | — |
 | 3440ms | `onDone()` | — |
 
 **The marker swap must not move the list.** The arrow and the mark are stacked absolutely
 inside one fixed-size box sized to the mark, so the swap cannot reflow anything beside them.
+
+**The lockup is recentred before the push.** The wheel is left-aligned by design, so the lockup
+settles off to one side and pushing from there sends the camera through the edge of the frame.
+The stage translates it to the middle first, then scales. Both phases ride one `transform`, with
+the translate kept applied during the zoom so the lockup does not snap back sideways as it grows
+— and because translating an element does not move its `transform-origin`, the push still scales
+about the lockup.
+
+**Measure the marker element, never the mark's `<img>`.** `OnionMark` crops a wide raster with
+`overflow: hidden`, so the image's own bounding rect is several times the width you actually see
+(222px against a visible 41px at ident size). Including it drags the computed centre well off.
 
 **The push origin is measured, not guessed.** On settle, the splash takes the union of the
 marker's and the landed item's bounding boxes and sets `transform-origin` to its centre. A
