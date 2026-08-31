@@ -51,10 +51,12 @@ export default function PickerWheel({
   onActiveChange,
   onSettled,
   marker,
+  isolate = false,
   className = "",
   style,
 }) {
   const itemRefs = useRef([]);
+  const activeIndexRef = useRef(0);
   const cbRef = useRef({ onActiveChange, onSettled });
   cbRef.current = { onActiveChange, onSettled };
 
@@ -88,8 +90,10 @@ export default function PickerWheel({
       // Never spin. Land on the target immediately so a splash still finishes.
       const rest = settling ? stopAt : startAt;
       paint(rest);
-      cbRef.current.onActiveChange?.(((rest % n) + n) % n);
-      if (settling) cbRef.current.onSettled?.();
+      const restIndex = ((rest % n) + n) % n;
+      activeIndexRef.current = restIndex;
+      cbRef.current.onActiveChange?.(restIndex);
+      if (settling) cbRef.current.onSettled?.(itemRefs.current[restIndex]);
       return;
     }
 
@@ -101,6 +105,7 @@ export default function PickerWheel({
 
     const announce = (pos) => {
       const active = ((Math.round(pos) % n) + n) % n;
+      activeIndexRef.current = active;
       if (active !== lastActive) {
         lastActive = active;
         cbRef.current.onActiveChange?.(active);
@@ -146,7 +151,7 @@ export default function PickerWheel({
 
       if (done) {
         paint(pos, 0); // land crisp
-        cbRef.current.onSettled?.();
+        cbRef.current.onSettled?.(itemRefs.current[activeIndexRef.current]);
         return;
       }
       raf = requestAnimationFrame(tick);
@@ -155,6 +160,21 @@ export default function PickerWheel({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [n, stepMs, startAt, stopAt, spins, spinMs]);
+
+  // Clears the losing items away so only the landed one is left beside the
+  // marker. Runs after the animation effect has finished, so there is no rAF
+  // loop still writing opacity that would fight these transitions.
+  useEffect(() => {
+    if (!isolate) return;
+    itemRefs.current.forEach((el, i) => {
+      if (!el) return;
+      el.style.transition = "opacity 260ms ease, filter 260ms ease";
+      if (i !== activeIndexRef.current) {
+        el.style.opacity = "0";
+        el.style.filter = "blur(12px)";
+      }
+    });
+  }, [isolate]);
 
   return (
     <div

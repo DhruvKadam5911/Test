@@ -42,10 +42,12 @@ play sound + start timeline      show "Click anywhere to play with sound"
    └────────────┬─────────────────────┘
                 ↓
    0ms      PickerWheel starts spinning through the platform list
-   0-2600ms one full turn + travel back to Onion, decelerating (+ ticks)
-   2600ms   locks on "Onion" → PickerWheel calls onSettled (+ chime)
-   3000ms   splash fades out
-   3420ms   onDone() → showSplash = false
+   0-2000ms one full turn + travel back to Onion, decelerating (+ ticks)
+   2000ms   locks on "Onion" → PickerWheel calls onSettled (+ chime)
+   2000ms   onion mark drops in, replacing the arrow marker
+   2380ms   losing platforms fade out — only the lockup is left
+   2620ms   the lockup zooms toward the viewer (11x), background dissolving
+   3440ms   onDone() → showSplash = false
 ```
 
 The routed page mounts and fetches **underneath** the splash, so by the time the splash

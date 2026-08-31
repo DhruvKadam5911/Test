@@ -8,11 +8,16 @@ import { PLATFORMS } from "../data/platforms";
 const TARGET = "Onion";
 const START_INDEX = 1; // begin on the item after the target, so it has to travel
 const SPINS = 1; // one full turn is plenty — more only lengthens the unreadable fast phase
-const SPIN_MS = 2200; // spin-up and deceleration onto the target
-// Long enough for the mark to swap in and be read before the splash leaves.
-const SETTLE_HOLD_MS = 750;
-const MARK_SWAP_MS = 380; // arrow out, brand mark in
-const FADE_MS = 420;
+const SPIN_MS = 2000; // spin-up and deceleration onto the target
+// The mark renders at 0.37x its height (the crop's aspect), so 152 is
+// about 56px wide — still clear of the item column at left: 92.
+const MARK_HEIGHT = 152;
+const MARK_SWAP_MS = 560; // arrow out, brand mark in with an overshoot
+const ISOLATE_AFTER_MS = 380; // losing platforms clear away
+const ZOOM_AFTER_MS = 620; // camera starts pushing through the lockup
+const ZOOM_MS = 820;
+const ZOOM_SCALE = 11;
+const FADE_MS = 520; // background dropping away to reveal the app behind
 
 /* ==========================================================================
    WEB AUDIO API SOUND GENERATION SYSTEM
@@ -192,6 +197,13 @@ export default function SplashIntro({ onDone }) {
   const [started, setStarted] = useState(false);
   // Set once the wheel lands: swaps the arrow marker for the brand mark.
   const [settled, setSettled] = useState(false);
+  const [isolate, setIsolate] = useState(false);
+  const [zooming, setZooming] = useState(false);
+  // Origin of the push, measured from the real lockup so the zoom comes
+  // through the logo rather than the middle of an empty screen.
+  const [zoomOrigin, setZoomOrigin] = useState("30% 50%");
+  const stageRef = useRef(null);
+  const markerRef = useRef(null);
   const [showOverlay, setShowOverlay] = useState(false);
   // The single AudioContext for this mount. Browsers cap concurrent contexts
   // (~6), so it is created once, reused by handleInteraction, and closed on
@@ -254,10 +266,29 @@ export default function SplashIntro({ onDone }) {
 
   // The wheel drives the timeline: it reports when it has landed on Onion,
   // and only then does the splash hold, fade and hand over.
-  const handleSettled = () => {
+  const handleSettled = (activeEl) => {
     setSettled(true);
-    setTimeout(() => setVisible(false), SETTLE_HOLD_MS);
-    setTimeout(() => onDone?.(), SETTLE_HOLD_MS + FADE_MS);
+
+    // The lockup is the mark plus the landed name. Measure their union so the
+    // push starts from its centre on any viewport, instead of a guessed
+    // percentage that drifts as the layout changes.
+    const stage = stageRef.current;
+    const marker = markerRef.current;
+    if (stage && activeEl && marker) {
+      const base = stage.getBoundingClientRect();
+      const a = marker.getBoundingClientRect();
+      const b = activeEl.getBoundingClientRect();
+      const cx = (Math.min(a.left, b.left) + Math.max(a.right, b.right)) / 2 - base.left;
+      const cy = (Math.min(a.top, b.top) + Math.max(a.bottom, b.bottom)) / 2 - base.top;
+      setZoomOrigin(`${cx}px ${cy}px`);
+    }
+
+    setTimeout(() => setIsolate(true), ISOLATE_AFTER_MS);
+    setTimeout(() => {
+      setZooming(true);
+      setVisible(false);
+    }, ZOOM_AFTER_MS);
+    setTimeout(() => onDone?.(), ZOOM_AFTER_MS + ZOOM_MS);
   };
 
   return (
@@ -268,11 +299,24 @@ export default function SplashIntro({ onDone }) {
         zIndex: 200,
         background: colors.bg,
         opacity: visible ? 1 : 0,
-        transition: `opacity ${FADE_MS}ms ease`,
+        // Delayed so the camera is already moving before the splash dissolves.
+        transition: `opacity ${FADE_MS}ms ease ${zooming ? ZOOM_MS - FADE_MS : 0}ms`,
         pointerEvents: visible ? "auto" : "none",
       }}
     >
       {started && (
+        <div
+          ref={stageRef}
+          style={{
+            height: "100%",
+            transform: zooming ? `scale(${ZOOM_SCALE})` : "scale(1)",
+            transformOrigin: zoomOrigin,
+            // Accelerating, like a camera pushing through the logo — an
+            // ease-out here would read as the lockup drifting, not rushing.
+            transition: `transform ${ZOOM_MS}ms cubic-bezier(.45,0,.9,.6)`,
+            willChange: "transform",
+          }}
+        >
         <PickerWheel
           items={PLATFORMS}
           itemHeight={104}
@@ -281,33 +325,51 @@ export default function SplashIntro({ onDone }) {
           spins={SPINS}
           spinMs={SPIN_MS}
           onSettled={handleSettled}
+          isolate={isolate}
           marker={
-            // Arrow and mark are stacked in one box so the crossfade cannot
-            // shift the items beside them.
-            <span style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 52, height: 112 }}>
+            // Arrow and mark are stacked in one fixed box so the swap cannot
+            // reflow the names beside them. The box is sized to the mark, the
+            // larger of the two.
+            <span
+              ref={markerRef}
+              style={{
+                position: "relative",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: MARK_HEIGHT * 0.37,
+                height: MARK_HEIGHT,
+              }}
+            >
               <span
                 style={{
                   position: "absolute",
                   opacity: settled ? 0 : 1,
-                  transform: settled ? "translateX(-8px)" : "translateX(0)",
-                  transition: `opacity ${MARK_SWAP_MS}ms ease, transform ${MARK_SWAP_MS}ms ease`,
+                  transform: settled ? "translateX(-10px) scale(0.8)" : "translateX(0) scale(1)",
+                  transition: "opacity 200ms ease, transform 200ms ease",
                 }}
               >
                 →
               </span>
               <OnionMark
-                height={112}
+                height={MARK_HEIGHT}
                 style={{
                   position: "absolute",
                   opacity: settled ? 1 : 0,
-                  transform: settled ? "scale(1)" : "scale(0.6)",
-                  transition: `opacity ${MARK_SWAP_MS}ms ease, transform ${MARK_SWAP_MS}ms cubic-bezier(.16,1,.3,1)`,
+                  // Overshoots slightly past full size before settling, which
+                  // gives the mark a stamped-on feel rather than a fade-in.
+                  transform: settled
+                    ? "scale(1) translateY(0) rotate(0deg)"
+                    : "scale(0.3) translateY(14px) rotate(-12deg)",
+                  filter: settled ? "blur(0px)" : "blur(10px)",
+                  transition: `opacity 240ms ease, filter 300ms ease, transform ${MARK_SWAP_MS}ms cubic-bezier(.34,1.56,.64,1)`,
                 }}
               />
             </span>
           }
-          style={{ height: "100%" }}
-        />
+            style={{ height: "100%" }}
+          />
+        </div>
       )}
 
       {/* Subtle overlay to enable sound if autoplay is blocked */}

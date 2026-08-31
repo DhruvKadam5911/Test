@@ -29,7 +29,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Splash intro visuals | ✅ | ~3.4s; a `PickerWheel` spins through streaming platforms, locks on **Onion**, then the arrow marker crossfades into the onion mark |
+| Splash intro visuals | ✅ | ~3.5s; a `PickerWheel` spins through streaming platforms and locks on **Onion**, the onion mark drops in, the other names clear away, then the lockup zooms toward the viewer and the homepage is revealed behind |
 | Splash intro audio | ✅ | One `AudioContext` per mount, closed on unmount; the click path resumes it rather than opening a second (plan 1.1, 2026-08-31) |
 | Autoplay-blocked overlay | ✅ | Click-to-enable |
 | Cinematic hero | 🟡 | Renders, but the truncated description is hardcoded *Undertow* copy — plan 1.4 |
@@ -99,7 +99,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H8 | `npm run build` runs `tsc -b`. TypeScript errors fail a build in a mostly-JSX codebase |
 | H9 | `#7C3FC4` appears in a few places instead of `colors.accent` `#7B2685` |
 | H10 | Two components render the same raster differently: `OnionLogo.jsx` draws the full lockup for the navbar/footer, `OnionMark.jsx` crops the bulb alone for the splash. Both re-process `public/logo.png` on a canvas at runtime — if that file is replaced, check the crop bounds and the white-knockout threshold in both |
-| H11 | `PickerWheel` writes styles straight to DOM nodes from a rAF loop. Do not also drive those same properties from React state or CSS transitions — they will fight each other |
+| H11 | `PickerWheel` writes styles straight to DOM nodes from a rAF loop. Do not also drive those same properties from React state or CSS transitions — they will fight each other. `isolate` is safe only because it runs after the loop has finished |
 
 ---
 
@@ -126,6 +126,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Splash finishes with a Netflix-style push: once the wheel lands, the mark drops in bigger (152px) on an overshoot curve, the losing platforms clear, and the lockup zooms 11x into the homepage. Spin shortened to 2000ms to keep the splash the same length |
 | 2026-08-31 | — | The onion mark returns to the splash: once the wheel locks on Onion, the arrow marker crossfades into `OnionMark`, leaving a brand lockup. Spin shortened to 2200ms so the added beat does not lengthen the splash overall |
 | 2026-08-31 | — | Splash replaced: the icon swoop and written wordmark were removed, and `PickerWheel` now spins through the platform list and locks on Onion. Audio retimed — ticks derived from the easing inverse, chime on the lock. Mr Bedfort dropped from the font link, now unused |
 | 2026-08-31 | — | Added `PickerWheel` — a rotating slot-machine list of streaming platform names with arc geometry and depth-of-field falloff, plus a `/wheel` demo route |
