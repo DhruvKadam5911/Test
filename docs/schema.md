@@ -209,30 +209,35 @@ and null for anything not from TMDB. Nobody has watched anything in this catalog
 is vote count — the closest honest stand-in, and named as a stand-in here rather than pretended to
 be a view count.
 
-### `GET /music/tracks`
+### Music
 
-`[{ id, title, artist, audioUrl, artworkUrl, durationSeconds, genre, source }]`, newest first.
-`genre`, `limit` and `offset` narrow it. `GET /music/genres` returns the counts. Both return `[]`
-when the table does not exist yet, so the player can say there is no music rather than look broken.
+Tracks are YouTube videos. YouTube Music's catalogue *is* YouTube's — the Indian labels put
+everything on it — and the embedded player is the licensed way to reach it: YouTube serves the ads,
+the rights holders get paid. Nothing in the API touches audio; `sourceId` is a video id and the
+browser plays it through YouTube's own player, which stays visible because hiding it is against the
+terms it is allowed under.
 
-**Where the audio comes from.** Two sources, both free, both needing no key, and both serving whole
-tracks rather than the thirty-second previews the commercial APIs offer:
+| Route | What it does |
+|-------|--------------|
+| `GET /music/tracks` | What is charting in a region. `limit`, `region` (default `IN`) |
+| `GET /music/search?q=` | Songs, artists, albums. Under two characters returns `[]` |
+| `GET /music/genres` | Counts, for a client that wants to group |
 
-| Source | What it is |
-|--------|------------|
-| Audius | Artists upload for streaming, so linking the stream is the intended use. Browsed by genre |
-| Internet Archive | Public domain, Creative Commons, and live recordings taped with permission |
+**Quota is what shapes this.** The free allowance is 10,000 units a day and a search costs 100 of
+them — a hundred searches. So the charts come from `videos.list`, which costs 1 and can run on every
+visit, and every search result is written to `Track`; a query the catalog can already answer with
+eight rows or more is never sent to YouTube. When the quota does run out the charts fall back to
+what is stored rather than showing an empty page.
 
-Spotify and YouTube Music are not options and cannot be made into one. Spotify serves metadata
-only — audio needs their SDK and each listener's own Premium account, and the thirty-second preview
-was withdrawn from new apps in 2024. YouTube has no music API. The GitHub projects that appear to
-solve this work by ripping audio out of those services, and hosting the result here would be
-redistributing music nobody licensed.
+Needs `YOUTUBE_API_KEY` on the deployment. Without it the charts fall back to the table and search
+returns 503 saying so. `GET /admin/clear-music` empties the table; dry run unless `?apply=true`.
 
-`GET /admin/refresh-music` imports a slice — `source` (`audius` or `archive`), `genre`, `fromPage`,
-`pages` (capped at 10). Idempotent: each track carries the id its source gave it, and a unique index
-on `(source, sourceId)` rejects the second copy. `prisma/backfill-music.mjs` drives it across every
-genre and collection.
+**Ruled out, and why.** Spotify serves metadata only — audio needs their SDK and each listener's own
+Premium account, and the thirty-second preview was withdrawn from new apps in 2024. JioSaavn's
+catalogue is licensed to JioSaavn; serving their CDN from here is redistribution. The GitHub
+projects that appear to solve either work by ripping audio out of those services. Audius and the
+Internet Archive were tried first and dropped: both serve whole tracks legally, but not the music
+anyone asked for.
 
 ### `GET /titles/genres`
 

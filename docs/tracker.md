@@ -132,6 +132,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-09-01 | — | Music moved to YouTube's embedded player — the catalogue people actually want, played the licensed way. The Audius/Internet Archive tracks were deleted: legal and whole, but nobody wanted them. Quota shapes the design — charts cost 1 unit, search costs 100, so searches are cached in `Track` |
 | 2026-09-01 | — | The music player has music: Audius and the Internet Archive, both free, both keyless, both serving whole tracks. 6,000+ so far across 26 genres. Spotify and YouTube Music were ruled out — metadata only, or no API, and the projects that get around that redistribute unlicensed audio |
 | 2026-09-01 | — | Categories back, but not as they were: twelve genre rows under the four ordered ones, each loading only when scrolled towards, plus a Categories menu in the navbar listing all 29 with their counts and a `/genre/:genre` page behind each. The old version rendered every genre eagerly |
 | 2026-09-01 | — | Home page rebuilt: four ordered rows instead of 29 genre rows, ratings on every card, and three hardcoded decorations removed — "FEATURED VOD", a "#1 IN SERIES TODAY" ribbon and a "TV-MA" badge that every title carried. Import now stores TMDB's voteAverage/voteCount/popularity and backfills rows already stored |

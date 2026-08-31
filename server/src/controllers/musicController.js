@@ -1,46 +1,107 @@
 import prisma from "../config/db.js";
+import { fetchChart, searchMusic, isYoutubeConfigured } from "../services/youtube.js";
 
 /*
- * Music tracks.
+ * Music.
  *
- * The table and its columns are created by GET /admin/reindex alongside the
- * catalog's own, for the same reason: Prisma migrations cannot run from a
- * machine with no route to Postgres on 5432.
+ * Tracks are YouTube videos: the catalogue people actually want is there, and
+ * the embedded player is the licensed way to reach it. Nothing here handles
+ * audio — `sourceId` is a video id and the browser plays it through YouTube.
  *
- * Returns an empty list rather than an error when nothing has been added, so
- * the player can say so instead of looking broken.
+ * The Track table doubles as a quota cache. A search costs 100 of the 10,000
+ * units a day, so a query the catalog can already answer is never sent.
  */
 
-const MAX_LIMIT = 200;
+const MAX_LIMIT = 50;
+// Below this a stored answer is too thin to be worth serving instead of asking.
+const CACHE_HIT_MIN = 8;
 
-// GET /music/tracks
+const emptyIfNoTable = (error, res) => {
+  if (/does not exist/i.test(error.message)) return res.status(200).json([]);
+  return null;
+};
+
+async function storeTracks(tracks) {
+  if (!tracks.length) return;
+
+  const params = [];
+  const tuples = tracks.map((t) => {
+    const start = params.length;
+    params.push(t.title, t.artist, t.audioUrl, t.artworkUrl, t.durationSeconds, t.genre, t.source, t.sourceId);
+    const p = (n) => `$${start + n}`;
+    return `(gen_random_uuid()::text, ${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)}, ${p(6)}, ${p(7)}, ${p(8)}, NOW())`;
+  });
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "Track" (id, title, artist, "audioUrl", "artworkUrl", "durationSeconds", genre, source, "sourceId", "createdAt")
+     VALUES ${tuples.join(", ")}
+     ON CONFLICT (source, "sourceId") DO NOTHING`,
+    ...params
+  );
+}
+
+// GET /music/tracks — the charts, and what has been searched for before.
 export async function getTracks(req, res) {
   try {
-    const genre = req.query.genre || null;
-    const limit = Math.min(Number(req.query.limit) || 100, MAX_LIMIT);
-    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const limit = Math.min(Number(req.query.limit) || 50, MAX_LIMIT);
 
-    const tracks = genre
-      ? await prisma.$queryRaw`
-          SELECT id, title, artist, "audioUrl", "artworkUrl", "durationSeconds", genre, source
-          FROM "Track" WHERE lower(genre) = lower(${genre})
-          ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`
-      : await prisma.$queryRaw`
-          SELECT id, title, artist, "audioUrl", "artworkUrl", "durationSeconds", genre, source
-          FROM "Track"
-          ORDER BY "createdAt" DESC LIMIT ${limit} OFFSET ${offset}`;
+    if (isYoutubeConfigured()) {
+      try {
+        // One quota unit, so this can run on every visit.
+        const chart = await fetchChart({ region: req.query.region || "IN", limit });
+        await storeTracks(chart);
+        return res.status(200).json(chart);
+      } catch (error) {
+        // Quota gone or YouTube unreachable: fall back to what is stored rather
+        // than showing an empty page.
+        console.error("getTracks chart error:", error.message);
+      }
+    }
 
+    const tracks = await prisma.$queryRaw`
+      SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
+      FROM "Track" ORDER BY "createdAt" DESC LIMIT ${limit}`;
     return res.status(200).json(tracks);
   } catch (error) {
-    // The table not existing yet is the ordinary case before the first deploy
-    // that runs /admin/reindex, and is not worth a 500.
-    if (/does not exist/i.test(error.message)) return res.status(200).json([]);
+    const empty = emptyIfNoTable(error, res);
+    if (empty) return empty;
     console.error("getTracks error:", error);
     return res.status(500).json({ error: "Failed to fetch tracks." });
   }
 }
 
-// GET /music/genres
+// GET /music/search?q=
+export async function searchTracks(req, res) {
+  const query = String(req.query.q || "").trim();
+  if (query.length < 2) return res.status(200).json([]);
+
+  const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
+
+  try {
+    // The catalog first. Every search that has run before is in it, and asking
+    // YouTube again would cost a hundredth of the day's quota for the same rows.
+    const cached = await prisma.$queryRaw`
+      SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
+      FROM "Track"
+      WHERE source = 'youtube' AND (title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`})
+      ORDER BY "createdAt" DESC LIMIT ${limit}`;
+
+    if (cached.length >= CACHE_HIT_MIN) return res.status(200).json(cached);
+
+    if (!isYoutubeConfigured()) {
+      return res.status(503).json({ error: "YOUTUBE_API_KEY is not configured on this deployment." });
+    }
+
+    const found = await searchMusic({ query, region: req.query.region || "IN", limit });
+    await storeTracks(found);
+    return res.status(200).json(found);
+  } catch (error) {
+    console.error("searchTracks error:", error);
+    return res.status(500).json({ error: error.message || "Failed to search music." });
+  }
+}
+
+// GET /music/genres — kept so the client has one shape to read.
 export async function getMusicGenres(req, res) {
   try {
     const genres = await prisma.$queryRawUnsafe(
@@ -49,7 +110,8 @@ export async function getMusicGenres(req, res) {
     );
     return res.status(200).json(genres);
   } catch (error) {
-    if (/does not exist/i.test(error.message)) return res.status(200).json([]);
+    const empty = emptyIfNoTable(error, res);
+    if (empty) return empty;
     console.error("getMusicGenres error:", error);
     return res.status(500).json({ error: "Failed to fetch music genres." });
   }

@@ -1,6 +1,5 @@
 import { importSlice, MAX_PAGE } from "../services/catalogImport.js";
 import { dedupeTitles } from "../services/catalogCleanup.js";
-import { importMusicSlice } from "../services/musicImport.js";
 import prisma from "../config/db.js";
 import { isTmdbConfigured } from "../services/tmdb.js";
 
@@ -220,31 +219,36 @@ export async function removeSeed(req, res) {
 }
 
 /*
- * GET /admin/refresh-music
+ * GET /admin/clear-music
  *
- * The music equivalent of /admin/refresh. Same CRON_SECRET guard, same reason
- * for running server-side, same idempotency.
+ * Empties the Track table. Dry run unless ?apply=true, and `source` narrows it
+ * to one importer's rows.
  */
-export async function refreshMusic(req, res) {
+export async function clearMusic(req, res) {
   if (!authorised(req)) {
     return res.status(401).json({ error: "Unauthorized." });
   }
 
-  const { source, genre, fromPage, pages } = req.query;
+  const { source, apply } = req.query;
 
   try {
-    const result = await importMusicSlice({
-      source: source === "archive" ? "archive" : "audius",
-      genre: genre || null,
-      fromPage: Math.max(1, Number(fromPage) || 1),
-      // Capped for the same reason the film import is: a half-finished slice
-      // killed at the time limit reports nothing.
-      pages: Math.max(1, Math.min(Number(pages) || 2, 10)),
-    });
+    const [{ count }] = source
+      ? await prisma.$queryRaw`SELECT count(*)::int AS count FROM "Track" WHERE source = ${source}`
+      : await prisma.$queryRawUnsafe('SELECT count(*)::int AS count FROM "Track"');
 
-    return res.status(200).json({ status: "ok", ...result });
+    let deleted = 0;
+    if (apply === "true" && count > 0) {
+      deleted = source
+        ? await prisma.$executeRaw`DELETE FROM "Track" WHERE source = ${source}`
+        : await prisma.$executeRawUnsafe('DELETE FROM "Track"');
+    }
+
+    return res.status(200).json({ status: "ok", matched: count, deleted, applied: apply === "true" });
   } catch (error) {
-    console.error("refreshMusic error:", error);
-    return res.status(500).json({ error: error.message || "Music refresh failed." });
+    if (/does not exist/i.test(error.message)) {
+      return res.status(200).json({ status: "ok", matched: 0, deleted: 0, applied: false });
+    }
+    console.error("clearMusic error:", error);
+    return res.status(500).json({ error: error.message || "Clearing music failed." });
   }
 }
