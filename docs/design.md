@@ -262,10 +262,17 @@ gradient-backed title, which is currently all of them.
 |-----------|------|
 | `shared/OnionLogo.jsx` | The full lockup: `OnionMark` + `OnionWordmark`. Takes `height`. Navbar and footer |
 | `shared/OnionWordmark.jsx` | "onion" drawn from the brand geometry. Takes `height` (the letters' visual height, not an em size), `color`, `strokeWidth` |
-| `shared/OnionMark.jsx` | The bulb-and-sprout **only**, cropped out of the same raster at runtime with the white background knocked out. Use it wherever the mark sits next to live text — the splash marker |
+| `shared/OnionMark.jsx` | The bulb-and-sprout **only**, cropped out of the same raster at runtime with the white background knocked out, and lifted to its optical centre. Use it wherever the mark sits next to live text |
 | `shared/RingMotif.jsx` | Large concentric-ring decoration. Takes `size`, `opacity`, `style`. Hero background |
 | `shared/SmallRing.jsx` | Compact ring bullet before section titles |
 | `PickerWheel.jsx` | Slot-machine list that rotates a set of labels past a fixed `→` marker. Reusable — takes `items`, `itemHeight`, `stepMs`, `onActiveChange`. Demoed at `/wheel` |
+
+**The mark is lifted to its optical centre.** It is not centred inside its own crop: measuring
+the opaque pixels, the ink's bounding box sits 3.1% below the crop's centre and its centroid —
+where the weight is, the bulb being heavy and the sprout thin — sits 8.0% below. `items-center`
+would otherwise centre the empty box and leave the mark visibly low beside text, so `OnionMark`
+offsets the image by `INK_CENTROID_OFFSET`. Every lockup gets this for free; do not re-nudge the
+mark in individual callers.
 
 The concentric ring is the brand's secondary motif — an onion cross-section. Use it to mark
 sections, not as generic decoration.

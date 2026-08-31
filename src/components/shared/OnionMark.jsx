@@ -16,6 +16,14 @@ const SOURCE_H = 512;
 const ICON_LEFT = 199;
 const ICON_RIGHT = 388;
 
+// The mark is not centred in its own crop. Measuring the opaque pixels in that
+// x-range: the ink's bounding box sits 3.1% below the crop's centre, and its
+// centroid — where the weight actually is, since the bulb is heavy and the
+// sprout is thin — sits 8.0% below. Centring the box therefore leaves the mark
+// visibly low next to text. Lifting by the centroid offset makes `items-center`
+// centre what you see rather than the empty box around it.
+const INK_CENTROID_OFFSET = 0.08;
+
 export default function OnionMark({ height = 96, className = "", style }) {
   const [src, setSrc] = useState(null);
 
@@ -80,7 +88,7 @@ export default function OnionMark({ height = 96, className = "", style }) {
           style={{
             position: "absolute",
             left: -ICON_LEFT * scale,
-            top: 0,
+            top: -height * INK_CENTROID_OFFSET,
             height,
             width: SOURCE_W * scale,
             maxWidth: "none",

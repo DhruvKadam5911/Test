@@ -131,6 +131,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | `OnionMark` now lifts the bulb to its optical centre. The mark sits 8% low inside its own crop, so every lockup was centring an empty box and showing the mark below the text beside it |
 | 2026-08-31 | — | Desktop/tablet intro mark enlarged, and its size now derives from the wordmark's viewport basis rather than fixed pixels — a fixed height made the mark 4.2x the letter height on tablet against 3.0x on desktop |
 | 2026-08-31 | — | Wheel mark enlarged 152 → 210. The names' start position is now derived from the mark's width rather than hardcoded, so it could grow without sliding under them |
 | 2026-08-31 | — | The brand wordmark is now one drawn asset used everywhere: extracted `OnionWordmark` from the intro geometry, rebuilt `OnionLogo` on it so the navbar and footer stop showing the raster's uppercase "ONION", and the wheel renders its own name as the wordmark while other platforms stay as type |
