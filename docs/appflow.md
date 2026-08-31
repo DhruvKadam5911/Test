@@ -131,7 +131,8 @@ series  → GET /titles/:id/playback?episodeId={activeEpisode.id}
         ↓
 server: resolvePlaybackUrl(storedUrl)
         ↓
-{ playbackUrl }  →  <video src autoPlay> replaces the poster; the custom bar stays
+{ playbackUrl }  →  held back; the brand ident plays in the player box first
+                 →  ident onDone → <video src autoPlay> mounts; the bar returns
 ```
 
 Two things can fail here, and both land on the same in-player error surface with a Retry
@@ -146,6 +147,19 @@ The element failure matters as much as the request one: an unreachable or unsupp
 would otherwise leave a silent black box. Retry clears `playbackUrl` before refetching, because
 the same stream usually resolves to the same URL and React would not remount the element for an
 unchanged `src`.
+
+### Brand ident
+
+A resolved stream is **not** handed to the player immediately. It is held in `pendingPlaybackUrl`
+while `SplashWheel` plays inside the 16:9 box — the same wheel the phone splash uses, rendered
+inline at `IDENT_ITEM_HEIGHT` instead of full screen. Its `onDone` promotes the URL and starts
+playback. Roughly 3.4s from clicking play to the first frame.
+
+Holding the URL is the point: mounting the video behind the ident would start its audio
+underneath. The transport bar and the poster's play button are both hidden while it runs.
+
+Unlike the splash, the ident **has sound** — by the time someone clicks play they have interacted
+with the page, so the browser's autoplay block no longer applies.
 
 ### Overlay panel
 

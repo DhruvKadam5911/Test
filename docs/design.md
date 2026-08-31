@@ -140,6 +140,10 @@ soundtracks live in plain modules (`splash/wheelSound.js`, `splash/wordmarkSound
 than being exported from the components — a module exporting both a component and a plain
 function breaks Fast Refresh.
 
+`SplashWheel` is used in two places: as the phone splash, and as the pre-roll ident in the
+watch page's player. It takes `fullscreen` and `itemHeight`, and everything scales from
+`itemHeight` — including the mark — so the same intro holds its proportions at either size.
+
 #### Phone — the wheel
 
 The wheel *is* the intro, and the brand mark arrives at the end of it.

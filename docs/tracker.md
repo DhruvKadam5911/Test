@@ -39,7 +39,8 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | Dynamic genre rows | ✅ | Derived from the catalog at runtime |
 | Search | 🟡 | Client-side over the loaded 100-title pool only — plan 5.1 |
 | Content cards + skeletons | ✅ | |
-| PickerWheel | ✅ | Reusable rotating-list component. Loop mode demoed at `/wheel`; settle mode drives the splash |
+| PickerWheel | ✅ | Reusable rotating-list component. Loop mode demoed at `/wheel`; settle mode drives the phone splash and the watch-page ident |
+| Pre-roll ident | ✅ | `SplashWheel` plays inside the player before every video, ~3.4s. The stream is held back until it finishes so no audio starts underneath |
 | Row arrows / scroll | ✅ | |
 | Watch page metadata | ✅ | |
 | Season / episode picker | ✅ | |
@@ -130,6 +131,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | The wheel intro now plays as a brand ident inside the player before every video. `SplashWheel` gained `fullscreen` and `itemHeight` props so the same component serves the splash and the pre-roll |
 | 2026-08-31 | — | Removed the click-to-enable-sound gate from the splash. On the live domain a first-time visitor got a black screen and a permission prompt; the intro now runs silently when autoplay is blocked |
 | 2026-08-31 | — | Desktop splash: onion mark enlarged from 200 to 280 and the gap tightened, so it reads as the dominant element beside the wordmark rather than matching it |
 | 2026-08-31 | — | **Live on Vercel.** Neon provisioned, schema migrated and catalog seeded, both projects deployed and wired. Verified end to end: health, catalog, home page and a cold `/watch/:id` deep link |

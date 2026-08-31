@@ -11,6 +11,9 @@ export const SPIN_MS = 2000; // spin-up and deceleration onto the target
 // The mark renders at 0.37x its height (the crop's aspect), so 152 is
 // about 56px wide — still clear of the item column at left: 92.
 export const MARK_HEIGHT = 152;
+// The size the wheel was designed at. Rendering at any other size scales
+// everything from this, so the proportions hold.
+export const ITEM_HEIGHT = 104;
 export const MARK_SWAP_MS = 560; // arrow out, brand mark in with an overshoot
 export const ISOLATE_AFTER_MS = 380; // losing platforms clear away
 export const ZOOM_AFTER_MS = 620; // camera starts pushing through the lockup

@@ -6,6 +6,11 @@ import SmallRing from "../components/shared/SmallRing";
 import OnionLogo from "../components/shared/OnionLogo";
 import AppNavbar from "../components/AppNavbar";
 import api from "../api/client";
+import SplashWheel from "../components/SplashWheel";
+
+// The ident is designed at 104; inside a 16:9 player box that is far too big,
+// and everything in the wheel scales from this one number.
+const IDENT_ITEM_HEIGHT = 76;
 
 function parseDurationToSeconds(durationMinutes) {
   if (!durationMinutes || isNaN(durationMinutes)) return 2880;
@@ -32,6 +37,9 @@ export default function WatchPage() {
 
   const [playbackUrl, setPlaybackUrl] = useState(null);
   const [playbackError, setPlaybackError] = useState(null);
+  // A resolved stream held back while the brand ident plays. The video is not
+  // mounted until the ident finishes, so its audio cannot start underneath it.
+  const [pendingPlaybackUrl, setPendingPlaybackUrl] = useState(null);
 
   const [recommendations, setRecommendations] = useState([]);
   const [liked, setLiked] = useState(false);
@@ -106,8 +114,8 @@ export default function WatchPage() {
         endpoint += `?episodeId=${activeEpisode.id}`;
       }
       const data = await api.get(endpoint);
-      setPlaybackUrl(data.playbackUrl);
-      setIsPlaying(true);
+      // Hand it to the ident rather than the player; onDone starts the video.
+      setPendingPlaybackUrl(data.playbackUrl);
     } catch (err) {
       console.error("fetchPlaybackUrl error:", err);
       setPlaybackError(err.message || "Couldn't start playback.");
@@ -119,6 +127,7 @@ export default function WatchPage() {
   const retryPlayback = () => {
     setPlaybackError(null);
     setPlaybackUrl(null);
+    setPendingPlaybackUrl(null);
     setIsPlaying(false);
     fetchPlaybackUrl();
   };
@@ -146,6 +155,7 @@ export default function WatchPage() {
     setCurrentTimeSec(0);
     setVideoDurationSec(0);
     setPlaybackUrl(null);
+    setPendingPlaybackUrl(null);
     setPlaybackError(null);
     setIsPlaying(false);
   }, [activeEpisodeIdx, selectedSeasonIdx, videoId]);
@@ -323,7 +333,7 @@ export default function WatchPage() {
                   onError={handleVideoError}
                   onClick={togglePlay}
                 />
-              ) : (
+              ) : pendingPlaybackUrl ? null : (
                 <>
                   {/* Centered Play Button */}
                   <button
@@ -450,6 +460,21 @@ export default function WatchPage() {
                 </div>
               )}
 
+              {/* Brand ident. Plays where the video is about to appear, then
+                  hands over — the stream is only mounted once this finishes,
+                  so nothing plays underneath it. */}
+              {pendingPlaybackUrl && !playbackUrl && (
+                <SplashWheel
+                  fullscreen={false}
+                  itemHeight={IDENT_ITEM_HEIGHT}
+                  onDone={() => {
+                    setPlaybackUrl(pendingPlaybackUrl);
+                    setPendingPlaybackUrl(null);
+                    setIsPlaying(true);
+                  }}
+                />
+              )}
+
               {/* Playback failure — replaces the surface rather than firing a
                   browser dialog, and offers the same retry affordance the
                   content rows use. */}
@@ -472,7 +497,7 @@ export default function WatchPage() {
               )}
 
               {/* Bottom Control Bar — shown over the poster and over the video */}
-              {!playbackError && (
+              {!playbackError && !pendingPlaybackUrl && (
                 <div className="absolute bottom-0 left-0 right-0 p-3.5 flex items-center justify-between z-10" style={{ background: "linear-gradient(to top, rgba(12,8,18,0.95), transparent)" }}>
                   <div className="flex items-center gap-3 flex-1 mr-4 min-w-0">
                     <button onClick={togglePlay} style={{ background: "none", border: "none", cursor: "pointer" }}>

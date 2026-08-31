@@ -9,6 +9,7 @@ import {
   SPINS,
   SPIN_MS,
   MARK_HEIGHT,
+  ITEM_HEIGHT,
   MARK_SWAP_MS,
   ISOLATE_AFTER_MS,
   ZOOM_AFTER_MS,
@@ -17,7 +18,12 @@ import {
   FADE_MS,
 } from "./splash/wheelTiming";
 
-export default function SplashWheel({ onDone }) {
+export default function SplashWheel({ onDone, fullscreen = true, itemHeight = ITEM_HEIGHT }) {
+  // Everything is sized off itemHeight so the same intro works as a
+  // full-screen splash and as a pre-roll inside the player's 16:9 box.
+  const scale = itemHeight / ITEM_HEIGHT;
+  const markHeight = MARK_HEIGHT * scale;
+
   const [visible, setVisible] = useState(true);
 
   // Set once the wheel lands: swaps the arrow marker for the brand mark.
@@ -59,9 +65,9 @@ export default function SplashWheel({ onDone }) {
 
   return (
     <div
-      className="fixed inset-0"
+      className={fullscreen ? "fixed inset-0" : "absolute inset-0 overflow-hidden"}
       style={{
-        zIndex: 200,
+        zIndex: fullscreen ? 200 : 20,
         background: colors.bg,
         opacity: visible ? 1 : 0,
         // Delayed so the camera is already moving before the splash dissolves.
@@ -83,7 +89,7 @@ export default function SplashWheel({ onDone }) {
         >
         <PickerWheel
           items={PLATFORMS}
-          itemHeight={104}
+          itemHeight={itemHeight}
           startAt={START_INDEX}
           stopAt={TARGET_INDEX}
           spins={SPINS}
@@ -101,8 +107,8 @@ export default function SplashWheel({ onDone }) {
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: MARK_HEIGHT * 0.37,
-                height: MARK_HEIGHT,
+                width: markHeight * 0.37,
+                height: markHeight,
               }}
             >
               <span
@@ -116,7 +122,7 @@ export default function SplashWheel({ onDone }) {
                 →
               </span>
               <OnionMark
-                height={MARK_HEIGHT}
+                height={markHeight}
                 style={{
                   position: "absolute",
                   opacity: settled ? 1 : 0,
