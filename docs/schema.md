@@ -253,6 +253,32 @@ All playback URLs point at Google's public `gtv-videos-bucket` sample MP4s.
 Run with `node prisma/seed.js` from `server/`. **It deletes everything first** — never run it
 against a database with real data.
 
+### Keeping the catalog current
+
+`GET /admin/refresh` runs the import **on the server**, which is the only place that can reach
+both TMDB and the database — a developer machine behind a restrictive network often cannot.
+Nobody has to paste SQL.
+
+Guarded by `CRON_SECRET`, accepted as `Authorization: Bearer <secret>` (what Vercel Cron sends)
+or `?secret=`. **With no `CRON_SECRET` set the route refuses everything** rather than defaulting
+open.
+
+| Query param | Default |
+|-------------|---------|
+| `provider` | Netflix, Amazon Prime Video, JioHotstar, Zee5 |
+| `genre`, `language`, `country`, `region` | — / — / — / `IN` |
+| `fromPage`, `pages` | 1, 3 (capped at 10) |
+
+`pages` is capped because a serverless invocation is killed at its time limit and a half-finished
+import reports nothing. A backlog is loaded by calling it repeatedly with `fromPage`.
+
+**Every call is idempotent** — titles already stored are skipped — so a cron can run as often as
+it likes and re-running a slice is harmless. The response reports `added`, `skipped`,
+`failedPages` and `pagesRemaining`.
+
+A Vercel cron in `server/vercel.json` calls it daily at 03:00 UTC. Sorted by popularity, a small
+daily slice picks up new releases without needing a stored cursor.
+
 ### Importing real titles
 
 `prisma/import-tmdb.js` adds a real film from TMDB, with its backdrop, synopsis, runtime,

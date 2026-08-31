@@ -130,6 +130,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Catalog now refreshes itself: `GET /admin/refresh` imports server-side behind `CRON_SECRET`, with a daily Vercel cron. Used it to load 4,807 Hollywood titles into the live database without any SQL. Live catalog is 7,656 titles, 89% with artwork |
 | 2026-08-31 | — | Bulk import hardened for long runs: retries with backoff, failed pages skipped rather than aborting, chunked output, and TMDB's 500-page ceiling enforced. Generated 7,415 titles across Bollywood, Pollywood and Hollywood |
 | 2026-08-31 | — | Bulk TMDB import added, filtered by streaming platform and genre. Note the consequence, accepted deliberately: titles imported this way have no stream and will not play |
 | 2026-08-31 | — | `import-tmdb.js` gains `--sql`, which prints an `INSERT` instead of writing. Needed because this machine can reach TMDB but Prisma cannot open a connection to Neon, while the deployed API can |

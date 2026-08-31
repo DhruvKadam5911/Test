@@ -57,7 +57,23 @@ async function runTests() {
     const playbackRes = await fetch(url);
     if (!playbackRes.ok) throw new Error(`Fetch playback URL failed with status: ${playbackRes.status}`);
     const playback = await playbackRes.json();
-    console.log(`✅ Successfully resolved playback stream URL:`, playback.playbackUrl);
+    // A 200 is not enough: bulk-imported titles carry no stream, and the
+    // endpoint happily returns { playbackUrl: null } for them. Reporting that
+    // as a pass hides exactly the case a viewer would call broken.
+    if (playback.playbackUrl) {
+      console.log(`✅ Successfully resolved playback stream URL:`, playback.playbackUrl);
+    } else {
+      console.log(`⚠️  "${firstTitle.title}" has no stream — it will not play.`);
+    }
+
+    // Admin refresh must stay closed without the secret. Only the rejection is
+    // asserted; the success path writes to the catalog.
+    console.log("\nTesting GET /admin/refresh without a secret ...");
+    const adminRes = await fetch(`${BASE_URL}/admin/refresh`);
+    if (adminRes.status !== 401) {
+      throw new Error(`Admin refresh should refuse unauthenticated calls, got ${adminRes.status}`);
+    }
+    console.log("✅ Admin refresh refuses unauthenticated calls (401).");
 
     console.log("\n🎉 All tests passed successfully!");
   } catch (error) {
