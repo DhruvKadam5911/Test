@@ -122,6 +122,7 @@ Catalog list. **Returns a card-shaped projection, not the full row.**
 |-------------|---------|-------|
 | `genre` | — | Case-insensitive exact match |
 | `contentType` | — | `movie` or `series` |
+| `isOriginal` | — | `true` or `false` |
 | `limit` | 20 | Home requests 100 |
 | `offset` | 0 | |
 
@@ -148,6 +149,20 @@ exactly that for the featured title. Do not add `description` to this projection
 request — it would be carried by every one of up to 100 rows for the benefit of one.
 
 - `500` → `{ "error": "Failed to fetch titles." }`
+
+### `GET /titles/search`
+
+Searches title and genre across the **whole** catalog, case-insensitively. Same card projection.
+
+| Query param | Notes |
+|-------------|-------|
+| `q` | Under two characters returns `[]` — a single letter would scan the catalog for nothing useful |
+| `limit` | Default 40, capped at 100 |
+
+### `GET /titles/genres`
+
+`[{ "genre": "Comedy", "count": 1579 }]`, ordered by count. Lets the client render one row per
+genre without pulling the catalog down to group it in the browser.
 
 ### `GET /titles/trending`
 

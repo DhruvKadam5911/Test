@@ -36,8 +36,8 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | Cinematic hero | ✅ | Shows the featured title's real description, fetched from `/titles/:id` since the list projection omits it; "Read more" only appears when something is actually hidden (plan 1.4, 2026-08-31) |
 | Trending row | ✅ | With skeleton + retry |
 | Onion Originals row | ✅ | Client-side `isOriginal` filter |
-| Dynamic genre rows | ✅ | Derived from the catalog at runtime |
-| Search | 🟡 | Client-side over the loaded 100-title pool only — plan 5.1 |
+| Dynamic genre rows | ✅ | One row per genre from `/titles/genres`, each lazy-fetching its own titles as it scrolls into view |
+| Search | ✅ | Server-side across the whole catalog, debounced (plan 5.1, 2026-08-31) |
 | Content cards + skeletons | ✅ | |
 | PickerWheel | ✅ | Reusable rotating-list component. Loop mode demoed at `/wheel`; settle mode drives the phone splash and the watch-page ident |
 | Pre-roll ident | ✅ | `SplashWheel` plays inside the player before every video, ~3.4s. The stream is held back until it finishes so no audio starts underneath |
@@ -130,6 +130,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | The catalog is now actually reachable: server-side search across all titles, `/titles/genres`, and rows that fetch their own genre lazily. The page was showing ~110 of 7,656 titles |
 | 2026-08-31 | — | Catalog now refreshes itself: `GET /admin/refresh` imports server-side behind `CRON_SECRET`, with a daily Vercel cron. Used it to load 4,807 Hollywood titles into the live database without any SQL. Live catalog is 7,656 titles, 89% with artwork |
 | 2026-08-31 | — | Bulk import hardened for long runs: retries with backoff, failed pages skipped rather than aborting, chunked output, and TMDB's 500-page ceiling enforced. Generated 7,415 titles across Bollywood, Pollywood and Hollywood |
 | 2026-08-31 | — | Bulk TMDB import added, filtered by streaming platform and genre. Note the consequence, accepted deliberately: titles imported this way have no stream and will not play |

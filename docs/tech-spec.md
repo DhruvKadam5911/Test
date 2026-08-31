@@ -92,6 +92,7 @@ See [design.md](design.md).
 │   │   ├── PickerWheel.jsx       Rotating slot-machine list (loop or settle mode)
 │   │   ├── AppNavbar.jsx         Logo, links, expanding search, bell
 │   │   ├── ContentRow.jsx        Horizontal scroller with arrows, skeletons, retry
+│   │   ├── GenreRow.jsx          A ContentRow that lazy-fetches its own genre
 │   │   ├── ContentCard.jsx       Card + CardSkeleton export
 │   │   └── shared/               OnionLogo, OnionMark, RingMotif, SmallRing
 │   └── assets/
@@ -215,11 +216,10 @@ Expect all five checks green, ending in `🎉 All tests passed successfully!`
 
 | # | Issue | Location | Impact |
 |---|-------|----------|--------|
-| T8 | Search filters only the loaded pool (`?limit=100`), not the server | `Home.jsx` | Silently incomplete past 100 titles |
 | T9 | No auth on `/titles/:id/playback` despite the "(Requires Auth)" comment | `titlesController.js` | Stream URLs are public |
 | T10 | Mixed `.tsx`/`.jsx` with `tsc -b` in the build | root | Build can fail on TS errors in a mostly-JS codebase |
 
-**Resolved 2026-08-31:** T1 (splash `AudioContext` lifecycle), T2 (decorative CORS allowlist),
+**Resolved 2026-08-31:** T8 (client-side search), T1 (splash `AudioContext` lifecycle), T2 (decorative CORS allowlist),
 T3 (hardcoded hero description), T4 (simulated scrubber), T5 (`alert()` for playback errors),
 T6 (unused import), T7 (Vite-template README) — see implementation-plan.md 1.1–1.7. Also fixed
 along the way: `dotenv.config()` ran after the imports that read `process.env`, so **every key

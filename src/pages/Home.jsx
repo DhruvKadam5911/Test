@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Play, Info } from "lucide-react";
 import { colors, bodyFont, displayFont, resolveBackgroundImage } from "../theme";
@@ -6,21 +6,32 @@ import RingMotif from "../components/shared/RingMotif";
 import OnionLogo from "../components/shared/OnionLogo";
 import AppNavbar from "../components/AppNavbar";
 import ContentRow from "../components/ContentRow";
+import GenreRow from "../components/GenreRow";
 import api from "../api/client";
 
 // Characters of the featured description shown before "Read more".
 const DESCRIPTION_LIMIT = 150;
 
+// Typing a title should not fire a request per keystroke against the catalog.
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function OnionHome() {
   const navigate = useNavigate();
 
   const [trending, setTrending] = useState([]);
-  const [pool, setPool] = useState([]);
+  // Just the genre names and their counts — one row is rendered per genre and
+  // each fetches its own titles. Pulling a slice of the catalog and grouping it
+  // in the browser is what limited the page to ~100 of 7,000 titles.
+  const [genres, setGenres] = useState([]);
+  const [originals, setOriginals] = useState([]);
 
   const [loadingTrending, setLoadingTrending] = useState(true);
-  const [loadingPool, setLoadingPool] = useState(true);
+  const [loadingGenres, setLoadingGenres] = useState(true);
   const [errorTrending, setErrorTrending] = useState(null);
-  const [errorPool, setErrorPool] = useState(null);
+  const [errorGenres, setErrorGenres] = useState(null);
+
+  const [searchResults, setSearchResults] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
   // The hero's copy. /titles/trending returns the card projection, which
   // deliberately has no description, so the featured title's own detail has to
   // be fetched for it — see docs/schema.md.
@@ -43,47 +54,66 @@ export default function OnionHome() {
     }
   };
 
-  const fetchPool = async () => {
-    setLoadingPool(true);
-    setErrorPool(null);
+  const fetchGenres = async () => {
+    setLoadingGenres(true);
+    setErrorGenres(null);
     try {
-      const data = await api.get("/titles?limit=100");
-      setPool(data);
+      const data = await api.get("/titles/genres");
+      setGenres(data);
     } catch (err) {
-      console.error("fetchPool error:", err);
-      // The pool feeds Originals, every genre row and search. Failing quietly
-      // just makes most of the page vanish with no explanation.
-      setErrorPool(err.message);
+      console.error("fetchGenres error:", err);
+      // Failing quietly would leave the page with a hero and nothing else.
+      setErrorGenres(err.message);
     } finally {
-      setLoadingPool(false);
+      setLoadingGenres(false);
+    }
+  };
+
+  const fetchOriginals = async () => {
+    try {
+      setOriginals(await api.get("/titles?isOriginal=true&limit=20"));
+    } catch (err) {
+      console.error("fetchOriginals error:", err);
     }
   };
 
   useEffect(() => {
     fetchTrending();
-    fetchPool();
+    fetchGenres();
+    fetchOriginals();
   }, []);
 
-  // Group the title pool into genre rows dynamically, so new catalog genres show up automatically
-  const genreRows = useMemo(() => {
-    const byGenre = {};
-    for (const t of pool) {
-      if (!t.genre) continue;
-      if (!byGenre[t.genre]) byGenre[t.genre] = [];
-      byGenre[t.genre].push(t);
+  // Search runs against the whole catalog on the server. Filtering a loaded
+  // slice in the browser meant most of the library was unfindable — a title
+  // outside the first hundred simply did not exist as far as search knew.
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults(null);
+      setSearchLoading(false);
+      return;
     }
-    return Object.entries(byGenre)
-      .sort((a, b) => b[1].length - a[1].length)
-      .map(([genre, items]) => ({ genre, items }));
-  }, [pool]);
 
-  const originals = useMemo(() => pool.filter((t) => t.isOriginal), [pool]);
+    setSearchLoading(true);
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const data = await api.get(`/titles/search?q=${encodeURIComponent(query)}`);
+        // A slow response for an abandoned query must not overwrite a newer one.
+        if (!cancelled) setSearchResults(data);
+      } catch (err) {
+        console.error("search error:", err);
+        if (!cancelled) setSearchResults([]);
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    }, SEARCH_DEBOUNCE_MS);
 
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return null;
-    const q = searchQuery.trim().toLowerCase();
-    return pool.filter((t) => t.title?.toLowerCase().includes(q) || t.genre?.toLowerCase().includes(q));
-  }, [searchQuery, pool]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
 
   const featuredTitle = trending.length > 0 ? trending[0] : null;
   const isSearching = searchQuery.trim().length > 0;
@@ -125,10 +155,19 @@ export default function OnionHome() {
           <AppNavbar onSearchChange={setSearchQuery} />
           <div className="pt-8 pb-16 min-h-[70vh]">
             <div className="px-6 md:px-10 mb-4" style={{ color: colors.textMuted, fontSize: 14 }}>
-              {searchResults.length > 0 ? `Search results for "${searchQuery}"` : `No matches for "${searchQuery}"`}
+              {searchLoading
+                ? `Searching for "${searchQuery}"…`
+                : searchResults?.length
+                ? `${searchResults.length} result${searchResults.length === 1 ? "" : "s"} for "${searchQuery}"`
+                : `No matches for "${searchQuery}"`}
             </div>
-            {searchResults.length > 0 && (
-              <ContentRow title="Results" items={searchResults} size="lg" />
+            {(searchLoading || searchResults?.length > 0) && (
+              <ContentRow
+                title="Results"
+                items={searchResults || []}
+                size="lg"
+                loading={searchLoading}
+              />
             )}
           </div>
         </>
@@ -244,17 +283,19 @@ export default function OnionHome() {
               onRetry={fetchTrending}
             />
 
-            {errorPool ? (
-              <ContentRow title="the catalog" items={[]} error={errorPool} onRetry={fetchPool} />
-            ) : (
-              originals.length > 0 && (
-                <ContentRow title="Onion Originals" items={originals} size="md" loading={loadingPool} />
-              )
+            {originals.length > 0 && (
+              <ContentRow title="Onion Originals" items={originals} size="md" />
             )}
 
-            {genreRows.map(({ genre, items }) => (
-              <ContentRow key={genre} title={genre} items={items} size="md" />
-            ))}
+            {errorGenres ? (
+              <ContentRow title="the catalog" items={[]} error={errorGenres} onRetry={fetchGenres} />
+            ) : (
+              // One row per genre, each fetching its own titles as it comes
+              // into view. Ordered by how much the catalog holds of each.
+              genres.map(({ genre }) => <GenreRow key={genre} genre={genre} />)
+            )}
+
+            {loadingGenres && <ContentRow title="Loading" items={[]} loading />}
           </div>
         </>
       )}

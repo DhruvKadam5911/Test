@@ -66,6 +66,26 @@ async function runTests() {
       console.log(`⚠️  "${firstTitle.title}" has no stream — it will not play.`);
     }
 
+    // 6. Search and the genre list, both of which the home page depends on.
+    console.log("\nTesting GET /titles/search ...");
+    const term = firstTitle.title.split(" ")[0];
+    const searchRes = await fetch(`${BASE_URL}/titles/search?q=${encodeURIComponent(term)}`);
+    if (!searchRes.ok) throw new Error(`Search failed with status: ${searchRes.status}`);
+    const found = await searchRes.json();
+    if (!found.some((t) => t.id === firstTitle.id)) {
+      throw new Error(`Search for "${term}" did not return "${firstTitle.title}"`);
+    }
+    console.log(`✅ Search for "${term}" returned ${found.length} result(s), including the expected title.`);
+
+    console.log("\nTesting GET /titles/genres ...");
+    const genresRes = await fetch(`${BASE_URL}/titles/genres`);
+    if (!genresRes.ok) throw new Error(`Genres failed with status: ${genresRes.status}`);
+    const genreList = await genresRes.json();
+    if (!Array.isArray(genreList) || genreList.length === 0 || !genreList[0].genre) {
+      throw new Error("Genres endpoint returned nothing usable.");
+    }
+    console.log(`✅ ${genreList.length} genres, largest is "${genreList[0].genre}" (${genreList[0].count}).`);
+
     // Admin refresh must stay closed without the secret. Only the rejection is
     // asserted; the success path writes to the catalog.
     console.log("\nTesting GET /admin/refresh without a secret ...");

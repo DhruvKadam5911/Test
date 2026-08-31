@@ -58,7 +58,8 @@ clears, Home is usually already populated.
 | Call | Endpoint | Feeds |
 |------|----------|-------|
 | `fetchTrending()` | `GET /titles/trending` | Hero (item `[0]`) + "Trending Now" row |
-| `fetchPool()` | `GET /titles?limit=100` | Onion Originals + all genre rows + search |
+| `fetchGenres()` | `GET /titles/genres` | One row per genre — the rows fetch their own titles |
+| `fetchOriginals()` | `GET /titles?isOriginal=true&limit=20` | The Originals row |
 
 A third request follows once trending resolves: `GET /titles/{trending[0].id}` for the hero's
 description. The list projections deliberately omit `description` (see schema.md), so the hero
@@ -70,9 +71,13 @@ emptying the page silently.
 
 ### Derived state (all `useMemo` over `pool`)
 
-- `genreRows` — group by `genre`, sorted by descending item count. New genres appear automatically.
-- `originals` — `pool.filter(t => t.isOriginal)`.
-- `searchResults` — case-insensitive substring match on `title` or `genre`. `null` when the query is empty.
+**Each genre row fetches its own titles**, through `GenreRow`, when it comes within 600px of the
+viewport. The page used to slice every row out of one 100-title response, which showed about a
+hundred titles of a seven-thousand-title catalog. Loading all rows at once instead would put
+twenty-odd requests between the visitor and the first thing they can see.
+
+**Search runs on the server**, debounced 300ms, against the whole catalog. A stale response for
+an abandoned query is discarded rather than allowed to overwrite a newer one.
 
 ### Two render modes
 
