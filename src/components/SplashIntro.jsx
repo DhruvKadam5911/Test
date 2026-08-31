@@ -5,16 +5,23 @@ import { colors } from "../theme";
 // occupies x:199-388. The wordmark is rendered as live text instead, so it can
 // animate letter by letter rather than being cropped from the flattened image.
 //
-// "Netflix Sans" is Netflix's own proprietary, licensed typeface — it isn't
-// distributed publicly, so we use Inter here instead: it's the site's
-// existing brand font, rendered thin-weight (300) with a solid fill.
+// The wordmark is set in Poppins — a geometric sans whose round lowercase
+// bowls echo the onion bulb. Lowercase, light weight, loaded in index.html.
 const SOURCE_W = 1024;
 const SOURCE_H = 512;
 const ICON_LEFT = 199;
 const ICON_RIGHT = 388;
 const ICON_HEIGHT = 190;
-const WORD = "ONION";
-const WORDMARK_FONT = "'Inter', system-ui, sans-serif";
+const WORD = "onion";
+const WORDMARK_FONT = "'Poppins', system-ui, sans-serif";
+
+// Handwriting cadence: each letter is wiped in left-to-right, one after the
+// next, as though a nib were laying it down. LETTER_STAGGER also drives the
+// per-letter whoosh in playIntroSound — keep the two in step or the sound
+// drifts away from the strokes.
+const LETTER_STAGGER = 140; // ms between letters
+const LETTER_DRAW = 220; // ms for one letter to finish drawing
+const WRITE_DURATION = (WORD.length - 1) * LETTER_STAGGER + LETTER_DRAW;
 
 /* ==========================================================================
    WEB AUDIO API SOUND GENERATION SYSTEM
@@ -74,12 +81,13 @@ function playIntroSound(ctx) {
       console.log(`[Audio Log] Scheduled Letter ${index} Whoosh at ${(time - startTime).toFixed(3)}s`);
     };
 
-    // 2. Trigger soft whoosh for each letter (starts at 900ms, delayed by i * 70ms)
-    const letterDelays = [0, 70, 140, 210, 280];
-    letterDelays.forEach((delayMs, i) => {
-      const targetTime = startTime + 0.90 + delayMs / 1000;
+    // 2. One soft whoosh per letter, landing as that letter is drawn. The
+    //    writing starts at 900ms and steps by LETTER_STAGGER, so the strokes
+    //    and the sound stay locked together.
+    for (let i = 0; i < WORD.length; i++) {
+      const targetTime = startTime + 0.90 + (i * LETTER_STAGGER) / 1000;
       triggerWhoosh(targetTime, i);
-    });
+    }
 
     // 3. Warm rising C Major Pentatonic synth arpeggio (positive, uplifting feel)
     // Notes: C3 (130.8Hz), D3 (146.8Hz), E3 (164.8Hz), G3 (196.0Hz), A3 (220.0Hz), C4 (261.6Hz), E4 (329.6Hz), G4 (392.0Hz)
@@ -253,7 +261,21 @@ export default function SplashIntro({ onDone }) {
   // Measure the wordmark's real rendered width so the reveal container can
   // grow to an exact pixel value instead of guessing.
   useLayoutEffect(() => {
-    if (measureRef.current) setTextWidth(measureRef.current.scrollWidth);
+    const measure = () => {
+      if (measureRef.current) setTextWidth(measureRef.current.scrollWidth);
+    };
+    measure();
+
+    // The first measurement can land before Poppins has loaded, which would
+    // size the column to the fallback face and clip the wordmark. Re-measure
+    // once the real font is in.
+    let cancelled = false;
+    document.fonts?.ready.then(() => {
+      if (!cancelled) measure();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Detect Autoplay Permission
@@ -334,9 +356,11 @@ export default function SplashIntro({ onDone }) {
     fontWeight: 300,
     fontSize: 68,
     lineHeight: 1,
-    letterSpacing: "0.03em",
+    // Tighter than the old uppercase setting — wide gaps would break the
+    // illusion of one continuous stroke running through the word.
+    letterSpacing: "0.01em",
     color: colors.text,
-    marginRight: i < WORD.length - 1 ? 8 : 0,
+    marginRight: i < WORD.length - 1 ? 2 : 0,
   });
 
   return (
@@ -435,23 +459,43 @@ export default function SplashIntro({ onDone }) {
             transition: "width 520ms cubic-bezier(.16,1,.3,1)",
           }}
         >
-          <div className="flex" style={{ perspective: 400, width: textWidth }}>
+          <div className="flex relative" style={{ width: textWidth }}>
             {WORD.split("").map((ch, i) => (
               <span
                 key={i}
                 style={{
                   ...letterStyle(i),
+                  // Each glyph is wiped in from its own left edge, so the ink
+                  // appears to be laid down rather than faded in.
+                  clipPath: textIn ? "inset(0 -8% -20% 0)" : "inset(0 100% -20% 0)",
                   opacity: textIn ? 1 : 0,
-                  filter: textIn ? "blur(0px)" : "blur(6px)",
-                  transform: textIn
-                    ? "scale(1) rotateX(0deg)"
-                    : "scale(0.35) rotateX(55deg) translateY(10px)",
-                  transition: `opacity 400ms ease ${i * 70}ms, filter 400ms ease ${i * 70}ms, transform 460ms cubic-bezier(.16,1,.3,1) ${i * 70}ms`,
+                  transition: `clip-path ${LETTER_DRAW}ms cubic-bezier(.55,.06,.3,1) ${i * LETTER_STAGGER}ms, opacity 90ms linear ${i * LETTER_STAGGER}ms`,
                 }}
               >
                 {ch}
               </span>
             ))}
+
+            {/* The nib — a thin stroke that travels the width of the word in
+                time with the letters, then lifts off once the word is written. */}
+            {textWidth > 0 && (
+              <span
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: "6%",
+                  height: "88%",
+                  width: 2,
+                  borderRadius: 2,
+                  background: `linear-gradient(to bottom, transparent, ${colors.accentLight}, ${colors.accentGreen})`,
+                  boxShadow: `0 0 10px ${colors.accentLight}`,
+                  opacity: textIn ? 0 : 1,
+                  transform: textIn ? `translateX(${textWidth}px)` : "translateX(0px)",
+                  transition: `transform ${WRITE_DURATION}ms cubic-bezier(.42,0,.58,1), opacity 220ms ease ${WRITE_DURATION - 120}ms`,
+                }}
+              />
+            )}
           </div>
         </div>
       </div>
