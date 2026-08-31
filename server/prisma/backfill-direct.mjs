@@ -45,8 +45,13 @@ const MAX_PAGE = 500;
 const PAGE_SIZE = 20;
 const MAX_REACHABLE = MAX_PAGE * PAGE_SIZE;
 const INSERT_BATCH = 500;
-// TMDB 503s come in bursts; this many in a row means it is genuinely down.
-const MAX_CONSECUTIVE_FAILURES = 6;
+// TMDB 503s come in bursts, and this network drops it entirely for minutes at
+// a time. After this many failures in a row the import waits rather than
+// pressing on — pressing on marked every remaining slice "done" with a handful
+// of titles, which looks like a finished import and is not one.
+const MAX_CONSECUTIVE_FAILURES = 4;
+const OUTAGE_WAIT_MS = 60_000;
+const MAX_OUTAGE_WAITS = 20;
 
 // Indian cinema first — it is what the catalog is short of — then English.
 const LANGUAGES = [
@@ -76,6 +81,7 @@ const ONLY_LANGUAGES = argOf("--languages", null)?.split(",");
 const known = new Set();
 let added = 0;
 let failedPages = 0;
+let outageWaits = 0;
 
 async function loadExisting() {
   // Paged because the HTTP driver returns the whole result at once.
@@ -149,7 +155,18 @@ async function drain(label, { media, language, year }, genreNameById) {
       });
     } catch {
       failedPages++;
-      if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) break;
+      if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        if (outageWaits >= MAX_OUTAGE_WAITS) {
+          throw new Error(`TMDB unreachable for ${MAX_OUTAGE_WAITS} minutes — stopping. Re-run to continue.`);
+        }
+        outageWaits++;
+        process.stdout.write(`   ${label} — TMDB unreachable, waiting a minute (${outageWaits}/${MAX_OUTAGE_WAITS})   `);
+        await new Promise((r) => setTimeout(r, OUTAGE_WAIT_MS));
+        consecutiveFailures = 0;
+      }
+      // Retry the same page rather than skipping it — a page skipped here is
+      // twenty titles that quietly never arrive.
+      page--;
       continue;
     }
     consecutiveFailures = 0;
