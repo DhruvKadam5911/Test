@@ -8,24 +8,25 @@ import { playSound as playWordmarkSound } from "./splash/wordmarkSound";
 /*
  * SplashIntro — picks an intro for the viewport, and owns the audio for it.
  *
- * Desktop keeps the original wordmark intro: the mark swoops in and "onion" is
- * written beside it. Phones and tablets get the wheel, which spins through the
- * streaming services and pushes through the logo into the app — it reads far
- * better in a narrow portrait frame than a wide horizontal lockup does.
+ * Tablets and desktop keep the original wordmark intro: the mark swoops in and
+ * "onion" is written beside it. Phones get the wheel, which spins through the
+ * streaming services and pushes through the logo into the app — the horizontal
+ * lockup needs width to read, and a phone does not have it.
  *
  * The variants own their own visuals, timeline and exit. This shell only
  * decides which one runs and handles the AudioContext, because the context has
  * to be created and scheduled inside a single effect (see below).
  */
 
-// Tailwind's `lg`. At or above this the wordmark intro runs.
-const DESKTOP_QUERY = "(min-width: 1024px)";
+// Tailwind's `md` — tablet portrait and up. At or above this the wordmark
+// intro runs; below it (phones, and phones in landscape) the wheel does.
+const WORDMARK_QUERY = "(min-width: 768px)";
 
 export default function SplashIntro({ onDone }) {
   // Resolved once, on mount. Deliberately not reactive: a resize part-way
   // through would swap the whole intro mid-animation.
-  const [isDesktop] = useState(
-    () => window.matchMedia?.(DESKTOP_QUERY).matches ?? true
+  const [useWordmark] = useState(
+    () => window.matchMedia?.(WORDMARK_QUERY).matches ?? true
   );
 
   const [started, setStarted] = useState(false);
@@ -36,7 +37,7 @@ export default function SplashIntro({ onDone }) {
   const audioCtxRef = useRef(null);
 
   const playSoundRef = useRef(null);
-  playSoundRef.current = isDesktop ? playWordmarkSound : playWheelSound;
+  playSoundRef.current = useWordmark ? playWordmarkSound : playWheelSound;
 
   // Detect autoplay permission.
   //
@@ -116,5 +117,5 @@ export default function SplashIntro({ onDone }) {
     );
   }
 
-  return isDesktop ? <SplashWordmark onDone={onDone} /> : <SplashWheel onDone={onDone} />;
+  return useWordmark ? <SplashWordmark onDone={onDone} /> : <SplashWheel onDone={onDone} />;
 }

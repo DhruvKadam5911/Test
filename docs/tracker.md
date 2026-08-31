@@ -29,7 +29,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Splash intro visuals | ✅ | Two variants by viewport. **Desktop (≥1024px):** the original mark swoop + written Mr Bedfort wordmark, ~3.1s. **Phone/tablet (<1024px):** wheel spins through platforms, locks on Onion, mark drops in, others clear, lockup pushes through into the app, ~3.5s |
+| Splash intro visuals | ✅ | Two variants by viewport. **Tablet & desktop (≥768px):** the original mark swoop + written Mr Bedfort wordmark, ~3.1s. **Phone (<768px):** wheel spins through platforms, locks on Onion, mark drops in, others clear, lockup pushes through into the app, ~3.5s |
 | Splash intro audio | ✅ | One `AudioContext` per mount, closed on unmount; the click path resumes it rather than opening a second (plan 1.1, 2026-08-31) |
 | Autoplay-blocked overlay | ✅ | Click-to-enable |
 | Cinematic hero | 🟡 | Renders, but the truncated description is hardcoded *Undertow* copy — plan 1.4 |
@@ -127,7 +127,8 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved
 
 | Date | Commit | Change |
 |------|--------|--------|
-| 2026-08-31 | — | Splash split by viewport: desktop (≥1024px) keeps the original mark-swoop + written wordmark intro, phones and tablets get the wheel. `SplashIntro` is now a shell that picks a variant and owns the AudioContext; soundtracks moved to `components/splash/` so the component modules stay Fast-Refresh clean. Mr Bedfort restored to the font link for the desktop wordmark |
+| 2026-08-31 | — | Splash breakpoint moved to 768px: tablets join desktop on the wordmark intro, leaving the wheel to phones |
+| 2026-08-31 | — | Splash split by viewport: the original mark-swoop + written wordmark intro on the wider breakpoint, the wheel below it. `SplashIntro` is now a shell that picks a variant and owns the AudioContext; soundtracks moved to `components/splash/` so the component modules stay Fast-Refresh clean. Mr Bedfort restored to the font link for the desktop wordmark |
 | 2026-08-31 | — | Splash finishes with a Netflix-style push: once the wheel lands, the mark drops in bigger (152px) on an overshoot curve, the losing platforms clear, and the lockup zooms 11x into the homepage. Spin shortened to 2000ms to keep the splash the same length |
 | 2026-08-31 | — | The onion mark returns to the splash: once the wheel locks on Onion, the arrow marker crossfades into `OnionMark`, leaving a brand lockup. Spin shortened to 2200ms so the added beat does not lengthen the splash overall |
 | 2026-08-31 | — | Splash replaced: the icon swoop and written wordmark were removed, and `PickerWheel` now spins through the platform list and locks on Onion. Audio retimed — ticks derived from the easing inverse, chime on the lock. Mr Bedfort dropped from the font link, now unused |

@@ -112,11 +112,11 @@ Loaded in `index.html` and re-imported inside `Home.jsx`.
 
 | Viewport | Component | Intro |
 |----------|-----------|-------|
-| `≥ 1024px` (desktop) | `SplashWordmark.jsx` | The original: the mark swoops in and "onion" is written beside it in Mr Bedfort by a travelling nib |
-| `< 1024px` (phone, tablet) | `SplashWheel.jsx` | The wheel spins through streaming services, locks on Onion, then pushes through the logo |
+| `≥ 768px` (tablet, desktop) | `SplashWordmark.jsx` | The original: the mark swoops in and "onion" is written beside it in Mr Bedfort by a travelling nib |
+| `< 768px` (phone) | `SplashWheel.jsx` | The wheel spins through streaming services, locks on Onion, then pushes through the logo |
 
-The split exists because a wide horizontal lockup reads poorly in a narrow portrait frame,
-and the wheel's tall stack reads poorly in a wide one.
+The split exists because the horizontal lockup needs width to read, and a phone does not have
+it; the wheel's tall stack, conversely, reads poorly in a wide frame.
 
 `SplashIntro.jsx` is only a shell: it picks the variant and owns the `AudioContext`. Each
 variant owns its own visuals, timeline and exit, and ships its soundtrack in a sibling module
@@ -133,7 +133,7 @@ soundtracks live in plain modules (`splash/wheelSound.js`, `splash/wordmarkSound
 than being exported from the components — a module exporting both a component and a plain
 function breaks Fast Refresh.
 
-#### Mobile / tablet — the wheel
+#### Phone — the wheel
 
 The wheel *is* the intro, and the brand mark arrives at the end of it.
 
@@ -159,7 +159,7 @@ camera then appears to push through empty space next to the lockup.
 **Order matters:** isolate before zoom. Scaling a screen still full of platform names reads as
 the whole list lunging forward; clearing them first makes it a push through the logo.
 
-#### Desktop — the wordmark
+#### Tablet and desktop — the wordmark
 
 Unchanged from before the wheel existed. The mark swoops in from a 3D transform, the text
 column opens, and "onion" is written left to right by a nib over `WRITE_DURATION`, with a

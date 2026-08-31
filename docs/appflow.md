@@ -42,8 +42,8 @@ play sound + start timeline      show "Click anywhere to play with sound"
    └────────────┬─────────────────────┘
                 ↓
    SplashIntro picks a variant by viewport width (once, at mount):
-     >= 1024px  → SplashWordmark (mark swoops in, "onion" is written)
-     <  1024px  → SplashWheel, below
+     >= 768px  → SplashWordmark (mark swoops in, "onion" is written)
+     <  768px  → SplashWheel, below
 
    0ms      PickerWheel starts spinning through the platform list
    0-2000ms one full turn + travel back to Onion, decelerating (+ ticks)
