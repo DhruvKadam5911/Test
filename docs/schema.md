@@ -211,8 +211,28 @@ be a view count.
 
 ### `GET /music/tracks`
 
-`[{ id, title, artist, audioUrl, artworkUrl, durationSeconds }]`, newest first. Returns `[]` when
-the table does not exist yet, so the player can say there is no music rather than look broken.
+`[{ id, title, artist, audioUrl, artworkUrl, durationSeconds, genre, source }]`, newest first.
+`genre`, `limit` and `offset` narrow it. `GET /music/genres` returns the counts. Both return `[]`
+when the table does not exist yet, so the player can say there is no music rather than look broken.
+
+**Where the audio comes from.** Two sources, both free, both needing no key, and both serving whole
+tracks rather than the thirty-second previews the commercial APIs offer:
+
+| Source | What it is |
+|--------|------------|
+| Audius | Artists upload for streaming, so linking the stream is the intended use. Browsed by genre |
+| Internet Archive | Public domain, Creative Commons, and live recordings taped with permission |
+
+Spotify and YouTube Music are not options and cannot be made into one. Spotify serves metadata
+only — audio needs their SDK and each listener's own Premium account, and the thirty-second preview
+was withdrawn from new apps in 2024. YouTube has no music API. The GitHub projects that appear to
+solve this work by ripping audio out of those services, and hosting the result here would be
+redistributing music nobody licensed.
+
+`GET /admin/refresh-music` imports a slice — `source` (`audius` or `archive`), `genre`, `fromPage`,
+`pages` (capped at 10). Idempotent: each track carries the id its source gave it, and a unique index
+on `(source, sourceId)` rejects the second copy. `prisma/backfill-music.mjs` drives it across every
+genre and collection.
 
 ### `GET /titles/genres`
 

@@ -23,6 +23,8 @@ function formatTime(seconds) {
 
 export default function MusicPage() {
   const [tracks, setTracks] = useState(null);
+  const [genres, setGenres] = useState([]);
+  const [genre, setGenre] = useState(null);
   const [error, setError] = useState(null);
   const [current, setCurrent] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -34,14 +36,23 @@ export default function MusicPage() {
 
   useEffect(() => {
     api
-      .get("/music/tracks")
+      .get("/music/genres")
+      .then(setGenres)
+      .catch((err) => console.error("fetchMusicGenres error:", err));
+  }, []);
+
+  useEffect(() => {
+    setTracks(null);
+    setCurrent(0);
+    api
+      .get(`/music/tracks?limit=100${genre ? `&genre=${encodeURIComponent(genre)}` : ""}`)
       .then(setTracks)
       .catch((err) => {
         console.error("fetchTracks error:", err);
         setError(err.message);
         setTracks([]);
       });
-  }, []);
+  }, [genre]);
 
   const track = tracks?.[current] || null;
 
@@ -105,6 +116,27 @@ export default function MusicPage() {
         <h1 style={{ fontFamily: displayFont, fontSize: "clamp(30px, 5vw, 44px)", fontWeight: 600, color: colors.text, letterSpacing: "-0.02em" }}>
           Music
         </h1>
+
+        {genres.length > 0 && (
+          <div className="mt-5 flex flex-wrap gap-2">
+            {[{ genre: null, count: null }, ...genres].map(({ genre: g, count }) => (
+              <button
+                key={g || "all"}
+                onClick={() => setGenre(g)}
+                style={{
+                  fontFamily: bodyFont, fontSize: 12.5, fontWeight: 600,
+                  color: genre === g ? colors.text : colors.textMuted,
+                  background: genre === g ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${colors.ring}`, borderRadius: 999,
+                  padding: "6px 13px", cursor: "pointer",
+                }}
+              >
+                {g || "All"}
+                {count !== null && <span style={{ color: colors.textMuted, marginLeft: 6, fontWeight: 500 }}>{count}</span>}
+              </button>
+            ))}
+          </div>
+        )}
 
         {tracks === null ? (
           <div className="mt-8 space-y-3 animate-pulse">
@@ -183,8 +215,11 @@ export default function MusicPage() {
                   style={{ background: i === current ? "rgba(255,255,255,0.05)" : "none", border: "none", borderBottom: `1px solid ${colors.ring}`, padding: "12px 10px", cursor: "pointer" }}
                 >
                   <span style={{ fontSize: 12, color: colors.textMuted, width: 22 }}>{i + 1}</span>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: colors.text, flex: 1 }}>{t.title}</span>
-                  <span style={{ fontSize: 12, color: colors.textMuted }}>{t.artist}</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: colors.text, flex: 1 }} className="truncate">{t.title}</span>
+                  <span style={{ fontSize: 12, color: colors.textMuted, marginLeft: 12 }} className="truncate max-w-[35%]">{t.artist}</span>
+                  {t.durationSeconds ? (
+                    <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 12 }}>{formatTime(t.durationSeconds)}</span>
+                  ) : null}
                 </button>
               ))}
             </div>

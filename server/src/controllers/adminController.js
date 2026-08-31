@@ -1,5 +1,6 @@
 import { importSlice, MAX_PAGE } from "../services/catalogImport.js";
 import { dedupeTitles } from "../services/catalogCleanup.js";
+import { importMusicSlice } from "../services/musicImport.js";
 import prisma from "../config/db.js";
 import { isTmdbConfigured } from "../services/tmdb.js";
 
@@ -150,6 +151,15 @@ export async function reindex(req, res) {
       )
     `);
 
+    // Where a track came from, and the id its source gave it. The unique index
+    // is what makes a re-run of a music slice insert nothing twice.
+    for (const column of ["source TEXT", '"sourceId" TEXT', "genre TEXT"]) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Track" ADD COLUMN IF NOT EXISTS ${column}`);
+    }
+    await prisma.$executeRawUnsafe(
+      'CREATE UNIQUE INDEX IF NOT EXISTS "Track_source_sourceId_key" ON "Track" (source, "sourceId")'
+    );
+
     await prisma.$executeRawUnsafe("CREATE EXTENSION IF NOT EXISTS pg_trgm");
     await prisma.$executeRawUnsafe(
       'CREATE INDEX IF NOT EXISTS "Title_title_trgm_idx" ON "Title" USING gin (lower(title) gin_trgm_ops)'
@@ -206,5 +216,35 @@ export async function removeSeed(req, res) {
   } catch (error) {
     console.error("removeSeed error:", error);
     return res.status(500).json({ error: error.message || "Removing the seed titles failed." });
+  }
+}
+
+/*
+ * GET /admin/refresh-music
+ *
+ * The music equivalent of /admin/refresh. Same CRON_SECRET guard, same reason
+ * for running server-side, same idempotency.
+ */
+export async function refreshMusic(req, res) {
+  if (!authorised(req)) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
+
+  const { source, genre, fromPage, pages } = req.query;
+
+  try {
+    const result = await importMusicSlice({
+      source: source === "archive" ? "archive" : "audius",
+      genre: genre || null,
+      fromPage: Math.max(1, Number(fromPage) || 1),
+      // Capped for the same reason the film import is: a half-finished slice
+      // killed at the time limit reports nothing.
+      pages: Math.max(1, Math.min(Number(pages) || 2, 10)),
+    });
+
+    return res.status(200).json({ status: "ok", ...result });
+  } catch (error) {
+    console.error("refreshMusic error:", error);
+    return res.status(500).json({ error: error.message || "Music refresh failed." });
   }
 }

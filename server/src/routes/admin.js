@@ -1,10 +1,11 @@
 import { Router } from "express";
-import { refreshCatalog, dedupe, reindex, removeSeed } from "../controllers/adminController.js";
+import { refreshCatalog, dedupe, reindex, removeSeed, refreshMusic } from "../controllers/adminController.js";
 
 const router = Router();
 
 // GET so Vercel Cron can call it; guarded by CRON_SECRET in the controller.
 router.get("/refresh", refreshCatalog);
+router.get("/refresh-music", refreshMusic);
 
 // Dry run unless ?apply=true. Same CRON_SECRET guard.
 router.get("/dedupe", dedupe);

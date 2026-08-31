@@ -132,6 +132,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-09-01 | — | The music player has music: Audius and the Internet Archive, both free, both keyless, both serving whole tracks. 6,000+ so far across 26 genres. Spotify and YouTube Music were ruled out — metadata only, or no API, and the projects that get around that redistribute unlicensed audio |
 | 2026-09-01 | — | Categories back, but not as they were: twelve genre rows under the four ordered ones, each loading only when scrolled towards, plus a Categories menu in the navbar listing all 29 with their counts and a `/genre/:genre` page behind each. The old version rendered every genre eagerly |
 | 2026-09-01 | — | Home page rebuilt: four ordered rows instead of 29 genre rows, ratings on every card, and three hardcoded decorations removed — "FEATURED VOD", a "#1 IN SERIES TODAY" ribbon and a "TV-MA" badge that every title carried. Import now stores TMDB's voteAverage/voteCount/popularity and backfills rows already stored |
 | 2026-09-01 | — | `/music` added — a real audio player, empty until tracks exist. Also: backspace in an empty search box no longer navigates away, the player's resolution label reads the element instead of claiming 1080p, and a download link appears when a title has a stream |
