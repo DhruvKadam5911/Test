@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Play, Pause, Volume2, VolumeX, Maximize2, ThumbsUp, ListVideo, X, RefreshCw } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize2, ThumbsUp, ListVideo, X, RefreshCw, Download } from "lucide-react";
 import { colors, bodyFont, displayFont, resolveBackground } from "../theme";
 import SmallRing from "../components/shared/SmallRing";
 import OnionLogo from "../components/shared/OnionLogo";
@@ -36,6 +36,9 @@ export default function WatchPage() {
   const [error, setError] = useState(null);
 
   const [playbackUrl, setPlaybackUrl] = useState(null);
+  // The stream's real height, read off the element. The bar used to print a
+  // hardcoded "1080p" whatever was playing.
+  const [videoHeight, setVideoHeight] = useState(null);
   const [playbackError, setPlaybackError] = useState(null);
   // A resolved stream held back while the brand ident plays. The video is not
   // mounted until the ident finishes, so its audio cannot start underneath it.
@@ -354,6 +357,7 @@ export default function WatchPage() {
                   onLoadedMetadata={(e) => {
                     const d = e.currentTarget.duration;
                     if (Number.isFinite(d) && d > 0) setVideoDurationSec(d);
+                    setVideoHeight(e.currentTarget.videoHeight || null);
                   }}
                   onTimeUpdate={(e) => {
                     // Dragging owns the playhead until the user lets go.
@@ -568,7 +572,20 @@ export default function WatchPage() {
                     <button onClick={toggleMute} style={{ background: "none", border: "none", cursor: "pointer" }}>
                       {isMuted ? <VolumeX size={16} color={colors.textMuted} /> : <Volume2 size={16} color={colors.text} />}
                     </button>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted }}>1080p</span>
+                    {videoHeight && (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: colors.textMuted }}>{videoHeight}p</span>
+                    )}
+                    {playbackUrl && (
+                      <a
+                        href={playbackUrl}
+                        download
+                        style={{ display: "flex", color: colors.textMuted }}
+                        aria-label="Download"
+                        title="Download"
+                      >
+                        <Download size={16} color={colors.textMuted} />
+                      </a>
+                    )}
                     <button onClick={toggleFullscreen} style={{ background: "none", border: "none", cursor: "pointer", display: "flex" }} aria-label="Fullscreen">
                       <Maximize2 size={16} color={colors.textMuted} />
                     </button>

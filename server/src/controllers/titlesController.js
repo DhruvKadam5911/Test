@@ -8,6 +8,7 @@ import { rankMatches } from "../services/titleSearch.js";
 const CARD_FIELDS = {
   id: true,
   title: true,
+  voteAverage: true,
   thumbnailUrl: true,
   heroImageUrl: true,
   genre: true,
@@ -28,12 +29,39 @@ const MAX_LIMIT = 100;
 const PLACEHOLDER_GENRE = "Uncategorised";
 
 
+/*
+ * What the home page's rows are, in order terms. TMDB's own numbers stand in
+ * for numbers this catalog does not have: nobody has watched anything here, so
+ * "most viewed" is how many people rated it on TMDB.
+ *
+ * Each ordering excludes rows missing the field it sorts on — a null sorts
+ * somewhere arbitrary and fills the row with titles that have no business
+ * being top of anything.
+ */
+const SORTS = {
+  trending: { orderBy: { popularity: "desc" }, where: { popularity: { not: null } } },
+  viewed: { orderBy: { voteCount: "desc" }, where: { voteCount: { not: null } } },
+  rated: {
+    orderBy: { voteAverage: "desc" },
+    // A single ten-out-of-ten vote is not a well-rated film.
+    where: { voteAverage: { not: null }, voteCount: { gte: 200 } },
+  },
+  // Released, not announced: TMDB carries titles years ahead of their date, and
+  // ordering by year alone filled the row with films nobody can watch yet.
+  recent: {
+    orderBy: [{ releaseYear: "desc" }, { popularity: "desc" }],
+    where: { popularity: { not: null }, voteCount: { gte: 50 }, releaseYear: { lte: new Date().getFullYear() } },
+  },
+  newest: { orderBy: { createdAt: "desc" }, where: {} },
+};
+
 // GET /titles
 export async function getTitles(req, res) {
   try {
-    const { genre, contentType, isOriginal, limit = 20, offset = 0 } = req.query;
+    const { genre, contentType, isOriginal, sort, limit = 20, offset = 0 } = req.query;
 
-    const where = {};
+    const chosen = SORTS[sort] || SORTS.newest;
+    const where = { ...chosen.where };
     if (genre) where.genre = { equals: genre, mode: "insensitive" };
     if (contentType) where.contentType = contentType;
     if (isOriginal !== undefined) where.isOriginal = isOriginal === "true";
@@ -42,7 +70,7 @@ export async function getTitles(req, res) {
       where,
       take: Math.min(Number(limit) || 20, MAX_LIMIT),
       skip: Number(offset),
-      orderBy: { createdAt: "desc" },
+      orderBy: chosen.orderBy,
       select: CARD_FIELDS,
     });
 
@@ -57,9 +85,9 @@ export async function getTitles(req, res) {
 export async function getTrending(req, res) {
   try {
     const trending = await prisma.title.findMany({
-      where: { genre: { not: PLACEHOLDER_GENRE } },
+      where: { genre: { not: PLACEHOLDER_GENRE }, popularity: { not: null } },
       take: 10,
-      orderBy: { createdAt: "desc" },
+      orderBy: { popularity: "desc" },
       select: CARD_FIELDS,
     });
 

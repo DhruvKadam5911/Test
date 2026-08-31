@@ -46,6 +46,15 @@ model Title {
   heroImageUrl    String?
   playbackUrl     String?         // Only for movies; series use Episode.playbackUrl
   isOriginal      Boolean         @default(false)
+
+  // TMDB's own numbers, carried through by the import. voteAverage is the
+  // score out of ten shown on a card; voteCount is how many people rated it,
+  // which is the closest thing the catalog has to a view count; popularity is
+  // TMDB's own trending measure. Null for anything not imported from TMDB.
+  voteAverage     Float?
+  voteCount       Int?
+  popularity      Float?
+
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 

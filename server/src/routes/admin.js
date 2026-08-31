@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { refreshCatalog, dedupe, reindex } from "../controllers/adminController.js";
+import { refreshCatalog, dedupe, reindex, removeSeed } from "../controllers/adminController.js";
 
 const router = Router();
 
@@ -11,5 +11,8 @@ router.get("/dedupe", dedupe);
 
 // One-off: installs pg_trgm and the trigram index search depends on.
 router.get("/reindex", reindex);
+
+// One-off: drops the demo titles the project shipped with. Dry run unless ?apply=true.
+router.get("/remove-seed", removeSeed);
 
 export default router;

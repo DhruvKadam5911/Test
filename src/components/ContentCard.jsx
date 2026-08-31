@@ -35,6 +35,11 @@ export default function ContentCard({ item, size = "md", rank }) {
   const titleObj = (item && typeof item.title === "object" ? item.title : item) || {};
   const displayTitle = titleObj.title || "Untitled";
   const displaySub = titleObj.genre ? `${titleObj.genre} • ${titleObj.releaseYear || ""}` : titleObj.contentType || "";
+  // TMDB scores out of ten. Shown to one decimal because 7 and 7.4 are
+  // different films and rounding to whole numbers hides that.
+  const score = typeof titleObj.voteAverage === "number" && titleObj.voteAverage > 0
+    ? titleObj.voteAverage.toFixed(1)
+    : null;
   const background = resolveBackground(titleObj.thumbnailUrl);
 
   const handleOpen = () => {
@@ -141,7 +146,10 @@ export default function ContentCard({ item, size = "md", rank }) {
           <div style={{ fontSize: 12.5, fontWeight: 700, color: colors.text }} className="truncate">{displayTitle}</div>
 
           <div className="flex items-center gap-1.5 flex-wrap" style={{ fontSize: 10.5, color: colors.textMuted }}>
-            {titleObj.rating && (
+            {score && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: colors.accentGreen }}>★ {score}</span>
+            )}
+            {titleObj.rating && titleObj.rating !== "NR" && (
               <span style={{ fontSize: 9.5, fontWeight: 700, color: colors.text, border: `1px solid ${colors.ring}`, padding: "0 4px", borderRadius: 2 }}>{titleObj.rating}</span>
             )}
             {titleObj.releaseYear && <span>{titleObj.releaseYear}</span>}

@@ -136,6 +136,9 @@ export async function importSlice({
         heroImageUrl: imageUrl(item.backdrop_path, "original"),
         playbackUrl,
         isOriginal: false,
+        voteAverage: item.vote_average ?? null,
+        voteCount: item.vote_count ?? null,
+        popularity: item.popularity ?? null,
       });
     }
   }
@@ -165,8 +168,34 @@ export async function importSlice({
 
   const result = fresh.length ? await prisma.title.createMany({ data: fresh }) : { count: 0 };
 
+  // Rows already stored are skipped above, which is what makes the import
+  // idempotent — but the catalog was filled before TMDB's ratings were kept, so
+  // a re-run has to fill those in rather than walk past them. One statement,
+  // not one per row: at 200 rows a call, a loop does not finish inside a
+  // serverless invocation. Only ever writes the three numbers.
+  const rateable = rows.filter((r) => !seen.has(r.title.toLowerCase()) && r.voteAverage !== null);
+  let updated = 0;
+  if (rateable.length) {
+    updated = await prisma.$executeRawUnsafe(
+      `UPDATE "Title" t
+       SET "voteAverage" = v.va, "voteCount" = v.vc, "popularity" = v.pop
+       FROM (
+         SELECT unnest($1::text[]) AS title, unnest($2::int[]) AS year,
+                unnest($3::float8[]) AS va, unnest($4::int[]) AS vc,
+                unnest($5::float8[]) AS pop
+       ) v
+       WHERE t.title = v.title AND t."releaseYear" = v.year AND t."voteAverage" IS NULL`,
+      rateable.map((r) => r.title),
+      rateable.map((r) => r.releaseYear),
+      rateable.map((r) => r.voteAverage),
+      rateable.map((r) => r.voteCount ?? 0),
+      rateable.map((r) => r.popularity ?? 0)
+    );
+  }
+
   return {
     added: result.count,
+    updated,
     skipped: rows.length - fresh.length,
     scanned,
     failedPages,

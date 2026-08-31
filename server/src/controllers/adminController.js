@@ -111,13 +111,100 @@ export async function reindex(req, res) {
   }
 
   try {
+    // Columns first. Prisma migrations cannot run from a machine that has no
+    // route to Postgres on 5432, which is the situation this project is in, so
+    // additive schema changes are applied here and mirrored in schema.prisma.
+    for (const column of [
+      '"voteAverage" DOUBLE PRECISION',
+      '"voteCount" INTEGER',
+      '"popularity" DOUBLE PRECISION',
+    ]) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Title" ADD COLUMN IF NOT EXISTS ${column}`);
+    }
+
+    // The rows the home page orders by. Without these each is a full sort of
+    // 148,000 rows.
+    await prisma.$executeRawUnsafe(
+      'CREATE INDEX IF NOT EXISTS "Title_popularity_idx" ON "Title" ("popularity" DESC NULLS LAST)'
+    );
+    await prisma.$executeRawUnsafe(
+      'CREATE INDEX IF NOT EXISTS "Title_voteAverage_idx" ON "Title" ("voteAverage" DESC NULLS LAST)'
+    );
+    await prisma.$executeRawUnsafe(
+      'CREATE INDEX IF NOT EXISTS "Title_voteCount_idx" ON "Title" ("voteCount" DESC NULLS LAST)'
+    );
+    await prisma.$executeRawUnsafe(
+      'CREATE INDEX IF NOT EXISTS "Title_releaseYear_idx" ON "Title" ("releaseYear" DESC)'
+    );
+
+    // The music player's tracks. Same reason as the columns above.
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "Track" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        title TEXT NOT NULL,
+        artist TEXT NOT NULL,
+        "audioUrl" TEXT NOT NULL,
+        "artworkUrl" TEXT,
+        "durationSeconds" INTEGER,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW()
+      )
+    `);
+
     await prisma.$executeRawUnsafe("CREATE EXTENSION IF NOT EXISTS pg_trgm");
     await prisma.$executeRawUnsafe(
       'CREATE INDEX IF NOT EXISTS "Title_title_trgm_idx" ON "Title" USING gin (lower(title) gin_trgm_ops)'
     );
-    return res.status(200).json({ status: "ok", message: "pg_trgm and the title index are in place." });
+    return res.status(200).json({ status: "ok", message: "Columns, sort indexes, pg_trgm and the title index are in place." });
   } catch (error) {
     console.error("reindex error:", error);
     return res.status(500).json({ error: error.message || "Reindex failed." });
+  }
+}
+
+/*
+ * GET /admin/remove-seed
+ *
+ * Deletes the three demo titles the project shipped with — Undertow and the two
+ * documentaries from prisma/seed.js. Named explicitly rather than matched by a
+ * pattern, because "everything with a stream" is the same set today and would
+ * be the wrong thing to run tomorrow.
+ *
+ * Worth knowing before running it: these are the only titles in the catalog
+ * that play. Everything imported from TMDB is metadata with no stream, so
+ * afterwards nothing plays at all.
+ *
+ * Dry run unless called with ?apply=true. Cascades to their seasons and
+ * episodes, which is what the schema asks for.
+ */
+const SEED_TITLES = ["Undertow", "How Bread Works", "Building a Synth from Scratch"];
+
+export async function removeSeed(req, res) {
+  if (!authorised(req)) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
+
+  try {
+    const matches = await prisma.title.findMany({
+      where: { title: { in: SEED_TITLES } },
+      select: { id: true, title: true, playbackUrl: true },
+    });
+
+    const apply = req.query.apply === "true";
+    let deleted = 0;
+    if (apply && matches.length) {
+      const result = await prisma.title.deleteMany({ where: { id: { in: matches.map((m) => m.id) } } });
+      deleted = result.count;
+    }
+
+    return res.status(200).json({
+      status: "ok",
+      found: matches.map((m) => m.title),
+      playable: matches.filter((m) => m.playbackUrl).length,
+      deleted,
+      applied: apply,
+    });
+  } catch (error) {
+    console.error("removeSeed error:", error);
+    return res.status(500).json({ error: error.message || "Removing the seed titles failed." });
   }
 }

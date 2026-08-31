@@ -17,6 +17,7 @@ import prisma from "./src/config/db.js";
 
 import titlesRoutes from "./src/routes/titles.js";
 import adminRoutes from "./src/routes/admin.js";
+import musicRoutes from "./src/routes/music.js";
 
 const app = express();
 
@@ -87,6 +88,7 @@ app.get("/health", async (req, res) => {
 // API Routes Mounting
 app.use("/titles", titlesRoutes);
 app.use("/admin", adminRoutes);
+app.use("/music", musicRoutes);
 
 // Global 404 Handler
 app.use((req, res) => {

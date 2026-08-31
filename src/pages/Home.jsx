@@ -6,7 +6,6 @@ import RingMotif from "../components/shared/RingMotif";
 import OnionLogo from "../components/shared/OnionLogo";
 import AppNavbar from "../components/AppNavbar";
 import ContentRow from "../components/ContentRow";
-import GenreRow from "../components/GenreRow";
 import api from "../api/client";
 
 // Characters of the featured description shown before "Read more".
@@ -15,20 +14,29 @@ const DESCRIPTION_LIMIT = 150;
 // Typing a title should not fire a request per keystroke against the catalog.
 const SEARCH_DEBOUNCE_MS = 300;
 
+/*
+ * The home page's rows. Four fixed ones, not one per genre — at 148,000 titles
+ * and 29 genres the page was 30 rows of things nobody asked for.
+ *
+ * "Most viewed" is TMDB's vote count: nobody has watched anything in this
+ * catalog yet, and how many people bothered to rate a title is the closest
+ * honest stand-in.
+ */
+const ROWS = [
+  { key: "viewed", title: "Most Viewed" },
+  { key: "rated", title: "Most Rated" },
+  { key: "recent", title: "Recently Released" },
+];
+
 export default function OnionHome() {
   const navigate = useNavigate();
 
   const [trending, setTrending] = useState([]);
-  // Just the genre names and their counts — one row is rendered per genre and
-  // each fetches its own titles. Pulling a slice of the catalog and grouping it
-  // in the browser is what limited the page to ~100 of 7,000 titles.
-  const [genres, setGenres] = useState([]);
-  const [originals, setOriginals] = useState([]);
+  // One entry per row in ROWS, each filled by its own request.
+  const [rows, setRows] = useState({});
 
   const [loadingTrending, setLoadingTrending] = useState(true);
-  const [loadingGenres, setLoadingGenres] = useState(true);
   const [errorTrending, setErrorTrending] = useState(null);
-  const [errorGenres, setErrorGenres] = useState(null);
 
   const [searchResults, setSearchResults] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -54,33 +62,25 @@ export default function OnionHome() {
     }
   };
 
-  const fetchGenres = async () => {
-    setLoadingGenres(true);
-    setErrorGenres(null);
-    try {
-      const data = await api.get("/titles/genres");
-      setGenres(data);
-    } catch (err) {
-      console.error("fetchGenres error:", err);
-      // Failing quietly would leave the page with a hero and nothing else.
-      setErrorGenres(err.message);
-    } finally {
-      setLoadingGenres(false);
-    }
-  };
-
-  const fetchOriginals = async () => {
-    try {
-      setOriginals(await api.get("/titles?isOriginal=true&limit=20"));
-    } catch (err) {
-      console.error("fetchOriginals error:", err);
-    }
+  const fetchRows = async () => {
+    // Sorted server-side; ordering 148,000 titles in the browser is not an
+    // option, and neither is downloading them.
+    await Promise.all(
+      ROWS.map(async ({ key }) => {
+        try {
+          const data = await api.get(`/titles?sort=${key}&limit=20`);
+          setRows((current) => ({ ...current, [key]: data }));
+        } catch (err) {
+          console.error(`fetch ${key} row error:`, err);
+          setRows((current) => ({ ...current, [key]: [] }));
+        }
+      })
+    );
   };
 
   useEffect(() => {
     fetchTrending();
-    fetchGenres();
-    fetchOriginals();
+    fetchRows();
   }, []);
 
   // Search runs against the whole catalog on the server. Filtering a loaded
@@ -205,7 +205,7 @@ export default function OnionHome() {
                   <div className="flex items-center gap-2">
                     <span style={{ width: 7, height: 7, borderRadius: "50%", background: colors.accentGreen }} />
                     <span style={{ fontSize: 12, fontWeight: 700, color: colors.accentLight, letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                      {featuredTitle.isOriginal ? "ONION ORIGINAL" : "FEATURED VOD"}
+                      {featuredTitle.isOriginal ? "ONION ORIGINAL" : "TRENDING NOW"}
                     </span>
                   </div>
 
@@ -220,9 +220,17 @@ export default function OnionHome() {
                     <span>·</span>
                     <span>{featuredTitle.releaseYear}</span>
                     <span>·</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: colors.text, border: `1px solid ${colors.ring}`, padding: "1px 6px", borderRadius: 3, background: "rgba(255,255,255,0.06)" }}>
-                      {featuredTitle.rating || "PG-13"}
-                    </span>
+                    {featuredTitle.rating && featuredTitle.rating !== "NR" && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: colors.text, border: `1px solid ${colors.ring}`, padding: "1px 6px", borderRadius: 3, background: "rgba(255,255,255,0.06)" }}>
+                        {featuredTitle.rating}
+                      </span>
+                    )}
+                    {typeof featuredTitle.voteAverage === "number" && featuredTitle.voteAverage > 0 && (
+                      <>
+                        <span>·</span>
+                        <span style={{ color: colors.accentGreen, fontWeight: 700 }}>★ {featuredTitle.voteAverage.toFixed(1)}</span>
+                      </>
+                    )}
                   </div>
 
                   <p style={{ fontSize: 15, color: colors.textMuted, lineHeight: 1.6, maxWidth: 520 }}>
@@ -261,14 +269,6 @@ export default function OnionHome() {
               ) : null}
             </div>
 
-            <div className="absolute bottom-6 right-6 md:right-10 z-10 flex items-center gap-2 hidden sm:flex">
-              <div style={{ background: colors.accent, color: "#fff", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 4, letterSpacing: 0.5 }}>
-                #1 IN SERIES TODAY
-              </div>
-              <div style={{ background: "rgba(255,255,255,0.08)", border: `1px solid ${colors.ring}`, color: colors.textMuted, fontSize: 11, fontWeight: 600, padding: "4px 8px", borderRadius: 4 }}>
-                TV-MA
-              </div>
-            </div>
           </div>
 
           {/* Content Rows */}
@@ -283,19 +283,15 @@ export default function OnionHome() {
               onRetry={fetchTrending}
             />
 
-            {originals.length > 0 && (
-              <ContentRow title="Onion Originals" items={originals} size="md" />
-            )}
-
-            {errorGenres ? (
-              <ContentRow title="the catalog" items={[]} error={errorGenres} onRetry={fetchGenres} />
-            ) : (
-              // One row per genre, each fetching its own titles as it comes
-              // into view. Ordered by how much the catalog holds of each.
-              genres.map(({ genre }) => <GenreRow key={genre} genre={genre} />)
-            )}
-
-            {loadingGenres && <ContentRow title="Loading" items={[]} loading />}
+            {ROWS.map(({ key, title }) => (
+              <ContentRow
+                key={key}
+                title={title}
+                items={rows[key] || []}
+                size="md"
+                loading={!rows[key]}
+              />
+            ))}
           </div>
         </>
       )}

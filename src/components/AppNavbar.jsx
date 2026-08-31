@@ -68,7 +68,7 @@ export default function AppNavbar({ value, onSearchChange }) {
         </Link>
         <div className="hidden md:flex items-center gap-7">
           <Link to="/" style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted, textDecoration: "none" }}>Browse</Link>
-          <Link to="/" style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted, textDecoration: "none" }}>Originals</Link>
+          <Link to="/music" style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted, textDecoration: "none" }}>Music</Link>
         </div>
       </div>
 
@@ -82,7 +82,13 @@ export default function AppNavbar({ value, onSearchChange }) {
                 ref={searchInputRef}
                 value={searchValue}
                 onChange={handleSearchInput}
-                onKeyDown={(e) => e.key === "Escape" && closeSearch()}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") closeSearch();
+                  // Backspace in an empty field is a browser "go back" on some
+                  // setups, which threw the viewer off the page they were
+                  // searching from. Nothing left to delete, nothing to do.
+                  if (e.key === "Backspace" && !searchValue) e.preventDefault();
+                }}
                 placeholder="Titles, genres..."
                 className="outline-none bg-transparent"
                 style={{ color: colors.text, fontSize: 13, width: 160 }}
