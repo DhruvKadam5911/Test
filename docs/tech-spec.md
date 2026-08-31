@@ -88,8 +88,8 @@ See [design.md](design.md).
 │   ├── components/
 │   │   ├── SplashIntro.jsx       Picks an intro by viewport; owns the AudioContext
 │   │   ├── SplashWheel.jsx       Mobile/tablet intro — wheel, lock, push through logo
-│   │   ├── SplashWordmark.jsx    Desktop intro — mark swoop + written wordmark
-│   │   ├── splash/               Timing constants + Web Audio soundtracks per variant
+│   │   ├── SplashConstruct.jsx   Tablet/desktop intro — wordmark built from dots
+│   │   ├── splash/               Wordmark geometry, timings, soundtracks per variant
 │   │   ├── PickerWheel.jsx       Rotating slot-machine list (loop or settle mode)
 │   │   ├── AppNavbar.jsx         Logo, links, expanding search, bell
 │   │   ├── ContentRow.jsx        Horizontal scroller with arrows, skeletons, retry

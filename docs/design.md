@@ -112,7 +112,7 @@ Loaded in `index.html` and re-imported inside `Home.jsx`.
 
 | Viewport | Component | Intro |
 |----------|-----------|-------|
-| `≥ 768px` (tablet, desktop) | `SplashWordmark.jsx` | The original: the mark swoops in and "onion" is written beside it in Mr Bedfort by a travelling nib |
+| `≥ 768px` (tablet, desktop) | `SplashConstruct.jsx` | The wordmark is *built*: dots multiply, become the letterforms' anchor points, outlines draw between them over construction guides, then thicken into the solid wordmark |
 | `< 768px` (phone) | `SplashWheel.jsx` | The wheel spins through streaming services, locks on Onion, then pushes through the logo |
 
 The split exists because the horizontal lockup needs width to read, and a phone does not have
@@ -159,13 +159,32 @@ camera then appears to push through empty space next to the lockup.
 **Order matters:** isolate before zoom. Scaling a screen still full of platform names reads as
 the whole list lunging forward; clearing them first makes it a push through the logo.
 
-#### Tablet and desktop — the wordmark
+#### Tablet and desktop — the construction
 
-Unchanged from before the wheel existed. The mark swoops in from a 3D transform, the text
-column opens, and "onion" is written left to right by a nib over `WRITE_DURATION`, with a
-per-letter whoosh on `LETTER_STAGGER` and a chime as the wordmark locks. Mr Bedfort is a joined
-script, so the word is **one text run** — per-letter spans, `letter-spacing` or margins would
-break the strokes that carry between letters.
+| Time | Stage |
+|------|-------|
+| 0–320ms | A seed dot appears, then three, then five |
+| 520ms | The five spread out, one per letter |
+| 880ms | Each hands over to that letter's anchor points |
+| 1120ms | Guides fade in; the outlines draw between the anchors (staggered 90ms per letter) |
+| 1820ms | Scaffolding clears and the wireframe thickens into the solid wordmark |
+| 2240ms | The onion mark joins it |
+| 2760ms | Fade out → `onDone()` at 3180ms |
+
+**The letterforms are geometry, not type.** `splash/wordmarkGeometry.js` authors "onion" as
+paths — `o` is a ring, `n` is a stem turning into a semicircular shoulder, `i` is a stem plus a
+tittle. This is what makes the wireframe stage read as deliberate: every anchor lands on a
+quadrant point. A webfont's outlines carry dozens of arbitrary anchors and would look like
+noise. **No font is loaded for the wordmark at all.**
+
+**The whole reveal rides on two properties of one set of paths.** `stroke-dashoffset` draws
+them (each path carries `pathLength={1}`, so one normalised value works regardless of real
+length), and `stroke-width` fills them — wireframe `2`, solid `20`. The `i`'s tittle radius is
+derived from the same stroke width, so it thickens with the word instead of sitting there as a
+fixed dot. Do not add a separate filled copy of the wordmark for the solid stage.
+
+**The mark's space is reserved from the start** so its late fade-in cannot shift the wordmark
+sideways — the same rule as the wheel's marker.
 
 The audio is fully synthesized with the Web Audio API — no audio files are shipped.
 

@@ -29,7 +29,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Splash intro visuals | ✅ | Two variants by viewport. **Tablet & desktop (≥768px):** the original mark swoop + written Mr Bedfort wordmark, ~3.1s. **Phone (<768px):** wheel spins through platforms, locks on Onion, mark drops in, others clear, lockup pushes through into the app, ~3.5s |
+| Splash intro visuals | ✅ | Two variants by viewport. **Tablet & desktop (≥768px):** the wordmark is constructed — dots → anchor points → drawn outlines → solid, then the mark joins, ~3.2s. **Phone (<768px):** wheel spins through platforms, locks on Onion, mark drops in, others clear, lockup pushes through into the app, ~3.5s |
 | Splash intro audio | ✅ | One `AudioContext` per mount, closed on unmount; the click path resumes it rather than opening a second (plan 1.1, 2026-08-31) |
 | Autoplay-blocked overlay | ✅ | Click-to-enable |
 | Cinematic hero | 🟡 | Renders, but the truncated description is hardcoded *Undertow* copy — plan 1.4 |
@@ -100,6 +100,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H8 | `npm run build` runs `tsc -b`. TypeScript errors fail a build in a mostly-JSX codebase |
 | H9 | `#7C3FC4` appears in a few places instead of `colors.accent` `#7B2685` |
 | H10 | Two components render the same raster differently: `OnionLogo.jsx` draws the full lockup for the navbar/footer, `OnionMark.jsx` crops the bulb alone for the splash. Both re-process `public/logo.png` on a canvas at runtime — if that file is replaced, check the crop bounds and the white-knockout threshold in both |
+| H10b | The desktop wordmark is hand-authored SVG geometry in `splash/wordmarkGeometry.js`, **not** a font. Changing the wordmark means editing paths and their anchor lists together — the anchors are drawn from the same file so they cannot drift, but only if you edit both |
 | H11a | The splash breakpoint is read once at mount and never re-read. That is intentional — do not "fix" it with a resize listener, or a resize will swap the intro mid-animation |
 | H11 | `PickerWheel` writes styles straight to DOM nodes from a rAF loop. Do not also drive those same properties from React state or CSS transitions — they will fight each other. `isolate` is safe only because it runs after the loop has finished |
 
@@ -128,6 +129,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 and T4 r
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Desktop/tablet intro replaced with a construction reveal: seed dots become the letterforms' anchor points, outlines draw between them over guides, then thicken into the solid wordmark and the mark joins. Wordmark is now hand-authored SVG geometry — Mr Bedfort and the old written-wordmark intro removed (recoverable from `3615d25`) |
 | 2026-08-31 | — | Plan 1.2: the transport bar is now the real control surface — scrubber, duration, play/pause, mute and fullscreen all drive and follow the `<video>` element; the simulation is confined to the pre-play poster |
 | 2026-08-31 | — | Splash breakpoint moved to 768px: tablets join desktop on the wordmark intro, leaving the wheel to phones |
 | 2026-08-31 | — | Splash split by viewport: the original mark-swoop + written wordmark intro on the wider breakpoint, the wheel below it. `SplashIntro` is now a shell that picks a variant and owns the AudioContext; soundtracks moved to `components/splash/` so the component modules stay Fast-Refresh clean. Mr Bedfort restored to the font link for the desktop wordmark |

@@ -2,16 +2,17 @@ import React, { useEffect, useRef, useState } from "react";
 import { colors } from "../theme";
 import SplashWheel from "./SplashWheel";
 import { playSound as playWheelSound } from "./splash/wheelSound";
-import SplashWordmark from "./SplashWordmark";
-import { playSound as playWordmarkSound } from "./splash/wordmarkSound";
+import SplashConstruct from "./SplashConstruct";
+import { playSound as playConstructSound } from "./splash/constructSound";
 
 /*
  * SplashIntro — picks an intro for the viewport, and owns the audio for it.
  *
- * Tablets and desktop keep the original wordmark intro: the mark swoops in and
- * "onion" is written beside it. Phones get the wheel, which spins through the
- * streaming services and pushes through the logo into the app — the horizontal
- * lockup needs width to read, and a phone does not have it.
+ * Tablets and desktop get the construction intro: dots multiply, become the
+ * anchor points of the letterforms, and the wordmark is drawn and filled in.
+ * Phones get the wheel, which spins through the streaming services and pushes
+ * through the logo — the horizontal lockup needs width to read, and a phone
+ * does not have it.
  *
  * The variants own their own visuals, timeline and exit. This shell only
  * decides which one runs and handles the AudioContext, because the context has
@@ -37,7 +38,7 @@ export default function SplashIntro({ onDone }) {
   const audioCtxRef = useRef(null);
 
   const playSoundRef = useRef(null);
-  playSoundRef.current = useWordmark ? playWordmarkSound : playWheelSound;
+  playSoundRef.current = useWordmark ? playConstructSound : playWheelSound;
 
   // Detect autoplay permission.
   //
@@ -117,5 +118,5 @@ export default function SplashIntro({ onDone }) {
     );
   }
 
-  return useWordmark ? <SplashWordmark onDone={onDone} /> : <SplashWheel onDone={onDone} />;
+  return useWordmark ? <SplashConstruct onDone={onDone} /> : <SplashWheel onDone={onDone} />;
 }
