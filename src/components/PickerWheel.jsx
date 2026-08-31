@@ -50,6 +50,7 @@ export default function PickerWheel({
   spinMs = 2400,
   onActiveChange,
   onSettled,
+  marker,
   className = "",
   style,
 }) {
@@ -160,7 +161,9 @@ export default function PickerWheel({
       className={`relative overflow-hidden ${className}`}
       style={{ background: colors.bg, ...style }}
     >
-      {/* The marker the list rotates past. Fixed — the wheel moves, not this. */}
+      {/* The marker the list rotates past. Fixed — the wheel moves, not this.
+          Callers can replace it entirely (the splash swaps in the brand mark
+          once the wheel lands). */}
       <div
         aria-hidden="true"
         style={{
@@ -175,7 +178,7 @@ export default function PickerWheel({
           zIndex: 2,
         }}
       >
-        →
+        {marker ?? "→"}
       </div>
 
       {items.map((label, i) => (

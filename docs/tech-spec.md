@@ -91,7 +91,7 @@ See [design.md](design.md).
 │   │   ├── AppNavbar.jsx         Logo, links, expanding search, bell
 │   │   ├── ContentRow.jsx        Horizontal scroller with arrows, skeletons, retry
 │   │   ├── ContentCard.jsx       Card + CardSkeleton export
-│   │   └── shared/               OnionLogo, RingMotif, SmallRing
+│   │   └── shared/               OnionLogo, OnionMark, RingMotif, SmallRing
 │   └── assets/
 └── server/
     ├── server.js                 Bootstrap, CORS, /, /health, route mount, 404, error handler

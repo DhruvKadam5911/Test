@@ -29,7 +29,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Splash intro visuals | ✅ | ~3.4s; a `PickerWheel` spins through streaming platforms and locks on **Onion**. The icon swoop and written wordmark were removed |
+| Splash intro visuals | ✅ | ~3.4s; a `PickerWheel` spins through streaming platforms, locks on **Onion**, then the arrow marker crossfades into the onion mark |
 | Splash intro audio | ✅ | One `AudioContext` per mount, closed on unmount; the click path resumes it rather than opening a second (plan 1.1, 2026-08-31) |
 | Autoplay-blocked overlay | ✅ | Click-to-enable |
 | Cinematic hero | 🟡 | Renders, but the truncated description is hardcoded *Undertow* copy — plan 1.4 |
@@ -98,7 +98,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H7 | Route order in `routes/titles.js` — `/trending` must stay above `/:id` |
 | H8 | `npm run build` runs `tsc -b`. TypeScript errors fail a build in a mostly-JSX codebase |
 | H9 | `#7C3FC4` appears in a few places instead of `colors.accent` `#7B2685` |
-| H10 | The splash no longer shows the onion icon or a wordmark at all — it is only the wheel. `OnionLogo.jsx` (navbar, footer) is now the sole place the brand mark appears |
+| H10 | Two components render the same raster differently: `OnionLogo.jsx` draws the full lockup for the navbar/footer, `OnionMark.jsx` crops the bulb alone for the splash. Both re-process `public/logo.png` on a canvas at runtime — if that file is replaced, check the crop bounds and the white-knockout threshold in both |
 | H11 | `PickerWheel` writes styles straight to DOM nodes from a rAF loop. Do not also drive those same properties from React state or CSS transitions — they will fight each other |
 
 ---
@@ -118,7 +118,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved
 | D3 | Keep or delete Creator Studio? | Plan 1.7 |
 | D4 | Where does catalog content come from — manual, TMDB, or uploads? | Phase 5 |
 | D5 | Is Fraunces (loaded, unused) part of the type system or should it be dropped? | design.md |
-| D6 | Should the onion icon or wordmark return after the wheel lands? The splash is now wheel-only | Splash branding |
+| D6 | Should a wordmark join the mark once the wheel lands, or is the mark beside "Onion" enough? | Splash branding |
 
 ---
 
@@ -126,6 +126,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | The onion mark returns to the splash: once the wheel locks on Onion, the arrow marker crossfades into `OnionMark`, leaving a brand lockup. Spin shortened to 2200ms so the added beat does not lengthen the splash overall |
 | 2026-08-31 | — | Splash replaced: the icon swoop and written wordmark were removed, and `PickerWheel` now spins through the platform list and locks on Onion. Audio retimed — ticks derived from the easing inverse, chime on the lock. Mr Bedfort dropped from the font link, now unused |
 | 2026-08-31 | — | Added `PickerWheel` — a rotating slot-machine list of streaming platform names with arc geometry and depth-of-field falloff, plus a `/wheel` demo route |
 | 2026-08-31 | — | Splash wordmark reset in Mr Bedfort script, lowercase, revealed by a nib sweeping the word left to right (single text run — a joined script cannot be split into per-letter spans); per-letter audio retimed to match |

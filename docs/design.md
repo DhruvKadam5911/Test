@@ -108,16 +108,20 @@ Loaded in `index.html` and re-imported inside `Home.jsx`.
 
 ### Splash intro timeline (`SplashIntro.jsx`)
 
-The splash is a `PickerWheel` spun onto the brand. There is no wordmark, no icon and no
-writing effect — the wheel *is* the intro.
+The splash is a `PickerWheel` spun onto the brand. There is no wordmark and no writing effect —
+the wheel *is* the intro, and the brand mark arrives at the end of it.
 
 | Time | Visual | Audio |
 |------|--------|-------|
-| 0ms | Wheel starts spinning from `START_INDEX` | C2 sub-bass swell (65.4Hz sine), 0.5s fade-in; C major pentatonic arpeggio across the spin |
-| 0–2600ms | One full turn plus the travel back to Onion, decelerating on `easeOutCubic` | A tick each time the wheel crosses an item — the last 9 crossings, so they thin out as it slows |
-| 2600ms | Locks on **Onion**, crisp | C major chime chord (C5/E5/G5/C6, 20ms strum) + noise transient + feedback-delay tail |
-| 3000ms | Splash begins to fade | — |
-| 3420ms | `onDone()` | — |
+| 0ms | Wheel starts spinning from `START_INDEX`, arrow at the marker | C2 sub-bass swell (65.4Hz sine), 0.5s fade-in; C major pentatonic arpeggio across the spin |
+| 0–2200ms | One full turn plus the travel back to Onion, decelerating on `easeOutCubic` | A tick each time the wheel crosses an item — the last 9 crossings, so they thin out as it slows |
+| 2200ms | Locks on **Onion**, crisp | C major chime chord (C5/E5/G5/C6, 20ms strum) + noise transient + feedback-delay tail |
+| 2200–2580ms | Arrow slides out and fades; `OnionMark` scales up in its place, leaving the mark beside "Onion" as a lockup (`MARK_SWAP_MS`) | — |
+| 2950ms | Splash begins to fade | — |
+| 3370ms | `onDone()` | — |
+
+**The marker swap must not move the list.** The arrow and the mark are stacked absolutely
+inside one fixed-size box, so the crossfade cannot reflow anything beside them.
 
 The audio is fully synthesized with the Web Audio API — no audio files are shipped.
 
@@ -127,8 +131,8 @@ exactly on an item, which is why the sound decelerates in lockstep with the whee
 drifting against it. Change `SPIN_MS`, `SPINS` or `START_INDEX` and the ticks retime themselves.
 
 **The wheel owns the timeline.** `PickerWheel` calls `onSettled` when it lands, and only then
-does the splash hold, fade and hand over — the exit is not on an independent timer that could
-drift out of sync with the animation.
+does the splash swap in the mark, hold, fade and hand over — the exit is not on an independent
+timer that could drift out of sync with the animation.
 
 ---
 
@@ -154,7 +158,8 @@ gradient-backed title, which is currently all of them.
 
 | Component | Role |
 |-----------|------|
-| `shared/OnionLogo.jsx` | The wordmark + bulb. Takes `height`. Used in navbar, footer, splash |
+| `shared/OnionLogo.jsx` | The full baked lockup (bulb + "ONION") from `public/logo.png`. Takes `height`. Navbar and footer |
+| `shared/OnionMark.jsx` | The bulb-and-sprout **only**, cropped out of the same raster at runtime with the white background knocked out. Use it wherever the mark sits next to live text — the splash marker |
 | `shared/RingMotif.jsx` | Large concentric-ring decoration. Takes `size`, `opacity`, `style`. Hero background |
 | `shared/SmallRing.jsx` | Compact ring bullet before section titles |
 | `PickerWheel.jsx` | Slot-machine list that rotates a set of labels past a fixed `→` marker. Reusable — takes `items`, `itemHeight`, `stepMs`, `onActiveChange`. Demoed at `/wheel` |

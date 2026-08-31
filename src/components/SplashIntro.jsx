@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import { colors } from "../theme";
 import PickerWheel from "./PickerWheel";
+import OnionMark from "./shared/OnionMark";
 import { PLATFORMS } from "../data/platforms";
 
 // The splash spins a wheel of streaming services and lands on Onion.
 const TARGET = "Onion";
 const START_INDEX = 1; // begin on the item after the target, so it has to travel
 const SPINS = 1; // one full turn is plenty — more only lengthens the unreadable fast phase
-const SPIN_MS = 2600; // spin-up and deceleration onto the target
-const SETTLE_HOLD_MS = 400; // beat where the name just sits on the marker
+const SPIN_MS = 2200; // spin-up and deceleration onto the target
+// Long enough for the mark to swap in and be read before the splash leaves.
+const SETTLE_HOLD_MS = 750;
+const MARK_SWAP_MS = 380; // arrow out, brand mark in
 const FADE_MS = 420;
 
 /* ==========================================================================
@@ -187,6 +190,8 @@ export default function SplashIntro({ onDone }) {
 
   // Audio context and interaction state
   const [started, setStarted] = useState(false);
+  // Set once the wheel lands: swaps the arrow marker for the brand mark.
+  const [settled, setSettled] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
   // The single AudioContext for this mount. Browsers cap concurrent contexts
   // (~6), so it is created once, reused by handleInteraction, and closed on
@@ -250,6 +255,7 @@ export default function SplashIntro({ onDone }) {
   // The wheel drives the timeline: it reports when it has landed on Onion,
   // and only then does the splash hold, fade and hand over.
   const handleSettled = () => {
+    setSettled(true);
     setTimeout(() => setVisible(false), SETTLE_HOLD_MS);
     setTimeout(() => onDone?.(), SETTLE_HOLD_MS + FADE_MS);
   };
@@ -275,6 +281,31 @@ export default function SplashIntro({ onDone }) {
           spins={SPINS}
           spinMs={SPIN_MS}
           onSettled={handleSettled}
+          marker={
+            // Arrow and mark are stacked in one box so the crossfade cannot
+            // shift the items beside them.
+            <span style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 52, height: 112 }}>
+              <span
+                style={{
+                  position: "absolute",
+                  opacity: settled ? 0 : 1,
+                  transform: settled ? "translateX(-8px)" : "translateX(0)",
+                  transition: `opacity ${MARK_SWAP_MS}ms ease, transform ${MARK_SWAP_MS}ms ease`,
+                }}
+              >
+                →
+              </span>
+              <OnionMark
+                height={112}
+                style={{
+                  position: "absolute",
+                  opacity: settled ? 1 : 0,
+                  transform: settled ? "scale(1)" : "scale(0.6)",
+                  transition: `opacity ${MARK_SWAP_MS}ms ease, transform ${MARK_SWAP_MS}ms cubic-bezier(.16,1,.3,1)`,
+                }}
+              />
+            </span>
+          }
           style={{ height: "100%" }}
         />
       )}
