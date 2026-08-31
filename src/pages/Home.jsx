@@ -8,6 +8,9 @@ import AppNavbar from "../components/AppNavbar";
 import ContentRow from "../components/ContentRow";
 import api from "../api/client";
 
+// Characters of the featured description shown before "Read more".
+const DESCRIPTION_LIMIT = 150;
+
 export default function OnionHome() {
   const navigate = useNavigate();
 
@@ -17,6 +20,11 @@ export default function OnionHome() {
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [loadingPool, setLoadingPool] = useState(true);
   const [errorTrending, setErrorTrending] = useState(null);
+  const [errorPool, setErrorPool] = useState(null);
+  // The hero's copy. /titles/trending returns the card projection, which
+  // deliberately has no description, so the featured title's own detail has to
+  // be fetched for it — see docs/schema.md.
+  const [featuredDetail, setFeaturedDetail] = useState(null);
 
   const [descTruncated, setDescTruncated] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -37,11 +45,15 @@ export default function OnionHome() {
 
   const fetchPool = async () => {
     setLoadingPool(true);
+    setErrorPool(null);
     try {
       const data = await api.get("/titles?limit=100");
       setPool(data);
     } catch (err) {
       console.error("fetchPool error:", err);
+      // The pool feeds Originals, every genre row and search. Failing quietly
+      // just makes most of the page vanish with no explanation.
+      setErrorPool(err.message);
     } finally {
       setLoadingPool(false);
     }
@@ -75,6 +87,31 @@ export default function OnionHome() {
 
   const featuredTitle = trending.length > 0 ? trending[0] : null;
   const isSearching = searchQuery.trim().length > 0;
+
+  // Pull the hero's full record once we know which title it is. A failure here
+  // costs the description only, so the rest of the hero still renders.
+  useEffect(() => {
+    if (!featuredTitle?.id) return;
+    let cancelled = false;
+    api
+      .get(`/titles/${featuredTitle.id}`)
+      .then((data) => {
+        if (!cancelled) setFeaturedDetail(data);
+      })
+      .catch((err) => console.error("fetchFeaturedDetail error:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [featuredTitle?.id]);
+
+  // Truncate the featured title's own description at a word boundary. The
+  // toggle only appears when there is actually something hidden behind it.
+  const description = featuredDetail?.description || "";
+  const needsTruncating = description.length > DESCRIPTION_LIMIT;
+  const shownDescription =
+    needsTruncating && descTruncated
+      ? `${description.slice(0, description.lastIndexOf(" ", DESCRIPTION_LIMIT))}…`
+      : description;
 
   return (
     <div style={{ background: colors.bg, minHeight: "100vh", fontFamily: bodyFont }} className="w-full overflow-x-hidden">
@@ -150,14 +187,18 @@ export default function OnionHome() {
                   </div>
 
                   <p style={{ fontSize: 15, color: colors.textMuted, lineHeight: 1.6, maxWidth: 520 }}>
-                    {descTruncated ? "A dockworker uncovers a smuggling route beneath the city she swore to leave. Eight episodes..." : (featuredTitle.description || "Stream new episodes now on Onion.")}
-                    {" "}
-                    <button
-                      onClick={() => setDescTruncated(!descTruncated)}
-                      style={{ color: colors.text, fontSize: 13, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
-                    >
-                      {descTruncated ? "Read more" : "Show less"}
-                    </button>
+                    {shownDescription}
+                    {needsTruncating && (
+                      <>
+                        {" "}
+                        <button
+                          onClick={() => setDescTruncated(!descTruncated)}
+                          style={{ color: colors.text, fontSize: 13, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                        >
+                          {descTruncated ? "Read more" : "Show less"}
+                        </button>
+                      </>
+                    )}
                   </p>
 
                   <div className="flex items-center gap-3 pt-3 flex-wrap">
@@ -203,8 +244,12 @@ export default function OnionHome() {
               onRetry={fetchTrending}
             />
 
-            {originals.length > 0 && (
-              <ContentRow title="Onion Originals" items={originals} size="md" loading={loadingPool} />
+            {errorPool ? (
+              <ContentRow title="the catalog" items={[]} error={errorPool} onRetry={fetchPool} />
+            ) : (
+              originals.length > 0 && (
+                <ContentRow title="Onion Originals" items={originals} size="md" loading={loadingPool} />
+              )
             )}
 
             {genreRows.map(({ genre, items }) => (
