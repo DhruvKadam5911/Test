@@ -11,7 +11,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma generate"
+    "vercel-build": "prisma generate",
+    "import:tmdb": "node prisma/import-tmdb.js"
   },
   "dependencies": {
     "@prisma/client": "^6.3.0",

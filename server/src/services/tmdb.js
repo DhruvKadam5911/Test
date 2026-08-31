@@ -1,34 +1,85 @@
-// TMDB (themoviedb.org) metadata client — placeholder until an API key is added.
-// 1. Get a key: https://www.themoviedb.org/settings/api
-// 2. Paste it into server/.env as TMDB_API_KEY
-// 3. Implement the calls below (docs: https://developer.themoviedb.org/reference)
+/*
+ * TMDB (themoviedb.org) metadata client.
+ *
+ * Config is read per call, not at module load. Reading it at the top level is
+ * what made the whole server/.env surface silently invisible once before: ESM
+ * evaluates imports before the importing module's body, so anything captured
+ * here runs before a dotenv call further down. Reading late costs nothing and
+ * cannot be broken by import order.
+ *
+ * Docs: https://developer.themoviedb.org/reference
+ */
 
-const TMDB_API_KEY = process.env.TMDB_API_KEY;
-const TMDB_BASE_URL = process.env.TMDB_BASE_URL || "https://api.themoviedb.org/3";
+const DEFAULT_BASE_URL = "https://api.themoviedb.org/3";
+
+// TMDB serves images from its own CDN, sized by a path segment.
+const IMAGE_BASE_URL = "https://image.tmdb.org/t/p";
+
+function apiKey() {
+  return process.env.TMDB_API_KEY;
+}
+
+function baseUrl() {
+  return process.env.TMDB_BASE_URL || DEFAULT_BASE_URL;
+}
 
 export function isTmdbConfigured() {
-  return Boolean(TMDB_API_KEY);
+  return Boolean(apiKey());
 }
 
-// TODO: once TMDB_API_KEY is set, implement e.g.:
-// export async function searchTitle(query) {
-//   const res = await fetch(
-//     `${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}`
-//   );
-//   if (!res.ok) throw new Error(`TMDB search failed: ${res.status}`);
-//   return res.json();
-// }
-//
-// export async function getTitleDetails(tmdbId, mediaType = "movie") {
-//   const res = await fetch(`${TMDB_BASE_URL}/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY}`);
-//   if (!res.ok) throw new Error(`TMDB details failed: ${res.status}`);
-//   return res.json();
-// }
+async function tmdbGet(path, params = {}) {
+  const key = apiKey();
+  if (!key) {
+    throw new Error(
+      "TMDB_API_KEY is not set. Add it to server/.env (see .env.example) before importing."
+    );
+  }
 
-export async function searchTitle() {
-  throw new Error("TMDB is not configured yet — set TMDB_API_KEY in server/.env and implement searchTitle().");
+  const url = new URL(`${baseUrl()}${path}`);
+  url.searchParams.set("api_key", key);
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
+  }
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    // TMDB puts a human-readable reason in the body; surface it rather than a bare status.
+    const detail = await res.json().catch(() => null);
+    throw new Error(
+      `TMDB ${path} failed: ${res.status}${detail?.status_message ? ` — ${detail.status_message}` : ""}`
+    );
+  }
+  return res.json();
 }
 
-export async function getTitleDetails() {
-  throw new Error("TMDB is not configured yet — set TMDB_API_KEY in server/.env and implement getTitleDetails().");
+/** Search movies by name. `year` narrows it when a title has been remade. */
+export async function searchTitle(query, { year } = {}) {
+  const data = await tmdbGet("/search/movie", { query, year, include_adult: false });
+  return data.results ?? [];
+}
+
+/** Full record for one movie. */
+export async function getTitleDetails(tmdbId) {
+  return tmdbGet(`/movie/${tmdbId}`);
+}
+
+/**
+ * The certification ("PG-13", "R"). It is not on the movie record — it lives in
+ * per-country release data, so it needs its own call.
+ */
+export async function getCertification(tmdbId, region = "US") {
+  const data = await tmdbGet(`/movie/${tmdbId}/release_dates`);
+  const forRegion = (data.results ?? []).find((r) => r.iso_3166_1 === region);
+  const certified = (forRegion?.release_dates ?? []).find((r) => r.certification);
+  return certified?.certification || null;
+}
+
+/**
+ * Absolute URL for a TMDB image path. Cards and the hero are landscape, so
+ * callers want `backdrop_path` here — a poster is portrait and renders wrong
+ * in both places.
+ */
+export function imageUrl(path, size = "w780") {
+  if (!path) return null;
+  return `${IMAGE_BASE_URL}/${size}${path}`;
 }

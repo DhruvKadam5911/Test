@@ -67,7 +67,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | CORS allowlist | ✅ | Enforced outside development; unlisted origins warned about and allowed in dev, refused in production (plan 1.5, 2026-08-31) |
 | 404 + error handlers | ✅ | |
 | Video provider | ⛔ | Both branches throw; pass-through only — Phase 2 |
-| TMDB service | ⛔ | Both functions throw — plan 5.4 |
+| TMDB service | ✅ | Search, details, certification and image URLs implemented; `import-tmdb.js` brings real films into the catalog (plan 5.4, 2026-08-31) |
 | Auth | ⛔ | `User` model + `JWT_SECRET` exist, nothing uses them — Phase 3 |
 | Watch progress API | ⛔ | Model only — plan 4.1 |
 | My List API | ⛔ | Model only — plan 4.3 |
@@ -128,6 +128,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Plan 5.4: TMDB client implemented and a `prisma/import-tmdb.js` CLI added, so the catalog can hold real films with real artwork instead of gradient placeholders |
 | 2026-08-31 | — | **D3 decided: Creator Studio deleted.** Uploads are a PRD non-goal, and the page simulated one against no endpoint, no storage and no auth. Routing it would have shipped a form that silently discards what people give it. Phase 1 is now complete |
 | 2026-08-31 | — | Found checking the live site on a phone: every row reserved 128px below its cards for the hover expansion, which touch devices never trigger. Gated on `(hover: hover)`, removing ~580px of dead scrolling |
 | 2026-08-31 | — | Two fixes found by checking the live site: the ident now starts on the click rather than after the ~600ms stream request, and `OnionMark` processes its raster once per page instead of once per mount, which was stretching the ident past 5s on production |

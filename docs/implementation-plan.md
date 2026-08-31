@@ -203,8 +203,16 @@ misses anything past the 100-title pool.
 ### 5.3 Pagination / infinite scroll
 `limit` and `offset` already exist on `/titles`; nothing uses them beyond `limit=100`.
 
-### 5.4 TMDB enrichment
-Implement `services/tmdb.js` to auto-fill descriptions, artwork and ratings on catalog import.
+### 5.4 TMDB enrichment — DONE 2026-08-31
+`services/tmdb.js` implements search, details, certification lookup and image URLs, and
+`prisma/import-tmdb.js` is a CLI that inserts a real film with its backdrop, synopsis, runtime,
+certification and genre. See schema.md for the flags and the mapping decisions.
+
+**The config is read per call, not at module load** — reading it at the top level is exactly what
+made the whole `server/.env` surface invisible once before.
+
+**Movies only.** `Episode.playbackUrl` is required and TMDB has no streams, so importing a series
+would mean inventing data for every episode.
 
 ### 5.5 Admin catalog CRUD
 Replace "edit `seed.js`" as the way to add content.

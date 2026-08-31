@@ -253,6 +253,33 @@ All playback URLs point at Google's public `gtv-videos-bucket` sample MP4s.
 Run with `node prisma/seed.js` from `server/`. **It deletes everything first** — never run it
 against a database with real data.
 
+### Importing real titles
+
+`prisma/import-tmdb.js` adds a real film from TMDB, with its backdrop, synopsis, runtime,
+certification and genre. Unlike the seed it **only inserts** — it never clears anything.
+
+```bash
+npm run import:tmdb -- "Dune" --year 2021 --playback "https://…/stream.mp4" --original
+```
+
+| Flag | Effect |
+|------|--------|
+| `--year` | Narrows the search, for remakes |
+| `--playback` | The stream URL. Without it the title imports but cannot play |
+| `--original` | Marks it an Onion Original |
+| `--force` | Import even though a title with that name exists |
+
+Notes on the mapping:
+
+- **Backdrops, not posters.** Cards and the hero are landscape; a poster is portrait and renders
+  wrong in both.
+- **One genre.** `Title.genre` is a single string; TMDB returns several and the first is taken.
+- **The certification is a second request.** It is not on the movie record — it lives in
+  per-country release data, and falls back to `NR`.
+- **Movies only.** A series would need a `playbackUrl` for every episode, since
+  `Episode.playbackUrl` is required, and TMDB has no streams to supply — importing one would mean
+  inventing data for every episode.
+
 ---
 
 ## 5. Migrations

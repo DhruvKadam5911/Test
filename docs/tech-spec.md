@@ -105,6 +105,7 @@ See [design.md](design.md).
     ├── prisma/
     │   ├── schema.prisma         6 models — see schema.md
     │   ├── seed.js               3 titles (1 series with 2 episodes, 2 movies)
+    │   ├── import-tmdb.js        Import a real film from TMDB — inserts only, never clears
     │   └── migrations/           20260801204021_init
     └── src/
         ├── config/db.js          Single shared PrismaClient
@@ -183,6 +184,7 @@ Expect all five checks green, ending in `🎉 All tests passed successfully!`
 | `npm start` | server | `node server.js` (no reload) |
 | `npm run prisma:generate` | server | Regenerate Prisma Client after schema edits |
 | `npm run prisma:migrate` | server | Create and apply a dev migration |
+| `npm run import:tmdb -- "<title>"` | server | Import a film from TMDB into the catalog |
 
 ---
 
