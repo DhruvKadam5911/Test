@@ -93,7 +93,8 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H1 | **`prisma/seed.js` deletes all six tables before inserting.** Never run it against real data |
 | H2 | `server.js` loads env with `import "dotenv/config"` as its **first** import. Do not move it below the others — the service modules read `process.env` at import time, and every key in `server/.env` goes silently undefined if it loads late |
 | H3 | The scrubber is real during playback, but falls back to a `setInterval` preview *before* a stream is fetched. That preview timer is gated on `!playbackUrl` — never let it run alongside the element |
-| H3c | TMDB is only used by `prisma/import-tmdb.js`, never by a route. Setting `TMDB_API_KEY` on the deployed API changes nothing at runtime |
+| H3d | Titles imported in bulk have no `playbackUrl` and cannot play. That is the accepted cost of cataloguing other platforms' films, not a player bug — check the catalog before diagnosing a playback report |
+| H3c | TMDB is only used by the import scripts, never by a route. Setting `TMDB_API_KEY` on the deployed API changes nothing at runtime |
 | H3b | Google's `gtv-videos-bucket` sample URLs in the seed data return **403** from some networks. If playback fails with `MEDIA_ELEMENT_ERROR`, check the network before suspecting the player |
 | H4 | `data/videos.js` is legacy — `videos`, `heroVideo`, `continueWatching`, `trending` are all empty. Only `gradients` is live. Do not read data from it |
 | H6 | Setting `VIDEO_PROVIDER` in `.env` without implementing the branch breaks **all** playback |
@@ -129,6 +130,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Bulk TMDB import added, filtered by streaming platform and genre. Note the consequence, accepted deliberately: titles imported this way have no stream and will not play |
 | 2026-08-31 | — | `import-tmdb.js` gains `--sql`, which prints an `INSERT` instead of writing. Needed because this machine can reach TMDB but Prisma cannot open a connection to Neon, while the deployed API can |
 | 2026-08-31 | — | Plan 5.4: TMDB client implemented and a `prisma/import-tmdb.js` CLI added, so the catalog can hold real films with real artwork instead of gradient placeholders |
 | 2026-08-31 | — | **D3 decided: Creator Studio deleted.** Uploads are a PRD non-goal, and the page simulated one against no endpoint, no storage and no auth. Routing it would have shipped a form that silently discards what people give it. Phase 1 is now complete |

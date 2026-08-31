@@ -280,6 +280,35 @@ Notes on the mapping:
 - **`--sql` fills in `id` and `updatedAt` itself.** Neither has a database default — Prisma
   supplies both from the client — so a raw `INSERT` has to provide them, via `gen_random_uuid()`
   and `NOW()`.
+### Bulk import by platform and genre
+
+`prisma/import-tmdb-bulk.js` fills the catalog from TMDB's discover endpoint, filtered by
+streaming platform and genre.
+
+```bash
+npm run import:tmdb:bulk -- --provider Netflix,"Amazon Prime Video" --genre Horror --pages 5
+```
+
+| Flag | Effect |
+|------|--------|
+| `--provider` | Comma separated platform names, resolved against TMDB's list for the region |
+| `--genre` | Comma separated genre names |
+| `--region` | Watch region for provider filtering (default `IN`) |
+| `--pages` | Pages of 20 to fetch (default 3) |
+| `--details` | Also fetch runtime and certification — two extra requests per title |
+| `--playback` | Stream URL attached to every imported title |
+| `--out` | Write INSERTs to a file instead of the database |
+
+- **One request per 20 titles.** Genre names come from the ids the listing already returns, so
+  no per-title call is needed. `--details` is opt-in because it turns a 25-request import into a
+  2,000-request one.
+- **The requested genre wins the label.** `Title.genre` holds one value and TMDB returns several;
+  without this a `--genre Horror` import fills the catalog with rows labelled *Thriller*, because
+  that was TMDB's first id.
+- **Titles with no release date are skipped** — `releaseYear` is `NOT NULL`.
+- **Nothing imported this way can play** unless `--playback` is given. These are other platforms'
+  films; we hold no streams for them.
+
 - **Movies only.** A series would need a `playbackUrl` for every episode, since
   `Episode.playbackUrl` is required, and TMDB has no streams to supply — importing one would mean
   inventing data for every episode.

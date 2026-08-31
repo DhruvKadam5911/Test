@@ -83,3 +83,25 @@ export function imageUrl(path, size = "w780") {
   if (!path) return null;
   return `${IMAGE_BASE_URL}/${size}${path}`;
 }
+
+/** Browse by filters. Returns the raw discover page — 20 results at a time. */
+export async function discoverMovies(params = {}) {
+  return tmdbGet("/discover/movie", { include_adult: false, ...params });
+}
+
+/** The genre id/name table. Discover returns ids only, so callers need this to name them. */
+export async function getGenres() {
+  const data = await tmdbGet("/genre/movie/list");
+  return data.genres ?? [];
+}
+
+/**
+ * Streaming providers available in a region, ordered as TMDB ranks them.
+ * Normalised to { id, name } so callers can resolve human names to ids.
+ */
+export async function getProviders(region = "IN") {
+  const data = await tmdbGet("/watch/providers/movie", { watch_region: region });
+  return (data.results ?? [])
+    .sort((a, b) => (a.display_priority ?? 999) - (b.display_priority ?? 999))
+    .map((p) => ({ id: p.provider_id, name: p.provider_name }));
+}

@@ -105,7 +105,9 @@ See [design.md](design.md).
     ├── prisma/
     │   ├── schema.prisma         6 models — see schema.md
     │   ├── seed.js               3 titles (1 series with 2 episodes, 2 movies)
-    │   ├── import-tmdb.js        Import a real film from TMDB — inserts only, never clears
+    │   ├── import-tmdb.js        Import one film from TMDB — inserts only, never clears
+    │   ├── import-tmdb-bulk.js   Bulk import filtered by platform and genre
+    │   ├── lib/titleSql.js       Renders a Title row as a raw INSERT, shared by both importers
     │   └── migrations/           20260801204021_init
     └── src/
         ├── config/db.js          Single shared PrismaClient
@@ -184,7 +186,8 @@ Expect all five checks green, ending in `🎉 All tests passed successfully!`
 | `npm start` | server | `node server.js` (no reload) |
 | `npm run prisma:generate` | server | Regenerate Prisma Client after schema edits |
 | `npm run prisma:migrate` | server | Create and apply a dev migration |
-| `npm run import:tmdb -- "<title>"` | server | Import a film from TMDB into the catalog |
+| `npm run import:tmdb -- "<title>"` | server | Import one film from TMDB |
+| `npm run import:tmdb:bulk -- --provider Netflix` | server | Bulk import by platform and genre |
 
 ---
 
