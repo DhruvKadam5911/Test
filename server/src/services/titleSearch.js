@@ -181,11 +181,14 @@ export function scoreTitle(query, candidate) {
     // the whole title is not enough — "intersteller" is most of "Interstellar"
     // but a small fraction of "Interstellar: The IMAX Experience" — so the same
     // comparison runs against every run of words the query could have meant.
-    const similarity = Math.max(
-      trigramSimilarity(query, title),
-      bestWindowSimilarity(query, title)
-    );
-    if (similarity >= 0.34) score = Math.round(200 + similarity * 300);
+    const whole = trigramSimilarity(query, title);
+    const window = bestWindowSimilarity(query, title);
+
+    // A near-miss on the whole title beats an equally close miss on part of
+    // one. Scored together, "Shola Aur Shabnam" edged out "Sholay" for
+    // "sholey" — the window matched slightly better than the real title did.
+    if (whole >= 0.34) score = Math.round(220 + whole * 300);
+    else if (window >= 0.34) score = Math.round(170 + window * 260);
 
     if (!score) {
       // A typo in one word of a longer title: match word to word instead.
