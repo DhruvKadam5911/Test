@@ -131,6 +131,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Wheel mark enlarged 152 → 210. The names' start position is now derived from the mark's width rather than hardcoded, so it could grow without sliding under them |
 | 2026-08-31 | — | The brand wordmark is now one drawn asset used everywhere: extracted `OnionWordmark` from the intro geometry, rebuilt `OnionLogo` on it so the navbar and footer stop showing the raster's uppercase "ONION", and the wheel renders its own name as the wordmark while other platforms stay as type |
 | 2026-08-31 | `93e472b` | The wheel's lockup now glides to the centre of the frame before the zoom, so the push travels through the logo instead of past the side of it. Applies to both the phone splash and the watch-page ident |
 | 2026-08-31 | — | The wheel intro now plays as a brand ident inside the player before every video. `SplashWheel` gained `fullscreen` and `itemHeight` props so the same component serves the splash and the pre-roll |

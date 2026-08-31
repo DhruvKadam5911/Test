@@ -215,6 +215,10 @@ fixed dot. Do not add a separate filled copy of the wordmark for the solid stage
 **The mark's space is reserved from the start** so its late fade-in cannot shift the wordmark
 sideways — the same rule as the wheel's marker.
 
+**The names start clear of the marker, not at a fixed offset.** `PickerWheel` takes `markerLeft`
+and `labelLeft`, and `SplashWheel` derives the latter from the mark's rendered width. Resizing
+`MARK_HEIGHT` without that would slide the mark underneath the platform names.
+
 The audio is fully synthesized with the Web Audio API — no audio files are shipped.
 
 **The ticks are derived, not guessed.** `easeOutCubic` is `y = 1−(1−p)³`, so the wheel crosses

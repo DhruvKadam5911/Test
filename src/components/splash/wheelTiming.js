@@ -10,7 +10,11 @@ export const SPINS = 1; // one full turn is plenty — more only lengthens the u
 export const SPIN_MS = 2000; // spin-up and deceleration onto the target
 // The mark renders at 0.37x its height (the crop's aspect), so 152 is
 // about 56px wide — still clear of the item column at left: 92.
-export const MARK_HEIGHT = 152;
+// The marker sits here and the names begin after it, so the mark can be
+// resized without running into them.
+export const MARKER_LEFT = 28;
+export const LABEL_GAP = 20;
+export const MARK_HEIGHT = 210;
 // The size the wheel was designed at. Rendering at any other size scales
 // everything from this, so the proportions hold.
 export const ITEM_HEIGHT = 104;

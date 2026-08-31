@@ -13,6 +13,8 @@ import {
   MARK_HEIGHT,
   ITEM_HEIGHT,
   MARK_SWAP_MS,
+  MARKER_LEFT,
+  LABEL_GAP,
   ISOLATE_AFTER_MS,
   CENTRE_AFTER_MS,
   CENTRE_MS,
@@ -27,6 +29,9 @@ export default function SplashWheel({ onDone, fullscreen = true, itemHeight = IT
   // full-screen splash and as a pre-roll inside the player's 16:9 box.
   const scale = itemHeight / ITEM_HEIGHT;
   const markHeight = MARK_HEIGHT * scale;
+  // OnionMark renders at 0.37x its height. The names start clear of it rather
+  // than at a fixed offset, so the mark can grow without colliding with them.
+  const labelLeft = MARKER_LEFT + markHeight * 0.37 + LABEL_GAP * scale;
 
   const [visible, setVisible] = useState(true);
 
@@ -114,6 +119,8 @@ export default function SplashWheel({ onDone, fullscreen = true, itemHeight = IT
         <PickerWheel
           items={PLATFORMS}
           itemHeight={itemHeight}
+          labelLeft={labelLeft}
+          markerLeft={MARKER_LEFT}
           startAt={START_INDEX}
           stopAt={TARGET_INDEX}
           spins={SPINS}

@@ -56,6 +56,11 @@ export default function PickerWheel({
   // it to set its own name in the brand wordmark while the other platforms
   // stay as plain type.
   renderLabel,
+  // Where the names start. It has to clear whatever the marker is, so callers
+  // that put something wide there (a brand mark rather than an arrow) pass a
+  // larger value instead of the labels running underneath it.
+  labelLeft = 92,
+  markerLeft = 28,
   className = "",
   style,
 }) {
@@ -192,7 +197,7 @@ export default function PickerWheel({
         aria-hidden="true"
         style={{
           position: "absolute",
-          left: 28,
+          left: markerLeft,
           top: "50%",
           transform: "translateY(-50%)",
           fontFamily: displayFont,
@@ -213,7 +218,7 @@ export default function PickerWheel({
           }}
           style={{
             position: "absolute",
-            left: 92,
+            left: labelLeft,
             top: "50%",
             marginTop: -itemHeight / 2,
             height: itemHeight,
