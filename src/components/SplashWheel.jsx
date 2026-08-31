@@ -12,6 +12,8 @@ import {
   ITEM_HEIGHT,
   MARK_SWAP_MS,
   ISOLATE_AFTER_MS,
+  CENTRE_AFTER_MS,
+  CENTRE_MS,
   ZOOM_AFTER_MS,
   ZOOM_MS,
   ZOOM_SCALE,
@@ -30,6 +32,12 @@ export default function SplashWheel({ onDone, fullscreen = true, itemHeight = IT
   const [settled, setSettled] = useState(false);
   const [isolate, setIsolate] = useState(false);
   const [zooming, setZooming] = useState(false);
+  const [centred, setCentred] = useState(false);
+  // How far the lockup has to travel to sit in the middle of the frame. The
+  // wheel is left-aligned by design, so the lockup ends up off-centre and the
+  // push would otherwise come from the side of the frame rather than through
+  // the middle of it.
+  const [centreOffset, setCentreOffset] = useState([0, 0]);
   // Origin of the push, measured from the real lockup so the zoom comes
   // through the logo rather than the middle of an empty screen.
   const [zoomOrigin, setZoomOrigin] = useState("30% 50%");
@@ -42,8 +50,11 @@ export default function SplashWheel({ onDone, fullscreen = true, itemHeight = IT
     setSettled(true);
 
     // The lockup is the mark plus the landed name. Measure their union so the
-    // push starts from its centre on any viewport, instead of a guessed
-    // percentage that drifts as the layout changes.
+    // push has a real centre on any viewport instead of a guessed percentage.
+    //
+    // Measure the marker element, not the mark's <img>: OnionMark crops a wide
+    // raster with overflow, so the image's own rect is several times the width
+    // you actually see and would drag the centre well off.
     const stage = stageRef.current;
     const marker = markerRef.current;
     if (stage && activeEl && marker) {
@@ -53,9 +64,13 @@ export default function SplashWheel({ onDone, fullscreen = true, itemHeight = IT
       const cx = (Math.min(a.left, b.left) + Math.max(a.right, b.right)) / 2 - base.left;
       const cy = (Math.min(a.top, b.top) + Math.max(a.bottom, b.bottom)) / 2 - base.top;
       setZoomOrigin(`${cx}px ${cy}px`);
+      // Translating the stage does not move its transform-origin, so the push
+      // still scales about the lockup once it has been recentred.
+      setCentreOffset([base.width / 2 - cx, base.height / 2 - cy]);
     }
 
     setTimeout(() => setIsolate(true), ISOLATE_AFTER_MS);
+    setTimeout(() => setCentred(true), CENTRE_AFTER_MS);
     setTimeout(() => {
       setZooming(true);
       setVisible(false);
@@ -79,11 +94,18 @@ export default function SplashWheel({ onDone, fullscreen = true, itemHeight = IT
           ref={stageRef}
           style={{
             height: "100%",
-            transform: zooming ? `scale(${ZOOM_SCALE})` : "scale(1)",
+            // One property, two phases: glide to the middle, then push through
+            // it. The translate stays applied during the zoom so the lockup
+            // does not snap back to the side as it grows.
+            transform:
+              `translate(${centred ? centreOffset[0] : 0}px, ${centred ? centreOffset[1] : 0}px)` +
+              ` scale(${zooming ? ZOOM_SCALE : 1})`,
             transformOrigin: zoomOrigin,
-            // Accelerating, like a camera pushing through the logo — an
-            // ease-out here would read as the lockup drifting, not rushing.
-            transition: `transform ${ZOOM_MS}ms cubic-bezier(.45,0,.9,.6)`,
+            transition: zooming
+              // Accelerating, like a camera pushing through the logo — an
+              // ease-out here would read as the lockup drifting, not rushing.
+              ? `transform ${ZOOM_MS}ms cubic-bezier(.45,0,.9,.6)`
+              : `transform ${CENTRE_MS}ms cubic-bezier(.16,1,.3,1)`,
             willChange: "transform",
           }}
         >

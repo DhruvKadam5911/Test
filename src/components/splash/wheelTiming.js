@@ -16,7 +16,11 @@ export const MARK_HEIGHT = 152;
 export const ITEM_HEIGHT = 104;
 export const MARK_SWAP_MS = 560; // arrow out, brand mark in with an overshoot
 export const ISOLATE_AFTER_MS = 380; // losing platforms clear away
-export const ZOOM_AFTER_MS = 620; // camera starts pushing through the lockup
+// The lockup glides to the middle of the frame before the push, so the camera
+// travels through it rather than past the side of it.
+export const CENTRE_AFTER_MS = 560;
+export const CENTRE_MS = 440;
+export const ZOOM_AFTER_MS = 1020; // camera starts pushing through the lockup
 export const ZOOM_MS = 820;
 export const ZOOM_SCALE = 11;
 export const FADE_MS = 520; // background dropping away to reveal the app behind
