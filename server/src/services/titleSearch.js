@@ -161,9 +161,16 @@ export function scoreTitle(query, candidate) {
   else if (title.includes(query)) score = 600;
 
   if (!score) {
-    // Every word the viewer typed present somewhere, in any order.
+    // Every word the viewer typed present somewhere, in any order — allowing
+    // one of them to be misspelled. Without the second test "carry on jata"
+    // ranked "Carry-On" above "Carry On Jatta": both scored as partial matches,
+    // and the shorter title won on the length penalty.
     const titleWords = title.split(" ");
-    const matches = (w) => titleWords.some((t) => t.startsWith(w));
+    const matches = (w) => {
+      if (titleWords.some((t) => t.startsWith(w))) return true;
+      const max = tolerance(w.length);
+      return max > 0 && titleWords.some((t) => editDistance(w, t, max) <= max);
+    };
 
     if (query.split(" ").every(matches)) score = 520;
     else {
