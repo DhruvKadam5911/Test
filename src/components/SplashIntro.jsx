@@ -1,59 +1,52 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { colors } from "../theme";
+import PickerWheel from "./PickerWheel";
+import { PLATFORMS } from "../data/platforms";
 
-// Pixel bounds measured from public/logo.png (1024x512): the bulb+sprout icon
-// occupies x:199-388. The wordmark is rendered as live text instead, so it can
-// animate letter by letter rather than being cropped from the flattened image.
-//
-// The wordmark is set in Mr Bedfort — a joined script, so it reads as
-// handwriting rather than type. Lowercase, loaded in index.html.
-const SOURCE_W = 1024;
-const SOURCE_H = 512;
-const ICON_LEFT = 199;
-const ICON_RIGHT = 388;
-const ICON_HEIGHT = 190;
-const WORD = "onion";
-const WORDMARK_FONT = "'Mr Bedfort', cursive";
-// Script faces carry a small x-height for their em size, so the wordmark has
-// to be set much larger than a sans would be to sit level with the icon.
-const WORDMARK_SIZE = 132;
-
-// Handwriting cadence. Because the letters are joined, the word is revealed
-// by a single nib travelling left to right rather than by animating each
-// glyph: letters emerge one after another as the stroke passes them, which is
-// how writing actually reads. LETTER_STAGGER also drives the per-letter
-// whoosh in playIntroSound — keep the two in step or the sound drifts away
-// from the strokes.
-const LETTER_STAGGER = 140; // ms between letters
-const LETTER_DRAW = 220; // ms for the final letter to finish
-const WRITE_DURATION = (WORD.length - 1) * LETTER_STAGGER + LETTER_DRAW;
+// The splash spins a wheel of streaming services and lands on Onion.
+const TARGET = "Onion";
+const START_INDEX = 1; // begin on the item after the target, so it has to travel
+const SPINS = 1; // one full turn is plenty — more only lengthens the unreadable fast phase
+const SPIN_MS = 2600; // spin-up and deceleration onto the target
+const SETTLE_HOLD_MS = 400; // beat where the name just sits on the marker
+const FADE_MS = 420;
 
 /* ==========================================================================
    WEB AUDIO API SOUND GENERATION SYSTEM
    ========================================================================== */
 
-function playIntroSound(ctx) {
+// easeOutCubic is y = 1-(1-p)^3, so the moment the wheel crosses a given item
+// is p = 1-(1-y)^(1/3). That inverse is what lets the ticks land exactly on
+// the items rather than on a guessed rhythm — as the wheel slows, so do they.
+function crossingTimes(distance, spinSec, count) {
+  const times = [];
+  for (let k = Math.max(distance - count + 1, 1); k <= distance; k++) {
+    times.push(spinSec * (1 - Math.cbrt(1 - k / distance)));
+  }
+  return times;
+}
+
+function playIntroSound(ctx, { tickTimes, settleSec }) {
   try {
     const startTime = ctx.currentTime + 0.05; // 50ms scheduler safety margin
-    console.log(`[Audio Log] Initializing warm, uplifting C Major intro audio at timeline base: ${startTime.toFixed(2)}s`);
+    console.log(`[Audio Log] Intro audio scheduled from timeline base ${startTime.toFixed(2)}s`);
 
-    // 1. Warm C2 sub-bass swell (~65.4Hz, sine oscillator, fade in over 0.5s)
+    // 1. Warm C2 sub-bass swell under the whole spin
     const subOsc = ctx.createOscillator();
     const subGain = ctx.createGain();
     subOsc.type = "sine";
-    subOsc.frequency.setValueAtTime(65.4, startTime); // C2 (~65.4Hz)
-    
+    subOsc.frequency.setValueAtTime(65.4, startTime); // C2
+
     subGain.gain.setValueAtTime(0, startTime);
     subGain.gain.linearRampToValueAtTime(0.5, startTime + 0.5);
-    subGain.gain.exponentialRampToValueAtTime(0.001, startTime + 1.6);
-    
+    subGain.gain.exponentialRampToValueAtTime(0.001, startTime + settleSec + 0.2);
+
     subOsc.connect(subGain);
     subGain.connect(ctx.destination);
     subOsc.start(startTime);
-    subOsc.stop(startTime + 1.7);
-    console.log("[Audio Log] Scheduled C2 Sub-Bass Swell at 0.00s");
+    subOsc.stop(startTime + settleSec + 0.3);
 
-    // Pre-generate white noise buffer for whooshes and transients
+    // Pre-generate white noise for the ticks and the impact transient
     const bufferSize = ctx.sampleRate * 2;
     const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
@@ -61,70 +54,50 @@ function playIntroSound(ctx) {
       noiseData[i] = Math.random() * 2 - 1;
     }
 
-    // Helper to trigger a soft whoosh (filtered white noise, short attack/decay)
-    const triggerWhoosh = (time, index) => {
+    // 2. A tick each time the wheel crosses an item. They thin out on their
+    //    own as the wheel decelerates, which is what sells the landing.
+    tickTimes.forEach((offset, i) => {
+      const time = startTime + offset;
       const noise = ctx.createBufferSource();
       noise.buffer = noiseBuffer;
 
       const filter = ctx.createBiquadFilter();
       filter.type = "bandpass";
-      filter.frequency.setValueAtTime(300, time);
-      filter.frequency.exponentialRampToValueAtTime(1500, time + 0.2);
-      filter.Q.setValueAtTime(2.0, time);
+      filter.frequency.setValueAtTime(900 + i * 60, time);
+      filter.Q.setValueAtTime(6, time);
 
       const gainNode = ctx.createGain();
       gainNode.gain.setValueAtTime(0, time);
-      gainNode.gain.linearRampToValueAtTime(0.06, time + 0.04);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.22);
+      gainNode.gain.linearRampToValueAtTime(0.05, time + 0.006);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.09);
 
       noise.connect(filter);
       filter.connect(gainNode);
       gainNode.connect(ctx.destination);
 
       noise.start(time);
-      noise.stop(time + 0.25);
-      console.log(`[Audio Log] Scheduled Letter ${index} Whoosh at ${(time - startTime).toFixed(3)}s`);
-    };
+      noise.stop(time + 0.12);
+    });
+    console.log(`[Audio Log] Scheduled ${tickTimes.length} wheel ticks`);
 
-    // 2. One soft whoosh per letter, landing as that letter is drawn. The
-    //    writing starts at 900ms and steps by LETTER_STAGGER, so the strokes
-    //    and the sound stay locked together.
-    for (let i = 0; i < WORD.length; i++) {
-      const targetTime = startTime + 0.90 + (i * LETTER_STAGGER) / 1000;
-      triggerWhoosh(targetTime, i);
-    }
+    // 3. Rising C major pentatonic arpeggio across the spin
+    const arpeggio = [130.8, 146.8, 164.8, 196.0, 220.0, 261.6, 329.6, 392.0];
+    arpeggio.forEach((freq, index) => {
+      const noteTime = startTime + 0.1 + (index / arpeggio.length) * (settleSec - 0.4);
 
-    // 3. Warm rising C Major Pentatonic synth arpeggio (positive, uplifting feel)
-    // Notes: C3 (130.8Hz), D3 (146.8Hz), E3 (164.8Hz), G3 (196.0Hz), A3 (220.0Hz), C4 (261.6Hz), E4 (329.6Hz), G4 (392.0Hz)
-    const arpeggioNotes = [
-      { delay: 0.1, freq: 130.8 },
-      { delay: 0.3, freq: 146.8 },
-      { delay: 0.5, freq: 164.8 },
-      { delay: 0.7, freq: 196.0 },
-      { delay: 0.9, freq: 220.0 },
-      { delay: 1.1, freq: 261.6 },
-      { delay: 1.3, freq: 329.6 },
-      { delay: 1.5, freq: 392.0 },
-    ];
-
-    arpeggioNotes.forEach((note, index) => {
-      const noteTime = startTime + note.delay;
-      
       const osc1 = ctx.createOscillator();
       const osc2 = ctx.createOscillator();
       const filter = ctx.createBiquadFilter();
       const gainNode = ctx.createGain();
 
-      // Detuned triangle oscillators for a soft, warm chorused tone
+      // Detuned triangles for a soft, warm chorused tone
       osc1.type = "triangle";
-      osc1.frequency.setValueAtTime(note.freq - 0.6, noteTime);
-
+      osc1.frequency.setValueAtTime(freq - 0.6, noteTime);
       osc2.type = "triangle";
-      osc2.frequency.setValueAtTime(note.freq + 0.6, noteTime);
+      osc2.frequency.setValueAtTime(freq + 0.6, noteTime);
 
       filter.type = "lowpass";
-      const cutoff = 300 + (index / (arpeggioNotes.length - 1)) * 1100;
-      filter.frequency.setValueAtTime(cutoff, noteTime);
+      filter.frequency.setValueAtTime(300 + (index / (arpeggio.length - 1)) * 1100, noteTime);
 
       gainNode.gain.setValueAtTime(0, noteTime);
       gainNode.gain.linearRampToValueAtTime(0.09, noteTime + 0.04);
@@ -139,43 +112,37 @@ function playIntroSound(ctx) {
       osc2.start(noteTime);
       osc1.stop(noteTime + 0.22);
       osc2.stop(noteTime + 0.22);
-      console.log(`[Audio Log] Scheduled C-Major Arpeggio Note ${index} (${note.freq}Hz) at ${(noteTime - startTime).toFixed(2)}s`);
     });
 
-    // 4. Bright, warm C Major chime hit/stab (starts at 1.64s when the wordmark locks)
-    const hitTime = startTime + 1.64;
+    // 4. Chime stab at the exact moment the wheel locks onto Onion
+    const hitTime = startTime + settleSec;
 
-    // Feedback Delay Line acting as the Reverb/Space Tail
+    // Feedback delay line acting as the reverb tail
     const delayNode = ctx.createDelay();
     delayNode.delayTime.setValueAtTime(0.16, hitTime);
-    
     const feedbackNode = ctx.createGain();
-    feedbackNode.gain.setValueAtTime(0.40, hitTime);
-
+    feedbackNode.gain.setValueAtTime(0.4, hitTime);
     delayNode.connect(feedbackNode);
     feedbackNode.connect(delayNode);
 
     const delayGain = ctx.createGain();
     delayGain.gain.setValueAtTime(0.35, hitTime);
-    delayGain.gain.exponentialRampToValueAtTime(0.001, hitTime + 1.4); // Natural decay over ~1.4s
-
+    delayGain.gain.exponentialRampToValueAtTime(0.001, hitTime + 1.4);
     delayNode.connect(delayGain);
     delayGain.connect(ctx.destination);
 
-    // Uplifting C Major chime chord (C5, E5, G5, C6) with 20ms strum delays
-    const chimeChord = [
-      { freq: 523.3, offset: 0.00 }, // C5
-      { freq: 659.3, offset: 0.02 }, // E5
-      { freq: 784.0, offset: 0.04 }, // G5
-      { freq: 1046.5, offset: 0.06 }, // C6
-    ];
-
-    chimeChord.forEach(note => {
+    // C major chime chord (C5, E5, G5, C6) with 20ms strum offsets
+    [
+      { freq: 523.3, offset: 0.0 },
+      { freq: 659.3, offset: 0.02 },
+      { freq: 784.0, offset: 0.04 },
+      { freq: 1046.5, offset: 0.06 },
+    ].forEach((note) => {
       const noteHitTime = hitTime + note.offset;
       const osc = ctx.createOscillator();
       const gainNode = ctx.createGain();
 
-      osc.type = "sine"; // Sine chimes for a warm, clean glass-like chime
+      osc.type = "sine";
       osc.frequency.setValueAtTime(note.freq, noteHitTime);
 
       gainNode.gain.setValueAtTime(0, noteHitTime);
@@ -184,16 +151,15 @@ function playIntroSound(ctx) {
 
       osc.connect(gainNode);
       gainNode.connect(ctx.destination);
-      gainNode.connect(delayNode); // Feed into space delay tail
+      gainNode.connect(delayNode);
 
       osc.start(noteHitTime);
       osc.stop(noteHitTime + 0.7);
     });
 
-    // Highpass quick noise transient for crisp impact
+    // Highpass noise transient for a crisp impact on the lock
     const transient = ctx.createBufferSource();
     transient.buffer = noiseBuffer;
-
     const hpFilter = ctx.createBiquadFilter();
     hpFilter.type = "highpass";
     hpFilter.frequency.setValueAtTime(1400, hitTime);
@@ -206,27 +172,20 @@ function playIntroSound(ctx) {
     transient.connect(hpFilter);
     hpFilter.connect(transientGain);
     transientGain.connect(ctx.destination);
-    transientGain.connect(delayNode); // Feed into space delay tail
+    transientGain.connect(delayNode);
 
     transient.start(hitTime);
     transient.stop(hitTime + 0.15);
-    console.log("[Audio Log] Scheduled C-Major Strum Chime + Reverb at 1.64s");
-
+    console.log(`[Audio Log] Scheduled lock chime at ${settleSec.toFixed(2)}s`);
   } catch (err) {
     console.error("Failed to run Web Audio synthesizers:", err);
   }
 }
 
 export default function SplashIntro({ onDone }) {
-  const [src, setSrc] = useState(null);
-  const [swooped, setSwooped] = useState(false);
-  const [textOpen, setTextOpen] = useState(false);
-  const [textIn, setTextIn] = useState(false);
   const [visible, setVisible] = useState(true);
-  const [textWidth, setTextWidth] = useState(0);
-  const measureRef = useRef(null);
 
-  // Audio Context and interaction state
+  // Audio context and interaction state
   const [started, setStarted] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
   // The single AudioContext for this mount. Browsers cap concurrent contexts
@@ -234,56 +193,17 @@ export default function SplashIntro({ onDone }) {
   // unmount rather than left to leak.
   const audioCtxRef = useRef(null);
 
-  useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = "Anonymous";
-    img.src = "/logo.png";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+  const targetIndex = Math.max(PLATFORMS.indexOf(TARGET), 0);
 
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
+  const soundtrack = useRef(null);
+  if (!soundtrack.current) {
+    const forward = (((targetIndex - START_INDEX) % PLATFORMS.length) + PLATFORMS.length) % PLATFORMS.length;
+    const distance = SPINS * PLATFORMS.length + forward;
+    const settleSec = SPIN_MS / 1000;
+    soundtrack.current = { tickTimes: crossingTimes(distance, settleSec, 9), settleSec };
+  }
 
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        if (r > 220 && g > 220 && b > 220) {
-          data[i + 3] = 0;
-        } else if (r < 95 && g < 40 && b < 105) {
-          data[i] = 243; data[i + 1] = 240; data[i + 2] = 245;
-        }
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-      setSrc(canvas.toDataURL("image/png"));
-    };
-  }, []);
-
-  // Measure the wordmark's real rendered width so the reveal container can
-  // grow to an exact pixel value instead of guessing.
-  useLayoutEffect(() => {
-    const measure = () => {
-      if (measureRef.current) setTextWidth(measureRef.current.scrollWidth);
-    };
-    measure();
-
-    // The first measurement can land before Poppins has loaded, which would
-    // size the column to the fallback face and clip the wordmark. Re-measure
-    // once the real font is in.
-    let cancelled = false;
-    document.fonts?.ready.then(() => {
-      if (!cancelled) measure();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Detect Autoplay Permission
+  // Detect autoplay permission
   useEffect(() => {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) {
@@ -300,7 +220,7 @@ export default function SplashIntro({ onDone }) {
       setShowOverlay(true);
     } else {
       setStarted(true);
-      playIntroSound(ctx);
+      playIntroSound(ctx, soundtrack.current);
     }
 
     // StrictMode double-invokes this in dev; tearing the context down here
@@ -312,33 +232,10 @@ export default function SplashIntro({ onDone }) {
     };
   }, []);
 
-  // Visual Animation Timeline
-  useEffect(() => {
-    if (!started) return;
-
-    // 1) icon swoops in centered on screen (text column is 0-width so far)
-    const swoopTimer = setTimeout(() => setSwooped(true), 60);
-    // 2) once it's landed, open the text column — the icon visibly slides
-    //    left as the centered group widens to make room
-    const openTimer = setTimeout(() => setTextOpen(true), 680);
-    // 3) shortly after, the letters swoop in one by one into the opened space
-    const textTimer = setTimeout(() => setTextIn(true), 900);
-    const hideTimer = setTimeout(() => setVisible(false), 2650);
-    const doneTimer = setTimeout(() => onDone?.(), 3100);
-
-    return () => {
-      clearTimeout(swoopTimer);
-      clearTimeout(openTimer);
-      clearTimeout(textTimer);
-      clearTimeout(hideTimer);
-      clearTimeout(doneTimer);
-    };
-  }, [started, onDone]);
-
   const handleInteraction = () => {
     if (started) return;
     setShowOverlay(false);
-    // The visual timeline runs regardless of whether audio can be resumed.
+    // The wheel spins regardless of whether audio can be resumed.
     setStarted(true);
 
     const ctx = audioCtxRef.current;
@@ -346,46 +243,41 @@ export default function SplashIntro({ onDone }) {
 
     ctx
       .resume()
-      .then(() => playIntroSound(ctx))
+      .then(() => playIntroSound(ctx, soundtrack.current))
       .catch((err) => console.error("Failed to resume audio context:", err));
   };
 
-  const scale = ICON_HEIGHT / SOURCE_H;
-  const imgWidth = SOURCE_W * scale;
-  const iconLeftPx = ICON_LEFT * scale;
-  const iconWidthPx = (ICON_RIGHT - ICON_LEFT) * scale;
-
-  // Mr Bedfort is a joined script, so the word is set as ONE text run: no
-  // per-letter elements, no letter-spacing, no margins. Splitting it into
-  // spans would break the strokes that carry from one letter into the next.
-  const wordStyle = {
-    fontFamily: WORDMARK_FONT,
-    fontWeight: 400,
-    fontSize: WORDMARK_SIZE,
-    lineHeight: 1.05,
-    letterSpacing: "normal",
-    color: colors.text,
-    whiteSpace: "nowrap",
+  // The wheel drives the timeline: it reports when it has landed on Onion,
+  // and only then does the splash hold, fade and hand over.
+  const handleSettled = () => {
+    setTimeout(() => setVisible(false), SETTLE_HOLD_MS);
+    setTimeout(() => onDone?.(), SETTLE_HOLD_MS + FADE_MS);
   };
 
   return (
     <div
       onClick={handleInteraction}
-      className={`fixed inset-0 flex items-center justify-center ${showOverlay ? "cursor-pointer" : ""}`}
+      className={`fixed inset-0 ${showOverlay ? "cursor-pointer" : ""}`}
       style={{
         zIndex: 200,
         background: colors.bg,
         opacity: visible ? 1 : 0,
-        transition: "opacity 450ms ease",
+        transition: `opacity ${FADE_MS}ms ease`,
         pointerEvents: visible ? "auto" : "none",
       }}
     >
-      <style>{`
-        @keyframes onionSplashBob {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
-        }
-      `}</style>
+      {started && (
+        <PickerWheel
+          items={PLATFORMS}
+          itemHeight={104}
+          startAt={START_INDEX}
+          stopAt={targetIndex}
+          spins={SPINS}
+          spinMs={SPIN_MS}
+          onSettled={handleSettled}
+          style={{ height: "100%" }}
+        />
+      )}
 
       {/* Subtle overlay to enable sound if autoplay is blocked */}
       {showOverlay && (
@@ -406,104 +298,6 @@ export default function SplashIntro({ onDone }) {
           </div>
         </div>
       )}
-
-      {/* Hidden measurer — same letters/font/spacing, used only to read the
-          wordmark's true pixel width before it's ever shown. */}
-      <div
-        ref={measureRef}
-        aria-hidden="true"
-        style={{ position: "absolute", visibility: "hidden", whiteSpace: "nowrap", top: -9999, left: -9999 }}
-      >
-        <span style={wordStyle}>{WORD}</span>
-      </div>
-
-      <div className="flex items-center" style={{ gap: textOpen ? 16 : 0, perspective: 700 }}>
-        {/* Icon — swoops in centered, then the group widens as the text column
-            opens, which visibly pushes the icon left. Settles into an idle bob. */}
-        <div
-          style={{
-            height: ICON_HEIGHT,
-            width: iconWidthPx,
-            overflow: "hidden",
-            position: "relative",
-            transformStyle: "preserve-3d",
-            transform: swooped
-              ? "translateZ(0) rotateX(0deg) scale(1)"
-              : "translateZ(-320px) rotateX(38deg) scale(2.8)",
-            opacity: swooped ? 1 : 0,
-            filter: swooped ? "blur(0px)" : "blur(16px)",
-            transition:
-              "transform 640ms cubic-bezier(.16,1,.3,1), opacity 260ms ease, filter 520ms ease",
-            animation: swooped ? "onionSplashBob 2.2s ease-in-out 700ms infinite" : "none",
-          }}
-        >
-          {src && (
-            <img
-              src={src}
-              alt=""
-              style={{
-                position: "absolute",
-                left: -iconLeftPx,
-                top: 0,
-                height: ICON_HEIGHT,
-                width: imgWidth,
-                maxWidth: "none",
-              }}
-            />
-          )}
-        </div>
-
-        {/* Text column — grows from 0 to the wordmark's real width, which is
-            what visually shifts the icon leftward; letters swoop in inside it. */}
-        <div
-          style={{
-            width: textOpen ? textWidth : 0,
-            overflow: "hidden",
-            transition: "width 520ms cubic-bezier(.16,1,.3,1)",
-          }}
-        >
-          <div className="relative" style={{ width: textWidth }}>
-            {/* One text run, uncovered left to right. The ink edge advances at
-                the same rate as the nib below, so letters surface in sequence
-                as the stroke reaches them — joins intact. */}
-            <span
-              style={{
-                ...wordStyle,
-                display: "inline-block",
-                clipPath: textIn ? "inset(-25% -12% -30% 0)" : "inset(-25% 100% -30% 0)",
-                transition: `clip-path ${WRITE_DURATION}ms cubic-bezier(.42,0,.58,1)`,
-              }}
-            >
-              {WORD}
-            </span>
-
-            {/* The nib — rides the ink edge, then lifts off once the word is
-                written. Same duration and easing as the reveal, so the two
-                never separate. */}
-            {textWidth > 0 && (
-              <span
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  top: "12%",
-                  height: "76%",
-                  width: 2,
-                  borderRadius: 2,
-                  background: `linear-gradient(to bottom, transparent, ${colors.accentLight}, ${colors.accentGreen})`,
-                  boxShadow: `0 0 10px ${colors.accentLight}`,
-                  opacity: textIn ? 0 : 1,
-                  // The reveal sweeps to -12% (past the advance width, so the
-                  // script's closing flourish isn't clipped). The nib has to
-                  // cover that same 112% or the ink runs ahead of the pen.
-                  transform: textIn ? `translateX(${Math.round(textWidth * 1.12)}px)` : "translateX(0px)",
-                  transition: `transform ${WRITE_DURATION}ms cubic-bezier(.42,0,.58,1), opacity 220ms ease ${WRITE_DURATION - 120}ms`,
-                }}
-              />
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

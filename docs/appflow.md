@@ -41,13 +41,11 @@ play sound + start timeline      show "Click anywhere to play with sound"
    │                            play sound + start timeline
    └────────────┬─────────────────────┘
                 ↓
-   60ms   icon swoops to centre
-   ~400ms text column opens, icon slides left
-   900ms  "onion" is written — nib sweeps left to right (+ per-letter whoosh)
-   1640ms chime stab — wordmark locks
-   ~1680ms word finished, nib lifts off
-   2650ms splash fades out
-   3100ms onDone() → showSplash = false
+   0ms      PickerWheel starts spinning through the platform list
+   0-2600ms one full turn + travel back to Onion, decelerating (+ ticks)
+   2600ms   locks on "Onion" → PickerWheel calls onSettled (+ chime)
+   3000ms   splash fades out
+   3420ms   onDone() → showSplash = false
 ```
 
 The routed page mounts and fetches **underneath** the splash, so by the time the splash

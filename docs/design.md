@@ -46,7 +46,6 @@ Loaded in `index.html` and re-imported inside `Home.jsx`.
 | Family | Weights | Role |
 |--------|---------|------|
 | **Inter** | 400, 500, 600, 700 | Everything — both `displayFont` and `bodyFont` in `theme.js` |
-| **Mr Bedfort** | 400 (only weight) | The splash wordmark only (`SplashIntro.jsx`, `WORDMARK_FONT`). A joined script, set lowercase at `WORDMARK_SIZE` 132px |
 | **Fraunces** | 500, 600 (opsz 9–144) | Loaded but **currently unused** — available if a serif display voice is wanted |
 
 ### Scale in use
@@ -109,40 +108,27 @@ Loaded in `index.html` and re-imported inside `Home.jsx`.
 
 ### Splash intro timeline (`SplashIntro.jsx`)
 
+The splash is a `PickerWheel` spun onto the brand. There is no wordmark, no icon and no
+writing effect — the wheel *is* the intro.
+
 | Time | Visual | Audio |
 |------|--------|-------|
-| 0ms | — | C2 sub-bass swell (65.4Hz sine), 0.5s fade-in |
-| 60ms | Icon swoops to centre | C-major pentatonic arpeggio begins (C3→G4, one note per 200ms) |
-| ~400ms | Text column opens; icon slides left | arpeggio continues |
-| 900ms | "onion" is written — a glowing nib travels the word left to right over `WRITE_DURATION` (780ms), uncovering the script as it goes | Per-letter band-passed noise whoosh, `LETTER_STAGGER` (140ms) apart |
-| ~1680ms | Word finished; the nib lifts off | — |
-| 1640ms | Wordmark locks | C-major chime chord (C5/E5/G5/C6, 20ms strum) + noise transient + feedback-delay tail |
-| 2650ms | Splash fades out | — |
-| 3100ms | `onDone()` | — |
+| 0ms | Wheel starts spinning from `START_INDEX` | C2 sub-bass swell (65.4Hz sine), 0.5s fade-in; C major pentatonic arpeggio across the spin |
+| 0–2600ms | One full turn plus the travel back to Onion, decelerating on `easeOutCubic` | A tick each time the wheel crosses an item — the last 9 crossings, so they thin out as it slows |
+| 2600ms | Locks on **Onion**, crisp | C major chime chord (C5/E5/G5/C6, 20ms strum) + noise transient + feedback-delay tail |
+| 3000ms | Splash begins to fade | — |
+| 3420ms | `onDone()` | — |
 
 The audio is fully synthesized with the Web Audio API — no audio files are shipped.
 
-**The wordmark is a writing effect, not a fade.** Mr Bedfort is a *joined* script, so the word
-is set as **one text run** — no per-letter spans, no `letter-spacing`, no margins. Splitting it
-into elements would break the strokes that carry from one letter into the next.
+**The ticks are derived, not guessed.** `easeOutCubic` is `y = 1−(1−p)³`, so the wheel crosses
+item *k* at `p = 1 − ∛(1 − k/distance)`. `crossingTimes()` inverts the easing to place each tick
+exactly on an item, which is why the sound decelerates in lockstep with the wheel instead of
+drifting against it. Change `SPIN_MS`, `SPINS` or `START_INDEX` and the ticks retime themselves.
 
-The reveal is therefore a single sweep, not a per-letter animation: the word's `clip-path`
-animates from `inset(-25% 100% -30% 0)` to `inset(-25% -12% -30% 0)` over `WRITE_DURATION`, and
-letters surface in sequence as the ink edge passes them — which is how writing actually reads.
-The `-12%` overshoot gives the script's closing flourish room beyond the advance width.
-
-The nib is a glowing 2px stroke that **must stay on the ink edge**: it uses the same duration and
-easing, and translates to `textWidth * 1.12` to cover that same 112% sweep. Translating it to a
-plain `textWidth` makes the ink visibly outrun the pen.
-
-`LETTER_STAGGER` still spaces the audio: **`playIntroSound` reads it for the per-letter whoosh**,
-and `WRITE_DURATION` is derived from it, so changing the cadence retimes sound and strokes
-together.
-
-The splash measures the wordmark's real pixel width to size its reveal column, and re-measures on
-`document.fonts.ready` — without that, a first paint before Mr Bedfort loads would size the
-column to the fallback face and clip the word. This matters more for a script than a sans: the
-metrics differ enormously from the `cursive` fallback.
+**The wheel owns the timeline.** `PickerWheel` calls `onSettled` when it lands, and only then
+does the splash hold, fade and hand over — the exit is not on an independent timer that could
+drift out of sync with the animation.
 
 ---
 

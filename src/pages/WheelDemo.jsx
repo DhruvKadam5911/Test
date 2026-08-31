@@ -1,23 +1,8 @@
 import React, { useState } from "react";
 import { colors, bodyFont } from "../theme";
 import PickerWheel from "../components/PickerWheel";
+import { PLATFORMS } from "../data/platforms";
 
-// The streaming services Onion sits among. Plain text only — no third-party
-// logos or marks are used.
-const PLATFORMS = [
-  "Onion",
-  "Amazon Prime",
-  "ZEE5",
-  "Apple TV+",
-  "MX Player",
-  "YouTube",
-  "Hoichoi",
-  "Chaupal",
-  "Crunchyroll",
-  "SonyLIV",
-  "JioHotstar",
-  "Netflix",
-];
 
 export default function WheelDemo() {
   const [active, setActive] = useState(0);

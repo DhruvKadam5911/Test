@@ -79,12 +79,15 @@ See [design.md](design.md).
 │   ├── index.css                 Tailwind entry
 │   ├── api/client.js             fetch wrapper, error normalisation, API base URL
 │   ├── data/videos.js            Legacy static data — only `gradients` is still used
+│   ├── data/platforms.js         Streaming service names for the splash wheel and /wheel
 │   ├── pages/
 │   │   ├── Home.jsx              Hero, rows, search
 │   │   ├── WatchPage.jsx         Player, metadata, episodes/recommendations overlay
-│   │   └── StudioPage.jsx        Upload mock — NOT ROUTED
+│   │   ├── StudioPage.jsx        Upload mock — NOT ROUTED
+│   │   └── WheelDemo.jsx         PickerWheel demo at /wheel — not linked from the app
 │   ├── components/
-│   │   ├── SplashIntro.jsx       Animated intro + Web Audio soundtrack
+│   │   ├── SplashIntro.jsx       Wheel intro landing on Onion + Web Audio soundtrack
+│   │   ├── PickerWheel.jsx       Rotating slot-machine list (loop or settle mode)
 │   │   ├── AppNavbar.jsx         Logo, links, expanding search, bell
 │   │   ├── ContentRow.jsx        Horizontal scroller with arrows, skeletons, retry
 │   │   ├── ContentCard.jsx       Card + CardSkeleton export
@@ -183,6 +186,7 @@ Expect all five checks green, ending in `🎉 All tests passed successfully!`
 | Single shared `PrismaClient` | Avoids connection-pool exhaustion | Always import `src/config/db.js`, never `new PrismaClient()` |
 | Design tokens in `theme.js` | One source of truth for brand colors | Do not hardcode hex values in components |
 | Splash gated on `App` state, not a route | Intro plays once per session, not per navigation | `showSplash` lives in `App.jsx` |
+| The splash exit is driven by `PickerWheel`'s `onSettled`, not a timer | The fade can never start before the wheel has landed | Changing `SPIN_MS` needs no change to the exit timings |
 | `thumbnailUrl` / `heroImageUrl` accept a CSS gradient *or* an image URL | Ships without real artwork | Always render them through `resolveBackground()` / `resolveBackgroundImage()` |
 
 ---

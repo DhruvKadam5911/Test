@@ -29,7 +29,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Splash intro visuals | ✅ | 3.1s timeline; wordmark is lowercase "onion" in Mr Bedfort script, written by a nib sweeping left to right |
+| Splash intro visuals | ✅ | ~3.4s; a `PickerWheel` spins through streaming platforms and locks on **Onion**. The icon swoop and written wordmark were removed |
 | Splash intro audio | ✅ | One `AudioContext` per mount, closed on unmount; the click path resumes it rather than opening a second (plan 1.1, 2026-08-31) |
 | Autoplay-blocked overlay | ✅ | Click-to-enable |
 | Cinematic hero | 🟡 | Renders, but the truncated description is hardcoded *Undertow* copy — plan 1.4 |
@@ -38,7 +38,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | Dynamic genre rows | ✅ | Derived from the catalog at runtime |
 | Search | 🟡 | Client-side over the loaded 100-title pool only — plan 5.1 |
 | Content cards + skeletons | ✅ | |
-| PickerWheel | ✅ | Reusable rotating-list component; demo at `/wheel`, not linked from the app |
+| PickerWheel | ✅ | Reusable rotating-list component. Loop mode demoed at `/wheel`; settle mode drives the splash |
 | Row arrows / scroll | ✅ | |
 | Watch page metadata | ✅ | |
 | Season / episode picker | ✅ | |
@@ -98,8 +98,8 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H7 | Route order in `routes/titles.js` — `/trending` must stay above `/:id` |
 | H8 | `npm run build` runs `tsc -b`. TypeScript errors fail a build in a mostly-JSX codebase |
 | H9 | `#7C3FC4` appears in a few places instead of `colors.accent` `#7B2685` |
-| H10 | The wordmark is inconsistent: the splash writes lowercase "onion" in Mr Bedfort script, but `OnionLogo.jsx` renders `public/logo.png`, which has an uppercase sans "ONION" baked into the raster. Changing the navbar/footer wordmark means re-rendering it as live text, not a CSS change |
-| H11 | The splash wordmark must stay a single text run. Mr Bedfort is a joined script — per-letter spans, `letter-spacing`, or margins break the joins between letters |
+| H10 | The splash no longer shows the onion icon or a wordmark at all — it is only the wheel. `OnionLogo.jsx` (navbar, footer) is now the sole place the brand mark appears |
+| H11 | `PickerWheel` writes styles straight to DOM nodes from a rAF loop. Do not also drive those same properties from React state or CSS transitions — they will fight each other |
 
 ---
 
@@ -118,7 +118,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved
 | D3 | Keep or delete Creator Studio? | Plan 1.7 |
 | D4 | Where does catalog content come from — manual, TMDB, or uploads? | Phase 5 |
 | D5 | Is Fraunces (loaded, unused) part of the type system or should it be dropped? | design.md |
-| D6 | Where does `PickerWheel` actually ship — splash, a homepage section, or a marketing asset? Right now it only has a demo route | Its final placement |
+| D6 | Should the onion icon or wordmark return after the wheel lands? The splash is now wheel-only | Splash branding |
 
 ---
 
@@ -126,6 +126,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Splash replaced: the icon swoop and written wordmark were removed, and `PickerWheel` now spins through the platform list and locks on Onion. Audio retimed — ticks derived from the easing inverse, chime on the lock. Mr Bedfort dropped from the font link, now unused |
 | 2026-08-31 | — | Added `PickerWheel` — a rotating slot-machine list of streaming platform names with arc geometry and depth-of-field falloff, plus a `/wheel` demo route |
 | 2026-08-31 | — | Splash wordmark reset in Mr Bedfort script, lowercase, revealed by a nib sweeping the word left to right (single text run — a joined script cannot be split into per-letter spans); per-letter audio retimed to match |
 | 2026-08-31 | — | Plan 1.1: splash `AudioContext` lifecycle fixed — single context per mount, closed on cleanup, resumed instead of re-created on the autoplay-blocked path |
