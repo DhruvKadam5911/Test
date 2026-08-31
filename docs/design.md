@@ -81,6 +81,12 @@ Loaded in `index.html` and re-imported inside `Home.jsx`.
 
 `CardSkeleton` mirrors these exactly — keep them in sync if either changes.
 
+**Rows reserve space below the cards only where hover exists.** A card expands downwards on
+hover and the row scroller clips, so `ContentRow` pads the scroller by 128px to give it room.
+Devices without hover never expand a card, and that strip is then dead space under every row —
+on a phone it added roughly 580px of empty scrolling across five rows. The padding is gated on
+`(hover: hover)`.
+
 ---
 
 ## 5. Radii, borders, shadows

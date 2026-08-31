@@ -4,6 +4,15 @@ import { colors, bodyFont } from "../theme";
 import SmallRing from "./shared/SmallRing";
 import ContentCard, { CardSkeleton } from "./ContentCard";
 
+// The cards expand downwards on hover, and the scroller clips, so room has to
+// be reserved below them. Devices without hover never expand a card, and that
+// reserved strip is then just dead space under every row — five rows of it is
+// most of a phone screen's worth of empty scrolling.
+const HOVER_CAPABLE =
+  typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(hover: hover)").matches
+    : true;
+
 export default function ContentRow({ title, items, size = "md", rank = false, loading, error, onRetry }) {
   const scrollerRef = useRef(null);
   const [canLeft, setCanLeft] = useState(false);
@@ -90,7 +99,7 @@ export default function ContentRow({ title, items, size = "md", rank = false, lo
 
         <div
           ref={scrollerRef}
-          className="flex gap-3.5 overflow-x-auto px-6 md:px-10 pt-2 pb-32"
+          className={`flex gap-3.5 overflow-x-auto px-6 md:px-10 pt-2 ${HOVER_CAPABLE ? "pb-32" : "pb-3"}`}
           style={{ scrollbarWidth: "none" }}
         >
           {loading ? (
