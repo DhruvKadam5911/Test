@@ -158,6 +158,9 @@ export async function reindex(req, res) {
     await prisma.$executeRawUnsafe(
       'CREATE UNIQUE INDEX IF NOT EXISTS "Track_source_sourceId_key" ON "Track" (source, "sourceId")'
     );
+    // A YouTube track has no audio file to point at — it plays through their
+    // player from the video id — so the column cannot stay NOT NULL.
+    await prisma.$executeRawUnsafe('ALTER TABLE "Track" ALTER COLUMN "audioUrl" DROP NOT NULL');
 
     await prisma.$executeRawUnsafe("CREATE EXTENSION IF NOT EXISTS pg_trgm");
     await prisma.$executeRawUnsafe(
