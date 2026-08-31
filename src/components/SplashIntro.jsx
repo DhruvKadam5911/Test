@@ -5,22 +5,27 @@ import { colors } from "../theme";
 // occupies x:199-388. The wordmark is rendered as live text instead, so it can
 // animate letter by letter rather than being cropped from the flattened image.
 //
-// The wordmark is set in Poppins — a geometric sans whose round lowercase
-// bowls echo the onion bulb. Lowercase, light weight, loaded in index.html.
+// The wordmark is set in Mr Bedfort — a joined script, so it reads as
+// handwriting rather than type. Lowercase, loaded in index.html.
 const SOURCE_W = 1024;
 const SOURCE_H = 512;
 const ICON_LEFT = 199;
 const ICON_RIGHT = 388;
 const ICON_HEIGHT = 190;
 const WORD = "onion";
-const WORDMARK_FONT = "'Poppins', system-ui, sans-serif";
+const WORDMARK_FONT = "'Mr Bedfort', cursive";
+// Script faces carry a small x-height for their em size, so the wordmark has
+// to be set much larger than a sans would be to sit level with the icon.
+const WORDMARK_SIZE = 132;
 
-// Handwriting cadence: each letter is wiped in left-to-right, one after the
-// next, as though a nib were laying it down. LETTER_STAGGER also drives the
-// per-letter whoosh in playIntroSound — keep the two in step or the sound
-// drifts away from the strokes.
+// Handwriting cadence. Because the letters are joined, the word is revealed
+// by a single nib travelling left to right rather than by animating each
+// glyph: letters emerge one after another as the stroke passes them, which is
+// how writing actually reads. LETTER_STAGGER also drives the per-letter
+// whoosh in playIntroSound — keep the two in step or the sound drifts away
+// from the strokes.
 const LETTER_STAGGER = 140; // ms between letters
-const LETTER_DRAW = 220; // ms for one letter to finish drawing
+const LETTER_DRAW = 220; // ms for the final letter to finish
 const WRITE_DURATION = (WORD.length - 1) * LETTER_STAGGER + LETTER_DRAW;
 
 /* ==========================================================================
@@ -350,18 +355,18 @@ export default function SplashIntro({ onDone }) {
   const iconLeftPx = ICON_LEFT * scale;
   const iconWidthPx = (ICON_RIGHT - ICON_LEFT) * scale;
 
-  const letterStyle = (i) => ({
-    display: "inline-block",
+  // Mr Bedfort is a joined script, so the word is set as ONE text run: no
+  // per-letter elements, no letter-spacing, no margins. Splitting it into
+  // spans would break the strokes that carry from one letter into the next.
+  const wordStyle = {
     fontFamily: WORDMARK_FONT,
-    fontWeight: 300,
-    fontSize: 68,
-    lineHeight: 1,
-    // Tighter than the old uppercase setting — wide gaps would break the
-    // illusion of one continuous stroke running through the word.
-    letterSpacing: "0.01em",
+    fontWeight: 400,
+    fontSize: WORDMARK_SIZE,
+    lineHeight: 1.05,
+    letterSpacing: "normal",
     color: colors.text,
-    marginRight: i < WORD.length - 1 ? 2 : 0,
-  });
+    whiteSpace: "nowrap",
+  };
 
   return (
     <div
@@ -409,9 +414,7 @@ export default function SplashIntro({ onDone }) {
         aria-hidden="true"
         style={{ position: "absolute", visibility: "hidden", whiteSpace: "nowrap", top: -9999, left: -9999 }}
       >
-        {WORD.split("").map((ch, i) => (
-          <span key={i} style={letterStyle(i)}>{ch}</span>
-        ))}
+        <span style={wordStyle}>{WORD}</span>
       </div>
 
       <div className="flex items-center" style={{ gap: textOpen ? 16 : 0, perspective: 700 }}>
@@ -459,39 +462,41 @@ export default function SplashIntro({ onDone }) {
             transition: "width 520ms cubic-bezier(.16,1,.3,1)",
           }}
         >
-          <div className="flex relative" style={{ width: textWidth }}>
-            {WORD.split("").map((ch, i) => (
-              <span
-                key={i}
-                style={{
-                  ...letterStyle(i),
-                  // Each glyph is wiped in from its own left edge, so the ink
-                  // appears to be laid down rather than faded in.
-                  clipPath: textIn ? "inset(0 -8% -20% 0)" : "inset(0 100% -20% 0)",
-                  opacity: textIn ? 1 : 0,
-                  transition: `clip-path ${LETTER_DRAW}ms cubic-bezier(.55,.06,.3,1) ${i * LETTER_STAGGER}ms, opacity 90ms linear ${i * LETTER_STAGGER}ms`,
-                }}
-              >
-                {ch}
-              </span>
-            ))}
+          <div className="relative" style={{ width: textWidth }}>
+            {/* One text run, uncovered left to right. The ink edge advances at
+                the same rate as the nib below, so letters surface in sequence
+                as the stroke reaches them — joins intact. */}
+            <span
+              style={{
+                ...wordStyle,
+                display: "inline-block",
+                clipPath: textIn ? "inset(-25% -12% -30% 0)" : "inset(-25% 100% -30% 0)",
+                transition: `clip-path ${WRITE_DURATION}ms cubic-bezier(.42,0,.58,1)`,
+              }}
+            >
+              {WORD}
+            </span>
 
-            {/* The nib — a thin stroke that travels the width of the word in
-                time with the letters, then lifts off once the word is written. */}
+            {/* The nib — rides the ink edge, then lifts off once the word is
+                written. Same duration and easing as the reveal, so the two
+                never separate. */}
             {textWidth > 0 && (
               <span
                 aria-hidden="true"
                 style={{
                   position: "absolute",
                   left: 0,
-                  top: "6%",
-                  height: "88%",
+                  top: "12%",
+                  height: "76%",
                   width: 2,
                   borderRadius: 2,
                   background: `linear-gradient(to bottom, transparent, ${colors.accentLight}, ${colors.accentGreen})`,
                   boxShadow: `0 0 10px ${colors.accentLight}`,
                   opacity: textIn ? 0 : 1,
-                  transform: textIn ? `translateX(${textWidth}px)` : "translateX(0px)",
+                  // The reveal sweeps to -12% (past the advance width, so the
+                  // script's closing flourish isn't clipped). The nib has to
+                  // cover that same 112% or the ink runs ahead of the pen.
+                  transform: textIn ? `translateX(${Math.round(textWidth * 1.12)}px)` : "translateX(0px)",
                   transition: `transform ${WRITE_DURATION}ms cubic-bezier(.42,0,.58,1), opacity 220ms ease ${WRITE_DURATION - 120}ms`,
                 }}
               />

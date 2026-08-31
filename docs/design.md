@@ -46,7 +46,7 @@ Loaded in `index.html` and re-imported inside `Home.jsx`.
 | Family | Weights | Role |
 |--------|---------|------|
 | **Inter** | 400, 500, 600, 700 | Everything — both `displayFont` and `bodyFont` in `theme.js` |
-| **Poppins** | 300, 400, 500, 600 | The splash wordmark only (`SplashIntro.jsx`, `WORDMARK_FONT`). Set lowercase at 300 |
+| **Mr Bedfort** | 400 (only weight) | The splash wordmark only (`SplashIntro.jsx`, `WORDMARK_FONT`). A joined script, set lowercase at `WORDMARK_SIZE` 132px |
 | **Fraunces** | 500, 600 (opsz 9–144) | Loaded but **currently unused** — available if a serif display voice is wanted |
 
 ### Scale in use
@@ -114,7 +114,7 @@ Loaded in `index.html` and re-imported inside `Home.jsx`.
 | 0ms | — | C2 sub-bass swell (65.4Hz sine), 0.5s fade-in |
 | 60ms | Icon swoops to centre | C-major pentatonic arpeggio begins (C3→G4, one note per 200ms) |
 | ~400ms | Text column opens; icon slides left | arpeggio continues |
-| 900ms | "onion" is written — each letter wiped in left-to-right, `LETTER_STAGGER` (140ms) apart, `LETTER_DRAW` (220ms) each, with a glowing nib travelling the word's width | Per-letter band-passed noise whoosh, on the same 140ms cadence |
+| 900ms | "onion" is written — a glowing nib travels the word left to right over `WRITE_DURATION` (780ms), uncovering the script as it goes | Per-letter band-passed noise whoosh, `LETTER_STAGGER` (140ms) apart |
 | ~1680ms | Word finished; the nib lifts off | — |
 | 1640ms | Wordmark locks | C-major chime chord (C5/E5/G5/C6, 20ms strum) + noise transient + feedback-delay tail |
 | 2650ms | Splash fades out | — |
@@ -122,15 +122,27 @@ Loaded in `index.html` and re-imported inside `Home.jsx`.
 
 The audio is fully synthesized with the Web Audio API — no audio files are shipped.
 
-**The wordmark is a writing effect, not a fade.** Each letter animates `clip-path` from
-`inset(0 100% -20% 0)` to `inset(0 -8% -20% 0)`, so the glyph is uncovered from its own left
-edge as though ink were being laid down. `LETTER_STAGGER` and `LETTER_DRAW` in `SplashIntro.jsx`
-are the single source of the cadence — **`playIntroSound` reads `LETTER_STAGGER` for the
-per-letter whoosh, so changing it retimes the sound too.** Keep them together.
+**The wordmark is a writing effect, not a fade.** Mr Bedfort is a *joined* script, so the word
+is set as **one text run** — no per-letter spans, no `letter-spacing`, no margins. Splitting it
+into elements would break the strokes that carry from one letter into the next.
 
-The splash measures the wordmark's real pixel width to size its reveal column, and re-measures
-on `document.fonts.ready` — without that, a first paint before Poppins loads would size the
-column to the fallback face and clip the word.
+The reveal is therefore a single sweep, not a per-letter animation: the word's `clip-path`
+animates from `inset(-25% 100% -30% 0)` to `inset(-25% -12% -30% 0)` over `WRITE_DURATION`, and
+letters surface in sequence as the ink edge passes them — which is how writing actually reads.
+The `-12%` overshoot gives the script's closing flourish room beyond the advance width.
+
+The nib is a glowing 2px stroke that **must stay on the ink edge**: it uses the same duration and
+easing, and translates to `textWidth * 1.12` to cover that same 112% sweep. Translating it to a
+plain `textWidth` makes the ink visibly outrun the pen.
+
+`LETTER_STAGGER` still spaces the audio: **`playIntroSound` reads it for the per-letter whoosh**,
+and `WRITE_DURATION` is derived from it, so changing the cadence retimes sound and strokes
+together.
+
+The splash measures the wordmark's real pixel width to size its reveal column, and re-measures on
+`document.fonts.ready` — without that, a first paint before Mr Bedfort loads would size the
+column to the fallback face and clip the word. This matters more for a script than a sans: the
+metrics differ enormously from the `cursive` fallback.
 
 ---
 

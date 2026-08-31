@@ -29,7 +29,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Splash intro visuals | ✅ | 3.1s timeline; wordmark is lowercase "onion" in Poppins Light, written letter-by-letter with a travelling nib |
+| Splash intro visuals | ✅ | 3.1s timeline; wordmark is lowercase "onion" in Mr Bedfort script, written by a nib sweeping left to right |
 | Splash intro audio | ✅ | One `AudioContext` per mount, closed on unmount; the click path resumes it rather than opening a second (plan 1.1, 2026-08-31) |
 | Autoplay-blocked overlay | ✅ | Click-to-enable |
 | Cinematic hero | 🟡 | Renders, but the truncated description is hardcoded *Undertow* copy — plan 1.4 |
@@ -97,7 +97,8 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H7 | Route order in `routes/titles.js` — `/trending` must stay above `/:id` |
 | H8 | `npm run build` runs `tsc -b`. TypeScript errors fail a build in a mostly-JSX codebase |
 | H9 | `#7C3FC4` appears in a few places instead of `colors.accent` `#7B2685` |
-| H10 | The wordmark is inconsistent: the splash writes lowercase "onion" (Poppins), but `OnionLogo.jsx` renders `public/logo.png`, which has uppercase "ONION" baked into the raster. Changing the navbar/footer wordmark means re-rendering it as live text, not a CSS change |
+| H10 | The wordmark is inconsistent: the splash writes lowercase "onion" in Mr Bedfort script, but `OnionLogo.jsx` renders `public/logo.png`, which has an uppercase sans "ONION" baked into the raster. Changing the navbar/footer wordmark means re-rendering it as live text, not a CSS change |
+| H11 | The splash wordmark must stay a single text run. Mr Bedfort is a joined script — per-letter spans, `letter-spacing`, or margins break the joins between letters |
 
 ---
 
@@ -123,7 +124,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved
 
 | Date | Commit | Change |
 |------|--------|--------|
-| 2026-08-31 | — | Splash wordmark reset in Poppins Light, lowercase, written letter-by-letter via staggered `clip-path` wipes with a travelling nib; per-letter audio retimed to match |
+| 2026-08-31 | — | Splash wordmark reset in Mr Bedfort script, lowercase, revealed by a nib sweeping the word left to right (single text run — a joined script cannot be split into per-letter spans); per-letter audio retimed to match |
 | 2026-08-31 | — | Plan 1.1: splash `AudioContext` lifecycle fixed — single context per mount, closed on cleanup, resumed instead of re-created on the autoplay-blocked path |
 | 2026-08-31 | `87ccc80` | Added the `docs/` suite: PRD, tech spec, app flow, design, schema, implementation plan, tracker, rules |
 | 2026-08-31 | `525fc27` | Splash intro Web Audio soundtrack + autoplay overlay; `server/test-api.js` smoke test wired to `npm test` |
