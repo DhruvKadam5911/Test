@@ -113,9 +113,23 @@ export async function discoverMovies(params = {}) {
   return tmdbGet("/discover/movie", { include_adult: false, ...params });
 }
 
-/** The genre id/name table. Discover returns ids only, so callers need this to name them. */
-export async function getGenres() {
-  const data = await tmdbGet("/genre/movie/list");
+/**
+ * The same, for television. TMDB keeps films and series in separate discover
+ * endpoints with different field names — `name` and `first_air_date` rather
+ * than `title` and `release_date` — so callers must normalise.
+ */
+export async function discoverTv(params = {}) {
+  return tmdbGet("/discover/tv", { include_adult: false, ...params });
+}
+
+/**
+ * The genre id/name table. Discover returns ids only, so callers need this to
+ * name them. Film and television have separate tables that overlap but do not
+ * match — television has no "Science Fiction", it has "Sci-Fi & Fantasy" — so
+ * a caller importing series must ask for the television one.
+ */
+export async function getGenres(media = "movie") {
+  const data = await tmdbGet(`/genre/${media}/list`);
   return data.genres ?? [];
 }
 
@@ -123,8 +137,8 @@ export async function getGenres() {
  * Streaming providers available in a region, ordered as TMDB ranks them.
  * Normalised to { id, name } so callers can resolve human names to ids.
  */
-export async function getProviders(region = "IN") {
-  const data = await tmdbGet("/watch/providers/movie", { watch_region: region });
+export async function getProviders(region = "IN", media = "movie") {
+  const data = await tmdbGet(`/watch/providers/${media}`, { watch_region: region });
   return (data.results ?? [])
     .sort((a, b) => (a.display_priority ?? 999) - (b.display_priority ?? 999))
     .map((p) => ({ id: p.provider_id, name: p.provider_name }));

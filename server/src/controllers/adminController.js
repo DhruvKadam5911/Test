@@ -41,15 +41,23 @@ export async function refreshCatalog(req, res) {
     return res.status(503).json({ error: "TMDB_API_KEY is not configured on this deployment." });
   }
 
-  const { language, country, genre, provider, fromPage, pages, region } = req.query;
+  const { language, country, genre, provider, fromPage, pages, region, media, year } = req.query;
   const list = (v) => (v ? String(v).split(",").map((s) => s.trim()).filter(Boolean) : undefined);
+
+  // `provider=any` means no platform filter. The nightly cron watches four
+  // services, but most of TMDB is not on them, so the backfill needs a way to
+  // ask for everything — and an omitted parameter cannot express that, since it
+  // already means "use the scheduled default".
+  const providers = provider === "any" ? [] : list(provider) ?? SCHEDULED_SLICE.providers;
 
   try {
     const result = await importSlice({
-      providers: list(provider) ?? SCHEDULED_SLICE.providers,
+      media: media === "tv" ? "tv" : "movie",
+      providers,
       genres: list(genre) ?? [],
       language: language || null,
       country: country || null,
+      year: Number(year) || null,
       region: region || SCHEDULED_SLICE.region,
       fromPage: Math.max(1, Math.min(Number(fromPage) || 1, MAX_PAGE)),
       // Capped because a serverless invocation is killed at its time limit and

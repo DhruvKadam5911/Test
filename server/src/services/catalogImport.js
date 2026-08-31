@@ -1,5 +1,5 @@
 import prisma from "../config/db.js";
-import { discoverMovies, getGenres, getProviders, imageUrl } from "./tmdb.js";
+import { discoverMovies, discoverTv, getGenres, getProviders, imageUrl } from "./tmdb.js";
 
 /*
  * Importing TMDB titles into the catalog.
@@ -13,7 +13,10 @@ import { discoverMovies, getGenres, getProviders, imageUrl } from "./tmdb.js";
  * same slice can be re-imported safely and a cron can run as often as it likes.
  */
 
-// TMDB refuses discover past page 500, whatever total_pages claims.
+// TMDB refuses discover past page 500, whatever total_pages claims. That is a
+// hard 10,000-row ceiling *per query* — the only way past it is to ask a
+// narrower question (one language, one genre, one year at a time), which is
+// what the backfill driver does.
 export const MAX_PAGE = 500;
 const PAGE_SIZE = 20;
 
@@ -32,30 +35,56 @@ function resolveNames(names, catalogue, kind) {
 }
 
 /**
+ * Films and series come back from different endpoints with different field
+ * names. Normalising here keeps the rest of the import identical for both.
+ */
+function normalise(item, media) {
+  return media === "tv"
+    ? { name: item.name, date: item.first_air_date, contentType: "series" }
+    : { name: item.title, date: item.release_date, contentType: "movie" };
+}
+
+/**
  * Import one slice of TMDB's discover results.
  *
  * `fromPage`/`pages` exist because a serverless invocation has a hard time
  * limit — a few pages per call, driven repeatedly, is what makes a large
  * backlog possible without a long-running process.
+ *
+ * @param {object} options
+ * @param {"movie"|"tv"} options.media — which TMDB catalogue to walk.
+ * @param {string[]} options.providers — empty means no platform filter at all,
+ *   which is how the backfill reaches films that are not on the four services
+ *   the nightly cron watches.
  */
 export async function importSlice({
+  media = "movie",
   providers = [],
   genres = [],
   language = null,
   country = null,
   region = "IN",
+  year = null,
   fromPage = 1,
   pages = 3,
   playbackUrl = null,
 } = {}) {
   const [genreList, providerList] = await Promise.all([
-    getGenres(),
-    providers.length ? getProviders(region) : Promise.resolve([]),
+    getGenres(media),
+    providers.length ? getProviders(region, media) : Promise.resolve([]),
   ]);
 
   const genreIds = resolveNames(genres, genreList, "genre");
   const providerIds = resolveNames(providers, providerList, "provider");
   const genreNameById = new Map(genreList.map((g) => [g.id, g.name]));
+
+  const discover = media === "tv" ? discoverTv : discoverMovies;
+  // The date field is named after the medium, and so is the year filter.
+  const yearFilter = year
+    ? media === "tv"
+      ? { first_air_date_year: year }
+      : { primary_release_year: year }
+    : {};
 
   const rows = [];
   let scanned = 0;
@@ -66,7 +95,7 @@ export async function importSlice({
   for (let page = fromPage; page <= lastPage; page++) {
     let data;
     try {
-      data = await discoverMovies({
+      data = await discover({
         page,
         watch_region: region,
         with_watch_providers: providerIds.join("|") || undefined,
@@ -74,6 +103,7 @@ export async function importSlice({
         with_origin_country: country || undefined,
         with_original_language: language || undefined,
         sort_by: "popularity.desc",
+        ...yearFilter,
       });
     } catch {
       // One flaky page should not fail the whole slice; TMDB 503s in bursts.
@@ -84,23 +114,26 @@ export async function importSlice({
     totalAvailable = data.total_results ?? 0;
     if (!data.results?.length) break;
 
-    for (const m of data.results) {
+    for (const item of data.results) {
       scanned++;
-      const releaseYear = Number((m.release_date || "").slice(0, 4));
+      const { name, date, contentType } = normalise(item, media);
+      if (!name) continue;
+
+      const releaseYear = Number((date || "").slice(0, 4));
       // releaseYear is NOT NULL, so a title TMDB has no date for cannot be stored.
       if (!releaseYear) continue;
 
       rows.push({
-        title: m.title,
-        description: m.overview || "No description available.",
-        contentType: "movie",
-        genre: labelGenre(m.genre_ids, genreIds, genreNameById),
+        title: name,
+        description: item.overview || "No description available.",
+        contentType,
+        genre: labelGenre(item.genre_ids, genreIds, genreNameById),
         releaseYear,
         rating: "NR",
         durationMinutes: null,
         thumbnailUrl:
-          imageUrl(m.backdrop_path, "w780") || "linear-gradient(135deg, #241B2E, #17141A)",
-        heroImageUrl: imageUrl(m.backdrop_path, "original"),
+          imageUrl(item.backdrop_path, "w780") || "linear-gradient(135deg, #241B2E, #17141A)",
+        heroImageUrl: imageUrl(item.backdrop_path, "original"),
         playbackUrl,
         isOriginal: false,
       });
@@ -108,7 +141,7 @@ export async function importSlice({
   }
 
   if (rows.length === 0) {
-    return { added: 0, skipped: 0, scanned, failedPages, totalAvailable, lastPage };
+    return { added: 0, skipped: 0, scanned, failedPages, totalAvailable, lastPage, pagesRemaining: 0 };
   }
 
   // Compare against what is already stored rather than trusting TMDB's ordering

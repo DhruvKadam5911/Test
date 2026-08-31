@@ -93,8 +93,9 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H1 | **`prisma/seed.js` deletes all six tables before inserting.** Never run it against real data |
 | H2 | `server.js` loads env with `import "dotenv/config"` as its **first** import. Do not move it below the others — the service modules read `process.env` at import time, and every key in `server/.env` goes silently undefined if it loads late |
 | H3 | The scrubber is real during playback, but falls back to a `setInterval` preview *before* a stream is fetched. That preview timer is gated on `!playbackUrl` — never let it run alongside the element |
+| H3e | Series imported from TMDB have no `Season` or `Episode` rows. Playback needs an `episodeId` it cannot supply, so a series card opens to a detail page with no episodes |
 | H3d | Titles imported in bulk have no `playbackUrl` and cannot play. That is the accepted cost of cataloguing other platforms' films, not a player bug — check the catalog before diagnosing a playback report |
-| H3c | TMDB is only used by the import scripts, never by a route. Setting `TMDB_API_KEY` on the deployed API changes nothing at runtime |
+| H3c | `/admin/refresh` imports from TMDB at runtime, so `TMDB_API_KEY` **is** needed on the deployed API. It is read per call, not at module load, so a key added after a deploy takes effect without one |
 | H3b | Google's `gtv-videos-bucket` sample URLs in the seed data return **403** from some networks. If playback fails with `MEDIA_ELEMENT_ERROR`, check the network before suspecting the player |
 | H4 | `data/videos.js` is legacy — `videos`, `heroVideo`, `continueWatching`, `trending` are all empty. Only `gradients` is live. Do not read data from it |
 | H6 | Setting `VIDEO_PROVIDER` in `.env` without implementing the branch breaks **all** playback |
@@ -130,6 +131,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | The import can now reach the rest of TMDB: `media=tv` for series (a separate endpoint, field names and genre table), `provider=any` for titles outside the four cron platforms, and `year` for slicing past TMDB's hard 10,000-row-per-query ceiling. `prisma/backfill-catalog.mjs` drives it across every language and both media. The catalog was 7,656 films from four platforms |
 | 2026-08-31 | — | `GET /admin/dedupe` added, and `Uncategorised` no longer gets a home-page row or the hero. The three bulk SQL files each de-duplicated only against the catalog as it stood when written, so films in two slices (Sholay, for one) were inserted twice |
 | 2026-08-31 | — | The catalog is now actually reachable: server-side search across all titles, `/titles/genres`, and rows that fetch their own genre lazily. The page was showing ~110 of 7,656 titles |
 | 2026-08-31 | — | Catalog now refreshes itself: `GET /admin/refresh` imports server-side behind `CRON_SECRET`, with a daily Vercel cron. Used it to load 4,807 Hollywood titles into the live database without any SQL. Live catalog is 7,656 titles, 89% with artwork |

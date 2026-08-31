@@ -280,9 +280,20 @@ open.
 
 | Query param | Default |
 |-------------|---------|
-| `provider` | Netflix, Amazon Prime Video, JioHotstar, Zee5 |
+| `media` | `movie`. `tv` walks TMDB's series catalogue instead |
+| `provider` | Netflix, Amazon Prime Video, JioHotstar, Zee5. **`any` means no platform filter** |
 | `genre`, `language`, `country`, `region` | — / — / — / `IN` |
+| `year` | — (`primary_release_year` for films, `first_air_date_year` for series) |
 | `fromPage`, `pages` | 1, 3 (capped at 10) |
+
+`provider=any` exists because an omitted parameter already means "use the scheduled default", so
+there was no way to ask for everything. Most of TMDB is not on the four services the nightly cron
+watches, so the backfill needs it.
+
+Films and series come from different TMDB endpoints with different field names — `name` and
+`first_air_date` rather than `title` and `release_date` — and different genre tables (television
+has no "Science Fiction", it has "Sci-Fi & Fantasy"). The import normalises both into `Title`,
+with `contentType` set accordingly.
 
 `pages` is capped because a serverless invocation is killed at its time limit and a half-finished
 import reports nothing. A backlog is loaded by calling it repeatedly with `fromPage`.
@@ -293,6 +304,21 @@ it likes and re-running a slice is harmless. The response reports `added`, `skip
 
 A Vercel cron in `server/vercel.json` calls it daily at 03:00 UTC. Sorted by popularity, a small
 daily slice picks up new releases without needing a stored cursor.
+
+### Filling the catalog
+
+`prisma/backfill-catalog.mjs` drives the endpoint above until TMDB runs out:
+
+```bash
+node prisma/backfill-catalog.mjs --secret <CRON_SECRET>
+```
+
+It is only the caller — the import itself still runs on the server. It can be stopped and re-run at
+any point, because every import is idempotent; a second run adds only what the first one missed.
+
+The constraint it works around: TMDB serves at most 500 pages of 20 for any one query, a hard
+10,000-row ceiling. "Everything" is therefore not one request but many narrow ones. Slices are cut
+by medium and original language, and any slice that would hit the ceiling is cut again by year.
 
 ### Removing duplicate rows
 
