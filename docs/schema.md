@@ -333,6 +333,21 @@ node prisma/backfill-catalog.mjs --secret <CRON_SECRET>
 It is only the caller — the import itself still runs on the server. It can be stopped and re-run at
 any point, because every import is idempotent; a second run adds only what the first one missed.
 
+`prisma/backfill-direct.mjs` does the same job without the API, writing to the database itself:
+
+```bash
+BACKFILL_URL="postgres://…" node prisma/backfill-direct.mjs --languages hi,pa,ta --max-pages 200
+```
+
+Both exist because a machine behind a restrictive network cannot open a Postgres connection on 5432
+— which is what sent the import server-side in the first place. Neon also speaks SQL over HTTPS on
+443, which is not blocked, so `@neondatabase/serverless` gets a local run through after all. Use the
+API driver when you have `CRON_SECRET`, this one when you have a database URL.
+
+`--max-pages` caps how much of any one query is taken. English alone is 558,000 films; drained in
+full that is several hundred thousand rows, more than the database is sized for and far more than
+anyone will browse. The cap keeps the most popular of each year and language.
+
 The constraint it works around: TMDB serves at most 500 pages of 20 for any one query, a hard
 10,000-row ceiling. "Everything" is therefore not one request but many narrow ones. Slices are cut
 by medium and original language, and any slice that would hit the ceiling is cut again by year.
