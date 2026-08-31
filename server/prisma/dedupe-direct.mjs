@@ -17,8 +17,22 @@ import { neon } from "@neondatabase/serverless";
  * kept.
  */
 
-const sql = neon(process.env.BACKFILL_URL || process.env.DATABASE_URL);
+const neonSql = neon(process.env.BACKFILL_URL || process.env.DATABASE_URL);
 const APPLY = process.argv.includes("--apply");
+
+/** One statement, retried — the HTTP endpoint drops the occasional connection. */
+const sql = {
+  async query(text, params = []) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await neonSql.query(text, params);
+      } catch (err) {
+        if (attempt === 4) throw err;
+        await new Promise((r) => setTimeout(r, attempt * 3000));
+      }
+    }
+  },
+};
 
 // The row worth keeping: a playable one first, then an original, then the one
 // that has been in the catalog longest — its id is what any existing link

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { refreshCatalog, dedupe } from "../controllers/adminController.js";
+import { refreshCatalog, dedupe, reindex } from "../controllers/adminController.js";
 
 const router = Router();
 
@@ -8,5 +8,8 @@ router.get("/refresh", refreshCatalog);
 
 // Dry run unless ?apply=true. Same CRON_SECRET guard.
 router.get("/dedupe", dedupe);
+
+// One-off: installs pg_trgm and the trigram index search depends on.
+router.get("/reindex", reindex);
 
 export default router;

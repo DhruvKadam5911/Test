@@ -173,8 +173,19 @@ because that is most of what real typing gets wrong. Stopwords (`the`, `on`, `ka
 ignored when scoring partial matches — counting them put *Godzilla Minus One* in the results for
 "carry on jatta".
 
-Scoring runs over an in-memory index of `{id, title, genre, year}`, rebuilt on demand every ten
-minutes and capped at 30,000 rows. On a serverless instance that is roughly once per cold start.
+Candidates come from the database, not from a copy of the catalog held in the function. An
+in-memory index worked at 7,000 titles and broke silently at 85,000: capped by recency, it held
+only the most recent import, and "sholey" stopped finding *Sholay* because *Sholay* was no longer
+in it. The query now asks Postgres for up to 400 candidates using `pg_trgm`, and the scoring above
+puts them in order.
+
+Two trigram measures, because they fail differently: `similarity` compares whole strings, so a
+one-word query against a long title scores low however exact — "crary" against "Carry On Jatta" is
+0.11 — while `word_similarity` compares against the best-matching run of words, 0.20 for the same
+pair.
+
+`GET /admin/reindex` installs `pg_trgm` and the trigram index, once per database. Without them
+search still works, narrowed to exact matching, and logs that it has.
 
 ### `GET /titles/genres`
 
@@ -354,7 +365,7 @@ by medium and original language, and any slice that would hit the ceiling is cut
 
 ### Removing duplicate rows
 
-`GET /admin/dedupe` clears up what the bulk SQL imports left behind. The Bollywood, Pollywood and
+`GET /admin/dedupe` clears up what the bulk imports left behind. The Bollywood, Pollywood and
 Hollywood files were generated separately, each de-duplicating only against the catalog as it stood
 when it was written, so a film in two slices was inserted twice and shows twice in search.
 

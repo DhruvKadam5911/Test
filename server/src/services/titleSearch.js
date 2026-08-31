@@ -14,17 +14,28 @@ import prisma from "../config/db.js";
  * whole title index is a couple of megabytes.
  */
 
-// The index is rebuilt on demand. A serverless instance lives minutes, so this
-// mostly means once per cold start; the ceiling stops a very large catalog from
-// turning every cold start into a multi-megabyte read.
-const INDEX_TTL_MS = 10 * 60 * 1000;
-const INDEX_LIMIT = 30_000;
+// How many rows the database hands back for one query. The scoring below is
+// what puts them in order; this only has to be wide enough that the right title
+// is somewhere in it.
+const CANDIDATE_LIMIT = 400;
+
+/*
+ * Below this, Postgres does not consider two strings related at all. Loose
+ * enough for a misspelling, tight enough that 85,000 rows do not all come back.
+ *
+ * Two measures, because they fail differently: `similarity` compares whole
+ * strings, so a one-word query against a long title scores low no matter how
+ * exact — "crary" against "Carry On Jatta" is 0.11 — while `word_similarity`
+ * compares the query against the best-matching run of words, which is 0.20 for
+ * the same pair.
+ */
+const TRIGRAM_FLOOR = 0.24;
+const WORD_FLOOR = 0.19;
+
+let warnedAboutTrigram = false;
 
 // Below this a match is noise rather than a near miss.
 const SCORE_FLOOR = 120;
-
-let index = null;
-let indexedAt = 0;
 
 /**
  * Lowercase, strip accents and punctuation, collapse whitespace. Without this
@@ -240,50 +251,64 @@ export function scoreTitle(query, candidate) {
   return score;
 }
 
-async function buildIndex() {
-  const rows = await prisma.title.findMany({
-    take: INDEX_LIMIT,
-    orderBy: { createdAt: "desc" },
-    select: { id: true, title: true, genre: true, releaseYear: true },
-  });
-
-  index = rows.map((r) => ({
-    id: r.id,
-    releaseYear: r.releaseYear,
-    titleNorm: normalise(r.title),
-    genreNorm: normalise(r.genre),
-  }));
-  indexedAt = Date.now();
-  return index;
-}
-
-async function getIndex() {
-  if (!index || Date.now() - indexedAt > INDEX_TTL_MS) return buildIndex();
-  return index;
-}
-
 /**
  * Ranked ids for a query, best first. Returning ids rather than rows keeps the
  * card projection in one place — the controller selects it.
+ *
+ * Candidates come from the database, not from a copy of the catalog held in the
+ * function. An in-memory index worked at seven thousand titles and quietly
+ * broke at eighty thousand: capped at thirty thousand rows by recency, it held
+ * only the most recent import, and "sholey" stopped finding Sholay because
+ * Sholay was no longer in it.
  */
 export async function rankMatches(rawQuery, limit) {
   const query = normalise(rawQuery);
   if (query.length < 2) return [];
 
-  const candidates = await getIndex();
-  const scored = [];
+  const like = `%${query}%`;
+  let rows;
+  try {
+    rows = await prisma.$queryRaw`
+      SELECT id, title, genre, "releaseYear"
+      FROM "Title"
+      WHERE lower(title) LIKE ${like}
+         OR lower(genre) = ${query}
+         OR similarity(lower(title), ${query}) > ${TRIGRAM_FLOOR}
+         OR word_similarity(${query}, lower(title)) >= ${WORD_FLOOR}
+      ORDER BY greatest(
+        similarity(lower(title), ${query}),
+        word_similarity(${query}, lower(title))
+      ) DESC
+      LIMIT ${CANDIDATE_LIMIT}
+    `;
+  } catch {
+    // pg_trgm is installed by GET /admin/reindex. A database without it — a
+    // fresh development one, usually — still searches, just without the
+    // misspelling half. Failing outright would be worse than narrowing.
+    if (!warnedAboutTrigram) {
+      console.warn("titleSearch: pg_trgm unavailable, matching exactly. Run GET /admin/reindex.");
+      warnedAboutTrigram = true;
+    }
+    rows = await prisma.$queryRaw`
+      SELECT id, title, genre, "releaseYear"
+      FROM "Title"
+      WHERE lower(title) LIKE ${like} OR lower(genre) = ${query}
+      LIMIT ${CANDIDATE_LIMIT}
+    `;
+  }
 
-  for (const candidate of candidates) {
+  const scored = [];
+  for (const row of rows) {
+    const candidate = {
+      id: row.id,
+      releaseYear: row.releaseYear,
+      titleNorm: normalise(row.title),
+      genreNorm: normalise(row.genre),
+    };
     const score = scoreTitle(query, candidate);
-    if (score !== null) scored.push({ id: candidate.id, score, year: candidate.releaseYear });
+    if (score !== null) scored.push({ id: row.id, score, year: row.releaseYear });
   }
 
   scored.sort((a, b) => b.score - a.score || b.year - a.year);
   return scored.slice(0, limit).map((s) => s.id);
-}
-
-/** Only for tests — a stale index would otherwise outlive the data. */
-export function resetIndex() {
-  index = null;
-  indexedAt = 0;
 }

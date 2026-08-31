@@ -1,5 +1,6 @@
 import { importSlice, MAX_PAGE } from "../services/catalogImport.js";
 import { dedupeTitles } from "../services/catalogCleanup.js";
+import prisma from "../config/db.js";
 import { isTmdbConfigured } from "../services/tmdb.js";
 
 /*
@@ -90,5 +91,33 @@ export async function dedupe(req, res) {
   } catch (error) {
     console.error("dedupe error:", error);
     return res.status(500).json({ error: error.message || "Dedupe failed." });
+  }
+}
+
+/*
+ * GET /admin/reindex
+ *
+ * Installs what search needs: pg_trgm and a trigram index on the title. Run
+ * once, and again only if the database is rebuilt — everything is IF NOT
+ * EXISTS, so calling it twice costs nothing.
+ *
+ * Search cannot rank eighty thousand rows inside a request, so it asks the
+ * database for candidates first. Without this index that query is a sequential
+ * scan on every keystroke.
+ */
+export async function reindex(req, res) {
+  if (!authorised(req)) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
+
+  try {
+    await prisma.$executeRawUnsafe("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+    await prisma.$executeRawUnsafe(
+      'CREATE INDEX IF NOT EXISTS "Title_title_trgm_idx" ON "Title" USING gin (lower(title) gin_trgm_ops)'
+    );
+    return res.status(200).json({ status: "ok", message: "pg_trgm and the title index are in place." });
+  } catch (error) {
+    console.error("reindex error:", error);
+    return res.status(500).json({ error: error.message || "Reindex failed." });
   }
 }
