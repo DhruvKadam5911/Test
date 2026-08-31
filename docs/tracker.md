@@ -131,6 +131,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Two fixes found by checking the live site: the ident now starts on the click rather than after the ~600ms stream request, and `OnionMark` processes its raster once per page instead of once per mount, which was stretching the ident past 5s on production |
 | 2026-08-31 | — | `OnionMark` now lifts the bulb to its optical centre. The mark sits 8% low inside its own crop, so every lockup was centring an empty box and showing the mark below the text beside it |
 | 2026-08-31 | — | Desktop/tablet intro mark enlarged, and its size now derives from the wordmark's viewport basis rather than fixed pixels — a fixed height made the mark 4.2x the letter height on tablet against 3.0x on desktop |
 | 2026-08-31 | — | Wheel mark enlarged 152 → 210. The names' start position is now derived from the mark's width rather than hardcoded, so it could grow without sliding under them |

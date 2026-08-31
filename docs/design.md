@@ -262,10 +262,16 @@ gradient-backed title, which is currently all of them.
 |-----------|------|
 | `shared/OnionLogo.jsx` | The full lockup: `OnionMark` + `OnionWordmark`. Takes `height`. Navbar and footer |
 | `shared/OnionWordmark.jsx` | "onion" drawn from the brand geometry. Takes `height` (the letters' visual height, not an em size), `color`, `strokeWidth` |
-| `shared/OnionMark.jsx` | The bulb-and-sprout **only**, cropped out of the same raster at runtime with the white background knocked out, and lifted to its optical centre. Use it wherever the mark sits next to live text |
+| `shared/OnionMark.jsx` | The bulb-and-sprout **only**, cropped out of the same raster at runtime with the white background knocked out, lifted to its optical centre, and processed once per page. Use it wherever the mark sits next to live text |
 | `shared/RingMotif.jsx` | Large concentric-ring decoration. Takes `size`, `opacity`, `style`. Hero background |
 | `shared/SmallRing.jsx` | Compact ring bullet before section titles |
 | `PickerWheel.jsx` | Slot-machine list that rotates a set of labels past a fixed `→` marker. Reusable — takes `items`, `itemHeight`, `stepMs`, `onActiveChange`. Demoed at `/wheel` |
+
+**The knockout runs once per page.** It is a loop over every pixel of a 1024x512 raster, and the
+mark appears in the splash, the ident, the navbar and the footer. Processing per mount put that
+work on the main thread while the intro's rAF loop was running: on the deployed site a 3.8s ident
+stretched past 5s. `OnionMark` caches the processed data URL at module scope and hands it to
+every instance.
 
 **The mark is lifted to its optical centre.** It is not centred inside its own crop: measuring
 the opaque pixels, the ink's bounding box sits 3.1% below the crop's centre and its centroid —

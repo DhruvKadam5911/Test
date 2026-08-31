@@ -24,47 +24,70 @@ const ICON_RIGHT = 388;
 // centre what you see rather than the empty box around it.
 const INK_CENTROID_OFFSET = 0.08;
 
-export default function OnionMark({ height = 96, className = "", style }) {
-  const [src, setSrc] = useState(null);
+// The knockout is a loop over every pixel of a 1024x512 raster. Doing it per
+// mount cost real frames: the mark appears in the splash, the watch-page ident,
+// the navbar and the footer, and on the deployed site that work landed on the
+// main thread while the intro's rAF loop was running, stretching a 3.8s ident
+// past 5s. Process once per page, hand the same data URL to everyone.
+let cachedMark = null;
+let inFlight = null;
 
-  useEffect(() => {
-    let cancelled = false;
+function loadMark() {
+  if (cachedMark) return Promise.resolve(cachedMark);
+  if (inFlight) return inFlight;
 
+  inFlight = new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "Anonymous";
     img.src = "/logo.png";
+    img.onerror = reject;
     img.onload = () => {
-      if (cancelled) return;
-
       const canvas = document.createElement("canvas");
       canvas.width = img.width;
       canvas.height = img.height;
       const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      if (!ctx) return reject(new Error("2d context unavailable"));
 
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
       for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-
         // White page background → transparent.
-        if (r > 220 && g > 220 && b > 220) {
+        if (data[i] > 220 && data[i + 1] > 220 && data[i + 2] > 220) {
           data[i + 3] = 0;
         }
       }
 
       ctx.putImageData(imageData, 0, 0);
-      if (!cancelled) setSrc(canvas.toDataURL("image/png"));
+      cachedMark = canvas.toDataURL("image/png");
+      resolve(cachedMark);
     };
+  }).catch((err) => {
+    // Let a later mount retry rather than caching the failure.
+    inFlight = null;
+    throw err;
+  });
 
+  return inFlight;
+}
+
+export default function OnionMark({ height = 96, className = "", style }) {
+  // Already processed on this page: render on the first paint, no flash.
+  const [src, setSrc] = useState(cachedMark);
+
+  useEffect(() => {
+    if (src) return;
+    let cancelled = false;
+    loadMark()
+      .then((data) => {
+        if (!cancelled) setSrc(data);
+      })
+      .catch((err) => console.error("OnionMark failed to load /logo.png:", err));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [src]);
 
   const scale = height / SOURCE_H;
   const markWidth = (ICON_RIGHT - ICON_LEFT) * scale;
