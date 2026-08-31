@@ -86,7 +86,10 @@ See [design.md](design.md).
 │   │   ├── StudioPage.jsx        Upload mock — NOT ROUTED
 │   │   └── WheelDemo.jsx         PickerWheel demo at /wheel — not linked from the app
 │   ├── components/
-│   │   ├── SplashIntro.jsx       Wheel intro landing on Onion + Web Audio soundtrack
+│   │   ├── SplashIntro.jsx       Picks an intro by viewport; owns the AudioContext
+│   │   ├── SplashWheel.jsx       Mobile/tablet intro — wheel, lock, push through logo
+│   │   ├── SplashWordmark.jsx    Desktop intro — mark swoop + written wordmark
+│   │   ├── splash/               Timing constants + Web Audio soundtracks per variant
 │   │   ├── PickerWheel.jsx       Rotating slot-machine list (loop or settle mode)
 │   │   ├── AppNavbar.jsx         Logo, links, expanding search, bell
 │   │   ├── ContentRow.jsx        Horizontal scroller with arrows, skeletons, retry

@@ -106,10 +106,36 @@ Loaded in `index.html` and re-imported inside `Home.jsx`.
 | Overlay panel | `transition-all duration-300` |
 | Loading | Tailwind `animate-pulse` |
 
-### Splash intro timeline (`SplashIntro.jsx`)
+### Splash intro (`SplashIntro.jsx`)
 
-The splash is a `PickerWheel` spun onto the brand. There is no wordmark and no writing effect —
-the wheel *is* the intro, and the brand mark arrives at the end of it.
+**There are two intros, chosen by viewport width at mount.**
+
+| Viewport | Component | Intro |
+|----------|-----------|-------|
+| `≥ 1024px` (desktop) | `SplashWordmark.jsx` | The original: the mark swoops in and "onion" is written beside it in Mr Bedfort by a travelling nib |
+| `< 1024px` (phone, tablet) | `SplashWheel.jsx` | The wheel spins through streaming services, locks on Onion, then pushes through the logo |
+
+The split exists because a wide horizontal lockup reads poorly in a narrow portrait frame,
+and the wheel's tall stack reads poorly in a wide one.
+
+`SplashIntro.jsx` is only a shell: it picks the variant and owns the `AudioContext`. Each
+variant owns its own visuals, timeline and exit, and ships its soundtrack in a sibling module
+under `components/splash/`.
+
+**The breakpoint is resolved once, on mount, and is deliberately not reactive** — a resize
+part-way through would swap the entire intro mid-animation.
+
+**Audio is scheduled inside the same effect that creates the context.** StrictMode
+double-invokes effects in dev; because the context is created *and* played there, the discarded
+pass is closed by the cleanup before it can be heard. Moving playback into a variant would
+schedule twice onto one live context and double the soundtrack. That is also why the
+soundtracks live in plain modules (`splash/wheelSound.js`, `splash/wordmarkSound.js`) rather
+than being exported from the components — a module exporting both a component and a plain
+function breaks Fast Refresh.
+
+#### Mobile / tablet — the wheel
+
+The wheel *is* the intro, and the brand mark arrives at the end of it.
 
 | Time | Visual | Audio |
 |------|--------|-------|
@@ -132,6 +158,14 @@ camera then appears to push through empty space next to the lockup.
 
 **Order matters:** isolate before zoom. Scaling a screen still full of platform names reads as
 the whole list lunging forward; clearing them first makes it a push through the logo.
+
+#### Desktop — the wordmark
+
+Unchanged from before the wheel existed. The mark swoops in from a 3D transform, the text
+column opens, and "onion" is written left to right by a nib over `WRITE_DURATION`, with a
+per-letter whoosh on `LETTER_STAGGER` and a chime as the wordmark locks. Mr Bedfort is a joined
+script, so the word is **one text run** — per-letter spans, `letter-spacing` or margins would
+break the strokes that carry between letters.
 
 The audio is fully synthesized with the Web Audio API — no audio files are shipped.
 
