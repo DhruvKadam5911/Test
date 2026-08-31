@@ -13,6 +13,7 @@ Defined in `src/App.jsx`, mounted under `BrowserRouter` in `src/main.tsx`.
 |------|-----------|---------|
 | `/` | `pages/Home.jsx` | Browse — hero, trending, originals, genre rows, search |
 | `/watch/:videoId` | `pages/WatchPage.jsx` | Title detail and playback |
+| `/wheel` | `pages/WheelDemo.jsx` | Demo surface for `PickerWheel`. Not linked from anywhere in the app — reachable only by typing the URL |
 
 **Not routed:** `pages/StudioPage.jsx` exists but is unreachable. There is no 404 route —
 any unmatched path renders an empty page below the splash.
@@ -42,8 +43,9 @@ play sound + start timeline      show "Click anywhere to play with sound"
                 ↓
    60ms   icon swoops to centre
    ~400ms text column opens, icon slides left
-   900ms  "ONION" letters stagger in (+ per-letter whoosh)
+   900ms  "onion" is written — nib sweeps left to right (+ per-letter whoosh)
    1640ms chime stab — wordmark locks
+   ~1680ms word finished, nib lifts off
    2650ms splash fades out
    3100ms onDone() → showSplash = false
 ```

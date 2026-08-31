@@ -171,9 +171,32 @@ gradient-backed title, which is currently all of them.
 | `shared/OnionLogo.jsx` | The wordmark + bulb. Takes `height`. Used in navbar, footer, splash |
 | `shared/RingMotif.jsx` | Large concentric-ring decoration. Takes `size`, `opacity`, `style`. Hero background |
 | `shared/SmallRing.jsx` | Compact ring bullet before section titles |
+| `PickerWheel.jsx` | Slot-machine list that rotates a set of labels past a fixed `→` marker. Reusable — takes `items`, `itemHeight`, `stepMs`, `onActiveChange`. Demoed at `/wheel` |
 
 The concentric ring is the brand's secondary motif — an onion cross-section. Use it to mark
 sections, not as generic decoration.
+
+---
+
+## 8b. PickerWheel motion
+
+`PickerWheel.jsx` reproduces an off-screen wheel. Every item shares one pivot
+`PIVOT_RADIUS` (900px) to the **left** of the list and is rotated about it by its distance from
+the marker, `ANGLE_PER_ITEM` (7.2°) apart. That single rotation produces the entire effect:
+items fan along an arc, tilt as they climb away from centre, and drift horizontally by
+`R·(1−cos θ)` — exactly what a real wheel axis would do.
+
+**Do not rewrite this as `translateY` + `rotate`.** The curve is the effect; a vertical
+translate with an independent rotation looks flat and wrong.
+
+Depth of field is interpolated from that same distance — `blur = d²·0.9`px,
+`opacity = 1 − d·0.24`, `scale = 1 − d·0.055` — so nothing keys off a discrete "active index"
+and motion stays continuous between steps.
+
+One step is a `STEP_MOVE_MS` (420ms) eased move plus a `STEP_HOLD_MS` (250ms) rest on the
+marker, ~665ms per item. Transforms are written straight to the DOM from a `requestAnimationFrame`
+loop rather than through React state, so a 60fps animation does not re-render the tree each frame.
+`prefers-reduced-motion: reduce` holds item 0 on the marker instead of spinning.
 
 ---
 

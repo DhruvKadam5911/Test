@@ -38,6 +38,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | Dynamic genre rows | ✅ | Derived from the catalog at runtime |
 | Search | 🟡 | Client-side over the loaded 100-title pool only — plan 5.1 |
 | Content cards + skeletons | ✅ | |
+| PickerWheel | ✅ | Reusable rotating-list component; demo at `/wheel`, not linked from the app |
 | Row arrows / scroll | ✅ | |
 | Watch page metadata | ✅ | |
 | Season / episode picker | ✅ | |
@@ -117,6 +118,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved
 | D3 | Keep or delete Creator Studio? | Plan 1.7 |
 | D4 | Where does catalog content come from — manual, TMDB, or uploads? | Phase 5 |
 | D5 | Is Fraunces (loaded, unused) part of the type system or should it be dropped? | design.md |
+| D6 | Where does `PickerWheel` actually ship — splash, a homepage section, or a marketing asset? Right now it only has a demo route | Its final placement |
 
 ---
 
@@ -124,6 +126,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Added `PickerWheel` — a rotating slot-machine list of streaming platform names with arc geometry and depth-of-field falloff, plus a `/wheel` demo route |
 | 2026-08-31 | — | Splash wordmark reset in Mr Bedfort script, lowercase, revealed by a nib sweeping the word left to right (single text run — a joined script cannot be split into per-letter spans); per-letter audio retimed to match |
 | 2026-08-31 | — | Plan 1.1: splash `AudioContext` lifecycle fixed — single context per mount, closed on cleanup, resumed instead of re-created on the autoplay-blocked path |
 | 2026-08-31 | `87ccc80` | Added the `docs/` suite: PRD, tech spec, app flow, design, schema, implementation plan, tracker, rules |
