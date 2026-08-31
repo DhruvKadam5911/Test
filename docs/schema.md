@@ -184,8 +184,35 @@ one-word query against a long title scores low however exact — "crary" against
 0.11 — while `word_similarity` compares against the best-matching run of words, 0.20 for the same
 pair.
 
-`GET /admin/reindex` installs `pg_trgm` and the trigram index, once per database. Without them
+`GET /admin/reindex` installs everything the code expects the database to have: the `voteAverage` /
+`voteCount` / `popularity` columns, the indexes the home page's rows sort on, the `Track` table, and
+`pg_trgm` with the trigram index. Everything is `IF NOT EXISTS`, so running it twice costs nothing.
+
+**Additive schema changes go here, and are mirrored in `schema.prisma`.** Not because that is
+tidier — `prisma migrate` cannot open a connection to the hosted database from a machine with no
+route to Postgres on 5432, which is the situation this project is in.
+
+`GET /admin/remove-seed` deletes the three demo titles the project shipped with. Dry run unless
+`?apply=true`.
+
+The trigram index specifically, once per database. Without them
 search still works, narrowed to exact matching, and logs that it has.
+
+`sort` picks what the home page's rows are: `trending` (TMDB popularity), `viewed` (vote count),
+`rated` (score, with at least 200 votes — one ten-out-of-ten vote is not a well-rated film),
+`recent` (released, with at least 50 votes — TMDB carries titles years ahead of their date and
+ordering by year alone fills the row with films nobody can watch yet), or `newest` (default, by
+`createdAt`).
+
+`voteAverage`, `voteCount` and `popularity` are TMDB's own numbers, carried through by the import
+and null for anything not from TMDB. Nobody has watched anything in this catalog, so "most viewed"
+is vote count — the closest honest stand-in, and named as a stand-in here rather than pretended to
+be a view count.
+
+### `GET /music/tracks`
+
+`[{ id, title, artist, audioUrl, artworkUrl, durationSeconds }]`, newest first. Returns `[]` when
+the table does not exist yet, so the player can say there is no music rather than look broken.
 
 ### `GET /titles/genres`
 

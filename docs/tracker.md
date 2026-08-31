@@ -93,6 +93,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H1 | **`prisma/seed.js` deletes all six tables before inserting.** Never run it against real data |
 | H2 | `server.js` loads env with `import "dotenv/config"` as its **first** import. Do not move it below the others — the service modules read `process.env` at import time, and every key in `server/.env` goes silently undefined if it loads late |
 | H3 | The scrubber is real during playback, but falls back to a `setInterval` preview *before* a stream is fetched. That preview timer is gated on `!playbackUrl` — never let it run alongside the element |
+| H3f | **Nothing in the catalog plays.** The three seeded demo titles were the only ones with a stream and were deleted on request; everything else is TMDB metadata. The player, the download link and the resolution label are all correct and all have nothing to act on |
 | H3e | Series imported from TMDB have no `Season` or `Episode` rows. Playback needs an `episodeId` it cannot supply, so a series card opens to a detail page with no episodes |
 | H3d | Titles imported in bulk have no `playbackUrl` and cannot play. That is the accepted cost of cataloguing other platforms' films, not a player bug — check the catalog before diagnosing a playback report |
 | H3c | `/admin/refresh` imports from TMDB at runtime, so `TMDB_API_KEY` **is** needed on the deployed API. It is read per call, not at module load, so a key added after a deploy takes effect without one |
@@ -131,6 +132,8 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-09-01 | — | Home page rebuilt: four ordered rows instead of 29 genre rows, ratings on every card, and three hardcoded decorations removed — "FEATURED VOD", a "#1 IN SERIES TODAY" ribbon and a "TV-MA" badge that every title carried. Import now stores TMDB's voteAverage/voteCount/popularity and backfills rows already stored |
+| 2026-09-01 | — | `/music` added — a real audio player, empty until tracks exist. Also: backspace in an empty search box no longer navigates away, the player's resolution label reads the element instead of claiming 1080p, and a download link appears when a title has a stream |
 | 2026-09-01 | — | The catalog is the whole of TMDB's popular output now: 7,656 → **85,764** titles across 11 languages and both media, films and series, driven through `/admin/refresh` from Vercel because this machine's network drops TMDB and Postgres:5432 alike |
 | 2026-09-01 | — | Search moved onto `pg_trgm`. The in-memory index worked at 7,000 titles and broke silently at 85,000 — capped by recency it held only the newest import, so "sholey" stopped finding Sholay. `/admin/reindex` installs the extension and index |
 | 2026-09-01 | — | Search survives being typed into, and forgives a typo. The navbar sits inside the hero while browsing and outside it while searching, so the first keystroke remounted it — the box snapped shut and the text vanished, mid-word, every time. Ranking moved out of SQL into `services/titleSearch.js` |
