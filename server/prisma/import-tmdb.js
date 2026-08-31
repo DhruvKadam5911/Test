@@ -31,10 +31,26 @@ Usage: node prisma/import-tmdb.js "<title>" [options]
   --playback <url>   Stream URL for this title
   --original         Mark it as an Onion Original
   --force            Import even if a title with this name already exists
+  --sql              Print an INSERT statement instead of writing to the database
 `;
 
+// `id` and `updatedAt` have no database default — Prisma supplies both from the
+// client — so a raw INSERT has to fill them in itself.
+function toInsert(row) {
+  const q = (v) => (v === null || v === undefined ? "NULL" : `'${String(v).replace(/'/g, "''")}'`);
+  const raw = (v) => (v === null || v === undefined ? "NULL" : String(v));
+  return [
+    'INSERT INTO "Title" ("id", "title", "description", "contentType", "genre", "releaseYear",',
+    '  "rating", "durationMinutes", "thumbnailUrl", "heroImageUrl", "playbackUrl", "isOriginal", "updatedAt")',
+    "VALUES (gen_random_uuid(),",
+    `  ${q(row.title)}, ${q(row.description)}, '${row.contentType}', ${q(row.genre)}, ${raw(row.releaseYear)},`,
+    `  ${q(row.rating)}, ${raw(row.durationMinutes)}, ${q(row.thumbnailUrl)}, ${q(row.heroImageUrl)},`,
+    `  ${q(row.playbackUrl)}, ${raw(row.isOriginal)}, NOW());`,
+  ].join("\n");
+}
+
 function parseArgs(argv) {
-  const args = { query: null, year: null, playback: null, original: false, force: false };
+  const args = { query: null, year: null, playback: null, original: false, force: false, sql: false };
   const rest = argv.slice(2);
 
   for (let i = 0; i < rest.length; i++) {
@@ -43,6 +59,7 @@ function parseArgs(argv) {
     else if (arg === "--playback") args.playback = rest[++i];
     else if (arg === "--original") args.original = true;
     else if (arg === "--force") args.force = true;
+    else if (arg === "--sql") args.sql = true;
     else if (arg.startsWith("--")) throw new Error(`Unknown option: ${arg}`);
     else if (args.query === null) args.query = arg;
     else throw new Error(`Unexpected argument: ${arg}. Quote titles containing spaces.`);
@@ -80,6 +97,32 @@ async function main() {
   const details = await getTitleDetails(match.id);
   const certification = await getCertification(match.id);
 
+  const row = {
+    title: details.title,
+    description: details.overview || "No description available.",
+    contentType: "movie",
+    // Our schema carries one genre; TMDB returns several, ordered by relevance.
+    genre: details.genres?.[0]?.name || "Uncategorised",
+    releaseYear: Number((details.release_date || "").slice(0, 4)) || new Date().getFullYear(),
+    rating: certification || "NR",
+    durationMinutes: details.runtime || null,
+    thumbnailUrl:
+      imageUrl(details.backdrop_path, "w780") || "linear-gradient(135deg, #241B2E, #17141A)",
+    heroImageUrl: imageUrl(details.backdrop_path, "original"),
+    playbackUrl: args.playback,
+    isOriginal: args.original,
+  };
+
+  // --sql exists for environments that can reach TMDB but not the database —
+  // a locked-down network, or a managed Postgres you only have console access
+  // to. Paste the statement into that console instead.
+  if (args.sql) {
+    console.log(`
+-- ${row.title} (${row.releaseYear}), from TMDB
+${toInsert(row)}`);
+    return;
+  }
+
   const existing = await prisma.title.findFirst({ where: { title: details.title } });
   if (existing && !args.force) {
     throw new Error(
@@ -96,22 +139,7 @@ async function main() {
     console.warn("⚠️  No --playback URL given. The title will import but will not play.");
   }
 
-  const created = await prisma.title.create({
-    data: {
-      title: details.title,
-      description: details.overview || "No description available.",
-      contentType: "movie",
-      // Our schema carries one genre; TMDB returns several, ordered by relevance.
-      genre: details.genres?.[0]?.name || "Uncategorised",
-      releaseYear: Number((details.release_date || "").slice(0, 4)) || new Date().getFullYear(),
-      rating: certification || "NR",
-      durationMinutes: details.runtime || null,
-      thumbnailUrl: imageUrl(details.backdrop_path, "w780") || "linear-gradient(135deg, #241B2E, #17141A)",
-      heroImageUrl: imageUrl(details.backdrop_path, "original"),
-      playbackUrl: args.playback,
-      isOriginal: args.original,
-    },
-  });
+  const created = await prisma.title.create({ data: row });
 
   console.log(`\n✅ Imported "${created.title}"`);
   console.log(`   id            ${created.id}`);

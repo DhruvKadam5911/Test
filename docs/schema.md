@@ -268,6 +268,7 @@ npm run import:tmdb -- "Dune" --year 2021 --playback "https://…/stream.mp4" --
 | `--playback` | The stream URL. Without it the title imports but cannot play |
 | `--original` | Marks it an Onion Original |
 | `--force` | Import even though a title with that name exists |
+| `--sql` | Print an `INSERT` instead of writing, for when you can reach TMDB but not the database |
 
 Notes on the mapping:
 
@@ -276,6 +277,9 @@ Notes on the mapping:
 - **One genre.** `Title.genre` is a single string; TMDB returns several and the first is taken.
 - **The certification is a second request.** It is not on the movie record — it lives in
   per-country release data, and falls back to `NR`.
+- **`--sql` fills in `id` and `updatedAt` itself.** Neither has a database default — Prisma
+  supplies both from the client — so a raw `INSERT` has to provide them, via `gen_random_uuid()`
+  and `NOW()`.
 - **Movies only.** A series would need a `playbackUrl` for every episode, since
   `Episode.playbackUrl` is required, and TMDB has no streams to supply — importing one would mean
   inventing data for every episode.
