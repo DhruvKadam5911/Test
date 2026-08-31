@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { colors } from "../theme";
+import { colors, withAlpha } from "../theme";
 import SplashWheel from "./SplashWheel";
 import { playSound as playWheelSound } from "./splash/wheelSound";
 import SplashConstruct from "./SplashConstruct";
@@ -98,8 +98,11 @@ export default function SplashIntro({ onDone }) {
       >
         {showOverlay && (
           <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center z-[210] transition-all duration-300">
-            <div className="bg-[#181124]/90 border border-[#7C3FC4]/30 backdrop-blur-lg px-8 py-6 rounded-2xl flex flex-col items-center gap-4 shadow-2xl animate-pulse">
-              <div className="w-16 h-16 rounded-full bg-[#7C3FC4]/25 flex items-center justify-center text-[#F3F0F5]">
+            <div
+              className="backdrop-blur-lg px-8 py-6 rounded-2xl flex flex-col items-center gap-4 shadow-2xl animate-pulse"
+              style={{ background: withAlpha(colors.bgElevated, 0.9), border: `1px solid ${withAlpha(colors.accent, 0.3)}` }}
+            >
+              <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: withAlpha(colors.accent, 0.25), color: colors.text }}>
                 {/* Simple audio wave SVG icon */}
                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -108,8 +111,8 @@ export default function SplashIntro({ onDone }) {
                 </svg>
               </div>
               <div className="text-center">
-                <h3 className="font-semibold text-lg text-[#F3F0F5]">Onion TV</h3>
-                <p className="text-xs text-[#F3F0F5]/70 mt-1">Click anywhere to play with sound</p>
+                <h3 className="font-semibold text-lg" style={{ color: colors.text }}>Onion TV</h3>
+                <p className="text-xs mt-1" style={{ color: withAlpha(colors.text, 0.7) }}>Click anywhere to play with sound</p>
               </div>
             </div>
           </div>

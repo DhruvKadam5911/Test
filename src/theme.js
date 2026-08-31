@@ -13,6 +13,14 @@ export const colors = {
   ring: "#2B1E38",         // dark purple border / dividers
 };
 
+// Tokens are hex, but overlays need them at partial opacity. Going through
+// here keeps those cases on the palette instead of drifting to a hand-picked
+// near-miss (there used to be a stray #7C3FC4 alongside accent's #7B2685).
+export function withAlpha(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
 export const displayFont = "'Inter', system-ui, sans-serif";
 export const bodyFont = "'Inter', system-ui, sans-serif";
 
