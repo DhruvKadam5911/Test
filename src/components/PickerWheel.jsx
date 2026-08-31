@@ -52,6 +52,10 @@ export default function PickerWheel({
   onSettled,
   marker,
   isolate = false,
+  // Lets a caller draw an item as something other than text — the splash uses
+  // it to set its own name in the brand wordmark while the other platforms
+  // stay as plain type.
+  renderLabel,
   className = "",
   style,
 }) {
@@ -227,7 +231,7 @@ export default function PickerWheel({
             opacity: 0,
           }}
         >
-          {label}
+          {renderLabel ? renderLabel(label) : label}
         </div>
       ))}
     </div>

@@ -1,56 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import OnionMark from './OnionMark';
+import OnionWordmark from './OnionWordmark';
+import { colors } from '../../theme';
+
+/*
+ * OnionLogo — the full lockup: the bulb mark beside the wordmark.
+ *
+ * It used to draw public/logo.png whole, which has an uppercase "ONION" in an
+ * unrelated sans baked into the raster. The wordmark is now drawn from the
+ * brand geometry instead, so the navbar, the footer and the intros all show
+ * the same letterforms.
+ *
+ * `height` is the lockup's height, taken from the mark; the wordmark is set
+ * against it so the two stay in proportion at any size.
+ */
+
+// The drawn wordmark's letters, as a fraction of the mark's height. The mark's
+// raster carries a lot of transparent padding, so matching the two box heights
+// would leave the wordmark towering over the bulb.
+const WORDMARK_RATIO = 0.42;
 
 export function OnionLogo({ height = 90, className = "" }) {
-  const [exactLogo, setExactLogo] = useState('/logo.png');
-
-  useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.src = '/logo.png';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Draw the exact full logo image (bulb mark + ONION wordmark)
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-
-      // Convert white background pixels to transparent, and brighten dark purple wordmark text for dark background
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-
-        // Background pixels -> transparent
-        if (r > 220 && g > 220 && b > 220) {
-          data[i + 3] = 0;
-        } 
-        // Dark purple ONION wordmark text -> brighten to soft white (#F3F0F5) for dark bg contrast
-        else if (r < 95 && g < 40 && b < 105) {
-          data[i] = 243;
-          data[i + 1] = 240;
-          data[i + 2] = 245;
-        }
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-      setExactLogo(canvas.toDataURL('image/png'));
-    };
-  }, []);
-
   return (
-    <div className={`flex items-center ${className}`}>
-      {/* Render exact brand logo image (bulb mark + ONION wordmark) */}
-      <img 
-        src={exactLogo} 
-        alt="ONION" 
-        style={{ height: height, width: 'auto', objectFit: 'contain' }}
-        className="shrink-0 transition-all duration-200"
-      />
+    <div className={`flex items-center ${className}`} style={{ gap: height * 0.06 }}>
+      <OnionMark height={height} />
+      <OnionWordmark height={height * WORDMARK_RATIO} color={colors.text} />
     </div>
   );
 }

@@ -2,8 +2,10 @@ import React, { useRef, useState } from "react";
 import { colors } from "../theme";
 import PickerWheel from "./PickerWheel";
 import OnionMark from "./shared/OnionMark";
+import OnionWordmark from "./shared/OnionWordmark";
 import { PLATFORMS } from "../data/platforms";
 import {
+  TARGET,
   TARGET_INDEX,
   START_INDEX,
   SPINS,
@@ -118,6 +120,16 @@ export default function SplashWheel({ onDone, fullscreen = true, itemHeight = IT
           spinMs={SPIN_MS}
           onSettled={handleSettled}
           isolate={isolate}
+          renderLabel={(label) =>
+            label === TARGET ? (
+              // Our own name is the wordmark, not type. Sized to the text's
+              // x-height so it sits on the same optical line as the platforms
+              // it is spinning past.
+              <OnionWordmark height={itemHeight * 0.44} color={colors.text} />
+            ) : (
+              label
+            )
+          }
           marker={
             // Arrow and mark are stacked in one fixed box so the swap cannot
             // reflow the names beside them. The box is sized to the mark, the

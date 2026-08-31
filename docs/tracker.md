@@ -101,7 +101,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H7 | Route order in `routes/titles.js` — `/trending` must stay above `/:id` |
 | H8 | `npm run build` runs `tsc -b`. TypeScript errors fail a build in a mostly-JSX codebase |
 | H9 | `#7C3FC4` appears in a few places instead of `colors.accent` `#7B2685` |
-| H10 | Two components render the same raster differently: `OnionLogo.jsx` draws the full lockup for the navbar/footer, `OnionMark.jsx` crops the bulb alone for the splash. Both re-process `public/logo.png` on a canvas at runtime — if that file is replaced, check the crop bounds and the white-knockout threshold in both |
+| H10 | Only the **bulb** comes from `public/logo.png` now, via `OnionMark.jsx`, which crops it on a canvas at runtime — if that file is replaced, check the crop bounds and the white-knockout threshold there. The wordmark is drawn from geometry and is unaffected |
 | H10b | The desktop wordmark is hand-authored SVG geometry in `splash/wordmarkGeometry.js`, **not** a font. Changing the wordmark means editing paths and their anchor lists together — the anchors are drawn from the same file so they cannot drift, but only if you edit both |
 | H11a | The splash breakpoint is read once at mount and never re-read. That is intentional — do not "fix" it with a resize listener, or a resize will swap the intro mid-animation |
 | H11 | `PickerWheel` writes styles straight to DOM nodes from a rAF loop. Do not also drive those same properties from React state or CSS transitions — they will fight each other. `isolate` is safe only because it runs after the loop has finished |
@@ -131,6 +131,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | The brand wordmark is now one drawn asset used everywhere: extracted `OnionWordmark` from the intro geometry, rebuilt `OnionLogo` on it so the navbar and footer stop showing the raster's uppercase "ONION", and the wheel renders its own name as the wordmark while other platforms stay as type |
 | 2026-08-31 | `93e472b` | The wheel's lockup now glides to the centre of the frame before the zoom, so the push travels through the logo instead of past the side of it. Applies to both the phone splash and the watch-page ident |
 | 2026-08-31 | — | The wheel intro now plays as a brand ident inside the player before every video. `SplashWheel` gained `fullscreen` and `itemHeight` props so the same component serves the splash and the pre-roll |
 | 2026-08-31 | — | Removed the click-to-enable-sound gate from the splash. On the live domain a first-time visitor got a black screen and a permission prompt; the intro now runs silently when autoplay is blocked |

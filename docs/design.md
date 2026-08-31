@@ -194,6 +194,12 @@ the whole list lunging forward; clearing them first makes it a push through the 
 | 2240ms | The onion mark joins it, at `MARK_HEIGHT` 280 — the source raster pads the bulb heavily, so its box runs about twice the letter height for the mark to read as the larger element |
 | 2760ms | Fade out → `onDone()` at 3180ms |
 
+**One wordmark, drawn everywhere.** `shared/OnionWordmark.jsx` renders the same paths
+statically, and it is what the navbar, the footer and the wheel's own name all use — so the
+brand reads identically whether it is being constructed, spun past, or sitting in a header.
+`OnionLogo` used to draw `public/logo.png` whole, which had an uppercase "ONION" in an unrelated
+sans baked into the raster; only the bulb is taken from that file now.
+
 **The letterforms are geometry, not type.** `splash/wordmarkGeometry.js` authors "onion" as
 paths — `o` is a ring, `n` is a stem turning into a semicircular shoulder, `i` is a stem plus a
 tittle. This is what makes the wireframe stage read as deliberate: every anchor lands on a
@@ -244,7 +250,8 @@ gradient-backed title, which is currently all of them.
 
 | Component | Role |
 |-----------|------|
-| `shared/OnionLogo.jsx` | The full baked lockup (bulb + "ONION") from `public/logo.png`. Takes `height`. Navbar and footer |
+| `shared/OnionLogo.jsx` | The full lockup: `OnionMark` + `OnionWordmark`. Takes `height`. Navbar and footer |
+| `shared/OnionWordmark.jsx` | "onion" drawn from the brand geometry. Takes `height` (the letters' visual height, not an em size), `color`, `strokeWidth` |
 | `shared/OnionMark.jsx` | The bulb-and-sprout **only**, cropped out of the same raster at runtime with the white background knocked out. Use it wherever the mark sits next to live text — the splash marker |
 | `shared/RingMotif.jsx` | Large concentric-ring decoration. Takes `size`, `opacity`, `style`. Hero background |
 | `shared/SmallRing.jsx` | Compact ring bullet before section titles |
