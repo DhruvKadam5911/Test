@@ -294,11 +294,16 @@ npm run import:tmdb:bulk -- --provider Netflix,"Amazon Prime Video" --genre Horr
 | `--provider` | Comma separated platform names, resolved against TMDB's list for the region |
 | `--genre` | Comma separated genre names |
 | `--region` | Watch region for provider filtering (default `IN`) |
+| `--country` | Country the film was **made in**, e.g. `IN` for Indian cinema |
+| `--language` | Original language, e.g. `hi`, `ta`, `te` |
 | `--pages` | Pages of 20 to fetch (default 3) |
 | `--details` | Also fetch runtime and certification — two extra requests per title |
 | `--playback` | Stream URL attached to every imported title |
 | `--out` | Write INSERTs to a file instead of the database |
 
+- **`--region` does not select Indian films.** It only says where a title is *available*, so a
+  popularity sort still returns global hits. `--country IN` selects films made in India across
+  every Indian language (7,002 of them); `--language hi` narrows further to Hindi (2,576).
 - **One request per 20 titles.** Genre names come from the ids the listing already returns, so
   no per-title call is needed. `--details` is opt-in because it turns a 25-request import into a
   2,000-request one.

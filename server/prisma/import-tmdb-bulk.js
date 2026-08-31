@@ -28,6 +28,8 @@ Usage: node prisma/import-tmdb-bulk.js [options]
   --provider <names>   Comma separated, e.g. Netflix,"Amazon Prime Video"
   --genre <names>      Comma separated, e.g. Action,Thriller
   --region <cc>        Watch region for provider filtering (default IN)
+  --country <cc>       Country the film was made in, e.g. IN for Indian cinema
+  --language <code>    Original language, e.g. hi, ta, te
   --pages <n>          Pages of 20 to fetch (default 3)
   --details            Also fetch runtime and certification (2 extra calls each)
   --playback <url>     Stream URL to attach to every imported title
@@ -38,8 +40,8 @@ const PAGE_SIZE = 20;
 
 function parseArgs(argv) {
   const args = {
-    providers: [], genres: [], region: "IN", pages: 3,
-    details: false, playback: null, out: null,
+    providers: [], genres: [], region: "IN", country: null, language: null,
+    pages: 3, details: false, playback: null, out: null,
   };
   const rest = argv.slice(2);
   const list = (v) => v.split(",").map((s) => s.trim()).filter(Boolean);
@@ -49,6 +51,8 @@ function parseArgs(argv) {
     if (a === "--provider") args.providers = list(rest[++i] ?? "");
     else if (a === "--genre") args.genres = list(rest[++i] ?? "");
     else if (a === "--region") args.region = rest[++i];
+    else if (a === "--country") args.country = rest[++i];
+    else if (a === "--language") args.language = rest[++i];
     else if (a === "--pages") args.pages = Number(rest[++i]);
     else if (a === "--details") args.details = true;
     else if (a === "--playback") args.playback = rest[++i];
@@ -103,6 +107,8 @@ async function main() {
     `🔎 TMDB discover — region ${args.region}` +
       (args.providers.length ? `, on ${args.providers.join(" / ")}` : "") +
       (args.genres.length ? `, genre ${args.genres.join(" / ")}` : "") +
+      (args.country ? `, made in ${args.country}` : "") +
+      (args.language ? `, in ${args.language}` : "") +
       `, ${args.pages} page(s)`
   );
 
@@ -115,6 +121,11 @@ async function main() {
       watch_region: args.region,
       with_watch_providers: providerIds.join("|") || undefined,
       with_genres: genreIds.join(",") || undefined,
+      // watch_region only says where a film is *available*. Origin country and
+      // original language are what select the cinema itself — without one of
+      // them a popularity sort returns global hits, not local ones.
+      with_origin_country: args.country || undefined,
+      with_original_language: args.language || undefined,
       sort_by: "popularity.desc",
     });
 
