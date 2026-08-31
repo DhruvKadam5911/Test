@@ -20,6 +20,7 @@ Then the document covering your area:
 | Routes, screens, fetch sequences, navigation | [docs/appflow.md](docs/appflow.md) |
 | Colors, typography, motion, styling conventions | [docs/design.md](docs/design.md) |
 | Prisma models, API contract, seed data, migrations | [docs/schema.md](docs/schema.md) |
+| Hosting, environment variables, deploy steps | [docs/deployment.md](docs/deployment.md) |
 
 **The code is the source of truth.** If a document disagrees with the code, the code wins and
 the document is a bug — fix it in the same commit.

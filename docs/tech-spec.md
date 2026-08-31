@@ -97,7 +97,10 @@ See [design.md](design.md).
 │   │   └── shared/               OnionLogo, OnionMark, RingMotif, SmallRing
 │   └── assets/
 └── server/
-    ├── server.js                 Bootstrap, CORS, /, /health, route mount, 404, error handler
+    ├── app.js                    The Express app — CORS, /, /health, routes, 404, errors
+    ├── server.js                 Local listener only; Vercel does not use it
+    ├── api/index.js              Vercel serverless entry, re-exports the app
+    ├── vercel.json               Routes every path to the function
     ├── test-api.js               Endpoint smoke test (`npm test`)
     ├── .env / .env.example
     ├── prisma/

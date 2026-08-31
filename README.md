@@ -19,6 +19,7 @@ several things that look like bugs but are not, and one script that deletes your
 | [docs/appflow.md](docs/appflow.md) | Routes, screens, fetch sequences |
 | [docs/design.md](docs/design.md) | Design tokens, typography, motion |
 | [docs/schema.md](docs/schema.md) | Data model and API contract |
+| [docs/deployment.md](docs/deployment.md) | Hosting on Vercel + Neon |
 
 ## Running it
 

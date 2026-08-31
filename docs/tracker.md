@@ -129,6 +129,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Deployment prep for Vercel + Neon: the Express app split from its listener, a serverless entry added, Prisma given a Linux binary target and a `directUrl` for pooled connections, CORS origins made env-driven, and `docs/deployment.md` written. **Not yet deployed — needs a Neon database** |
 | 2026-08-31 | — | Plan 1.7: README rewritten to point at `docs/`, unused import dropped, and the stray `#7C3FC4` replaced with `colors.accent` via a new `withAlpha()` helper. **StudioPage still undecided (D3)** |
 | 2026-08-31 | — | Plan 1.4 + 1.6: the hero shows the featured title's real description (fetched from `/titles/:id`, since the list projection omits it), and a failed catalog fetch now shows an error row with Retry instead of emptying the page |
 | 2026-08-31 | — | Plan 1.5: CORS allowlist actually enforced outside development. Found and fixed alongside it: `dotenv.config()` ran after the imports that read `process.env`, so every key in `server/.env` was being silently ignored |

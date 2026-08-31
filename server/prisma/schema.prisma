@@ -1,10 +1,18 @@
 generator client {
   provider = "prisma-client-js"
+  // Vercel's Node runtime is Linux; without this the client generated on a
+  // developer machine has no engine the deployed function can load.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Queries go through the connection pooler. Serverless functions each open
+  // their own connection, and a direct Postgres URL runs out of them fast.
+  url       = env("DATABASE_URL")
+  // Migrations cannot run over a pooler, so they need the unpooled host.
+  // Locally both point at the same database.
+  directUrl = env("DIRECT_URL")
 }
 
 enum ContentType {

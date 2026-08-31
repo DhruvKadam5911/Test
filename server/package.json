@@ -9,7 +9,9 @@
     "dev": "nodemon server.js",
     "test": "node test-api.js",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "postinstall": "prisma generate",
+    "vercel-build": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.3.0",
