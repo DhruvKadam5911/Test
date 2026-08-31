@@ -125,6 +125,13 @@ under `components/splash/`.
 **The breakpoint is resolved once, on mount, and is deliberately not reactive** — a resize
 part-way through would swap the entire intro mid-animation.
 
+**Sound never gates the animation.** Browsers block audio on a domain the visitor has not
+interacted with, so the context arrives suspended and there is nothing to play. The intro runs
+silently in that case. It used to show a "click anywhere to play with sound" prompt instead,
+which meant a first-time visitor on a real domain got a black screen and a permission dialog for
+something they never asked for — it only looked fine in development because browsers relax the
+policy for domains you visit repeatedly.
+
 **Audio is scheduled inside the same effect that creates the context.** StrictMode
 double-invokes effects in dev; because the context is created *and* played there, the discarded
 pass is closed by the cleanup before it can be heard. Moving playback into a variant would

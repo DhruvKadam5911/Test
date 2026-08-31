@@ -32,7 +32,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 |---------|--------|-------|
 | Splash intro visuals | ✅ | Two variants by viewport. **Tablet & desktop (≥768px):** the wordmark is constructed — dots → anchor points → drawn outlines → solid, then the mark joins, ~3.2s. **Phone (<768px):** wheel spins through platforms, locks on Onion, mark drops in, others clear, lockup pushes through into the app, ~3.5s |
 | Splash intro audio | ✅ | One `AudioContext` per mount, closed on unmount; the click path resumes it rather than opening a second (plan 1.1, 2026-08-31) |
-| Autoplay-blocked overlay | ✅ | Click-to-enable |
+| Splash audio | ✅ | Plays when the browser allows it, silent when it does not. Never blocks the animation |
 | Cinematic hero | ✅ | Shows the featured title's real description, fetched from `/titles/:id` since the list projection omits it; "Read more" only appears when something is actually hidden (plan 1.4, 2026-08-31) |
 | Trending row | ✅ | With skeleton + retry |
 | Onion Originals row | ✅ | Client-side `isOriginal` filter |
@@ -130,6 +130,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Removed the click-to-enable-sound gate from the splash. On the live domain a first-time visitor got a black screen and a permission prompt; the intro now runs silently when autoplay is blocked |
 | 2026-08-31 | — | Desktop splash: onion mark enlarged from 200 to 280 and the gap tightened, so it reads as the dominant element beside the wordmark rather than matching it |
 | 2026-08-31 | — | **Live on Vercel.** Neon provisioned, schema migrated and catalog seeded, both projects deployed and wired. Verified end to end: health, catalog, home page and a cold `/watch/:id` deep link |
 | 2026-08-31 | — | Deployment prep for Vercel + Neon: the Express app split from its listener, a serverless entry added, Prisma given a Linux binary target and a `directUrl` for pooled connections, CORS origins made env-driven, and `docs/deployment.md` written. **Not yet deployed — needs a Neon database** |

@@ -61,7 +61,7 @@ but have no API or UI yet.
 
 | Feature | Where | Notes |
 |---------|-------|-------|
-| Splash intro | `src/components/SplashIntro.jsx` | Icon swoop → "ONION" wordmark; Web Audio soundtrack; click-to-enable overlay when autoplay is blocked |
+| Splash intro | `src/components/SplashIntro.jsx` | Picks an intro by viewport and owns the audio. Sound plays only if the browser allows it; the animation never waits on it |
 | Cinematic hero | `src/pages/Home.jsx` | Driven by the first trending title; gradient scrims, ring motif |
 | Trending row | Home | `GET /titles/trending`, ranked, with retry on failure |
 | Onion Originals row | Home | Filtered client-side on `isOriginal` |

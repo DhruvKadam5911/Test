@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import { colors, withAlpha } from "../theme";
 import SplashWheel from "./SplashWheel";
 import { playSound as playWheelSound } from "./splash/wheelSound";
 import SplashConstruct from "./SplashConstruct";
@@ -30,17 +29,21 @@ export default function SplashIntro({ onDone }) {
     () => window.matchMedia?.(WORDMARK_QUERY).matches ?? true
   );
 
-  const [started, setStarted] = useState(false);
-  const [showOverlay, setShowOverlay] = useState(false);
   // The single AudioContext for this mount. Browsers cap concurrent contexts
-  // (~6), so it is created once, reused by handleInteraction, and closed on
-  // unmount rather than left to leak.
+  // (~6), so it is created once and closed on unmount rather than left to leak.
   const audioCtxRef = useRef(null);
 
   const playSoundRef = useRef(null);
   playSoundRef.current = useWordmark ? playConstructSound : playWheelSound;
 
-  // Detect autoplay permission.
+  // Try for sound. The intro never waits on it.
+  //
+  // Browsers block audio on a domain the visitor has not interacted with, so
+  // the context comes back suspended and there is nothing to play. That must
+  // not stop the animation: gating it behind a "click to enable sound" prompt
+  // meant a first-time visitor got a black screen and a permission dialog for
+  // something they never asked for. The intro runs silently instead, and sound
+  // returns on its own once the browser trusts the domain.
   //
   // The sound is scheduled inside this effect on purpose. StrictMode
   // double-invokes effects in dev; because the context is created and played
@@ -49,77 +52,23 @@ export default function SplashIntro({ onDone }) {
   // live context and double the soundtrack.
   useEffect(() => {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) {
-      setStarted(true);
-      return;
-    }
+    if (!AudioContextClass) return;
 
     const ctx = new AudioContextClass();
     audioCtxRef.current = ctx;
 
-    if (ctx.state === "suspended") {
-      // Autoplay is blocked — keep the context around so handleInteraction can
-      // resume() this one instead of opening a second.
-      setShowOverlay(true);
-    } else {
-      setStarted(true);
+    if (ctx.state === "running") {
       playSoundRef.current(ctx);
     }
+    // Suspended: leave it alone. Resuming later would start the soundtrack
+    // from its beginning against visuals already part-way through, which reads
+    // worse than no sound at all.
 
     return () => {
       audioCtxRef.current = null;
       ctx.close().catch(() => {});
     };
   }, []);
-
-  const handleInteraction = () => {
-    if (started) return;
-    setShowOverlay(false);
-    // The intro runs regardless of whether audio can be resumed.
-    setStarted(true);
-
-    const ctx = audioCtxRef.current;
-    if (!ctx) return;
-
-    ctx
-      .resume()
-      .then(() => playSoundRef.current(ctx))
-      .catch((err) => console.error("Failed to resume audio context:", err));
-  };
-
-  // Waiting on a click: hold a plain black field so the intro is not already
-  // playing behind the prompt.
-  if (!started) {
-    return (
-      <div
-        onClick={handleInteraction}
-        className="fixed inset-0 cursor-pointer"
-        style={{ zIndex: 200, background: colors.bg }}
-      >
-        {showOverlay && (
-          <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center z-[210] transition-all duration-300">
-            <div
-              className="backdrop-blur-lg px-8 py-6 rounded-2xl flex flex-col items-center gap-4 shadow-2xl animate-pulse"
-              style={{ background: withAlpha(colors.bgElevated, 0.9), border: `1px solid ${withAlpha(colors.accent, 0.3)}` }}
-            >
-              <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: withAlpha(colors.accent, 0.25), color: colors.text }}>
-                {/* Simple audio wave SVG icon */}
-                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
-                </svg>
-              </div>
-              <div className="text-center">
-                <h3 className="font-semibold text-lg" style={{ color: colors.text }}>Onion TV</h3>
-                <p className="text-xs mt-1" style={{ color: withAlpha(colors.text, 0.7) }}>Click anywhere to play with sound</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return useWordmark ? <SplashConstruct onDone={onDone} /> : <SplashWheel onDone={onDone} />;
 }

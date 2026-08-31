@@ -29,18 +29,10 @@ main.tsx → StrictMode → BrowserRouter → App
         ↓
 App renders <SplashIntro> (showSplash = true) OVER the routed page
         ↓
-SplashIntro probes autoplay permission
+SplashIntro tries for sound, and never waits on it:
+     AudioContext running    → schedule the soundtrack
+     AudioContext suspended  → run silently, no prompt
         ↓
-   ┌────┴─────────────────────────────┐
-   │                                  │
-AudioContext running            AudioContext suspended
-   │                                  │
-play sound + start timeline      show "Click anywhere to play with sound"
-   │                                  │  ← user clicks
-   │                                  ↓
-   │                            play sound + start timeline
-   └────────────┬─────────────────────┘
-                ↓
    SplashIntro picks a variant by viewport width (once, at mount):
      >= 768px  → SplashConstruct (dots → anchors → outlines → solid wordmark)
      <  768px  → SplashWheel, below
