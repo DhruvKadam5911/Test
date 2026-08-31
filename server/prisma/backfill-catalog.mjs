@@ -26,11 +26,14 @@ const PAGES_PER_CALL = 10;
 const PAGE_SIZE = 20;
 const MAX_REACHABLE = 500 * PAGE_SIZE;
 
-// Indian cinema first — it is what the catalog is short of — then English.
+// Indian cinema first — it is what the catalog was short of — then English,
+// then the languages whose shows people search for by their English names:
+// Spanish (Money Heist is La casa de papel to TMDB), Korean, Japanese.
 const LANGUAGES = [
   ["hi", "Hindi"], ["pa", "Punjabi"], ["ta", "Tamil"], ["te", "Telugu"],
   ["ml", "Malayalam"], ["kn", "Kannada"], ["bn", "Bengali"], ["mr", "Marathi"],
   ["gu", "Gujarati"], ["ur", "Urdu"], ["en", "English"],
+  ["es", "Spanish"], ["ko", "Korean"], ["ja", "Japanese"],
 ];
 
 const YEAR_TO = new Date().getFullYear();
@@ -48,6 +51,7 @@ const MAX_CALLS = Number(argOf("--max-calls", Infinity));
 // most popular of every year and language.
 const MAX_PAGES = Number(argOf("--max-pages", 500));
 const ONLY_MEDIA = argOf("--media", null);
+const ONLY_LANGUAGES = argOf("--languages", null)?.split(",");
 
 let calls = 0;
 let added = 0;
@@ -112,6 +116,7 @@ async function main() {
     if (ONLY_MEDIA && ONLY_MEDIA !== media) continue;
 
     for (const [code, name] of LANGUAGES) {
+      if (ONLY_LANGUAGES && !ONLY_LANGUAGES.includes(code)) continue;
       if (calls >= MAX_CALLS) break;
 
       const base = { media, language: code };
