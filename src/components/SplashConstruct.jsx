@@ -49,7 +49,7 @@ const WORDMARK_MAX_PX = 720;
 // Mark height as a fraction of the wordmark's width. The source raster carries
 // a lot of transparent padding around the bulb, so this runs high for the mark
 // to read as the larger element.
-const MARK_TO_WORDMARK = 0.5;
+const MARK_TO_WORDMARK = 0.6;
 
 function wordmarkWidth() {
   return Math.min(window.innerWidth * WORDMARK_VW, WORDMARK_MAX_PX);
