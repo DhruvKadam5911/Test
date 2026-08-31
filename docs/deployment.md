@@ -28,13 +28,12 @@ Browser ──► onion-tv.vercel.app        (static SPA)          ✅ live
             onion-tv-api.vercel.app    (serverless Express)  ✅ live
                  │ DATABASE_URL (pooled)
                  ▼
-              Neon Postgres                                  ❌ not provisioned
+              Neon Postgres                                  ✅ live
 ```
 
-**Current state:** both projects are deployed and wired to each other. `VITE_API_URL`,
-`CORS_ORIGINS` and `JWT_SECRET` are set. The only thing missing is the database — until
-`DATABASE_URL` and `DIRECT_URL` are set on the API project, `/health` returns 500 and the site
-renders its "Couldn't load…" row.
+**Current state: fully deployed and serving.** `/health` returns ok, the catalog loads, and
+title deep links resolve. The Neon project is `ep-snowy-cake-a57ghoi3` in `us-east-2`; the
+schema is applied and the three seeded titles are in it.
 
 ---
 
@@ -81,12 +80,13 @@ Vite inlines `VITE_*` at build time, so **changing this requires a redeploy**, n
 
 ---
 
-## 4. Finishing the deploy
+## 4. The deploy, as performed
 
-Steps 3–5 below are already done. What remains is 1 and 2.
+All of this is done. It is recorded so it can be repeated for a second environment.
 
 1. **Create the Neon project** at [neon.tech](https://neon.tech) and copy both connection
-   strings (pooled and direct) from its dashboard.
+   strings from its dashboard. The direct host is the pooled host with `-pooler` removed —
+   `ep-x-y-pooler.region.aws.neon.tech` → `ep-x-y.region.aws.neon.tech`.
 
 2. **Apply the schema and seed the catalog**, from `server/`:
 
@@ -113,6 +113,9 @@ Steps 3–5 below are already done. What remains is 1 and 2.
 
    Then redeploy so the function picks them up: `npx vercel deploy --prod --yes`.
 
+   Setting an env var does **not** affect the running deployment — Vercel bakes environment
+   into the build. Skipping the redeploy leaves the API failing exactly as before.
+
 4. ~~Deploy the frontend with `VITE_API_URL`~~ — done. Note Vite inlines the value at build
    time, so pointing at a different API means a rebuild, not just an env change.
 
@@ -122,6 +125,10 @@ Steps 3–5 below are already done. What remains is 1 and 2.
 ---
 
 ## 5. Verifying a deploy
+
+Last verified 2026-08-31 against the live deployment: `/health` ok, `/titles/trending` and
+`/titles?limit=100` both 200 with 3 titles, the home page renders the hero and 7 cards with no
+error row, and `/watch/:id` resolves on a cold deep link.
 
 ```bash
 curl -s https://<api-domain>/health
