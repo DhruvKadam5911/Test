@@ -95,11 +95,15 @@ function significantWords(query) {
   return significant.length ? significant : words;
 }
 
-/** How wrong a word of this length is allowed to be. */
+/**
+ * How wrong a word of this length is allowed to be. Kept tight: at two edits a
+ * six-letter word reaches most of the alphabet — "sholey" matched "Stolen" as
+ * readily as "Sholay", and buried the film someone was looking for.
+ */
 function tolerance(length) {
   if (length <= 3) return 0;
-  if (length <= 5) return 1;
-  if (length <= 8) return 2;
+  if (length <= 6) return 1;
+  if (length <= 9) return 2;
   return 3;
 }
 
@@ -166,14 +170,28 @@ export function scoreTitle(query, candidate) {
     // ranked "Carry-On" above "Carry On Jatta": both scored as partial matches,
     // and the shorter title won on the length penalty.
     const titleWords = title.split(" ");
-    const matches = (w) => {
-      if (titleWords.some((t) => t.startsWith(w))) return true;
+    // 0 when the word is there as typed, the number of corrections needed when
+    // it is not, null when it is not there at all.
+    const cost = (w) => {
+      if (titleWords.some((t) => t.startsWith(w))) return 0;
       const max = tolerance(w.length);
-      return max > 0 && titleWords.some((t) => editDistance(w, t, max) <= max);
+      if (!max) return null;
+      let best = null;
+      for (const t of titleWords) {
+        const d = editDistance(w, t, max);
+        if (d <= max && (best === null || d < best)) best = d;
+      }
+      return best;
     };
+    const matches = (w) => cost(w) !== null;
 
-    if (query.split(" ").every(matches)) score = 520;
-    else {
+    const queryWords = query.split(" ");
+    const costs = queryWords.map(cost);
+    if (costs.every((c) => c !== null)) {
+      // Charge for the corrections, so a title that needed none is never
+      // ranked below one that needed two.
+      score = 520 - 60 * costs.reduce((a, b) => a + b, 0);
+    } else {
       // Partial credit, but only on words that carry meaning. Counting short
       // ones put "Godzilla Minus One" in the results for "carry on jatta",
       // because "one" starts with "on".
