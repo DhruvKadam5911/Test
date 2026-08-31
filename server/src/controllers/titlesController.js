@@ -1,5 +1,6 @@
 import prisma from "../config/db.js";
 import { resolvePlaybackUrl } from "../services/videoProvider.js";
+import { rankMatches } from "../services/titleSearch.js";
 
 // The card-shaped projection. ContentCard consumes /titles, /titles/trending and
 // /titles/search alike, so all three must select exactly this — diverging them
@@ -80,21 +81,22 @@ export async function searchTitles(req, res) {
       return res.status(200).json([]);
     }
 
-    const titles = await prisma.title.findMany({
-      where: {
-        OR: [
-          { title: { contains: query, mode: "insensitive" } },
-          { genre: { contains: query, mode: "insensitive" } },
-        ],
-      },
-      take: Math.min(Number(limit) || 40, MAX_LIMIT),
-      // Exact-ish matches first would need a raw query; recency is a reasonable
-      // stand-in and matches how the rest of the API orders.
-      orderBy: { createdAt: "desc" },
+    // Ranked in the service, which tolerates a misspelling — see
+    // services/titleSearch.js for why this is not a SQL LIKE.
+    const ids = await rankMatches(query, Math.min(Number(limit) || 40, MAX_LIMIT));
+    if (ids.length === 0) return res.status(200).json([]);
+
+    const rows = await prisma.title.findMany({
+      where: { id: { in: ids } },
       select: CARD_FIELDS,
     });
 
-    return res.status(200).json(titles);
+    // findMany returns rows in the database's order, not the ranking's, so the
+    // best match would otherwise land wherever Postgres felt like putting it.
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
+
+    return res.status(200).json(ordered);
   } catch (error) {
     console.error("searchTitles error:", error);
     return res.status(500).json({ error: "Failed to search titles." });

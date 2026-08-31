@@ -77,6 +77,21 @@ async function runTests() {
     }
     console.log(`✅ Search for "${term}" returned ${found.length} result(s), including the expected title.`);
 
+    // A misspelling has to work, or the catalog is only reachable by people who
+    // already know how to spell what they are looking for.
+    const longWord = firstTitle.title.split(" ").find((w) => w.length >= 5);
+    if (longWord) {
+      // Swap two adjacent letters — the most ordinary typo there is.
+      const typo = longWord.slice(0, 1) + longWord[2] + longWord[1] + longWord.slice(3);
+      const typoRes = await fetch(`${BASE_URL}/titles/search?q=${encodeURIComponent(typo)}`);
+      if (!typoRes.ok) throw new Error(`Fuzzy search failed with status: ${typoRes.status}`);
+      const fuzzy = await typoRes.json();
+      if (!fuzzy.some((t) => t.id === firstTitle.id)) {
+        throw new Error(`Misspelling "${typo}" did not find "${firstTitle.title}"`);
+      }
+      console.log(`✅ Misspelled "${typo}" still found "${firstTitle.title}".`);
+    }
+
     console.log("\nTesting GET /titles/genres ...");
     const genresRes = await fetch(`${BASE_URL}/titles/genres`);
     if (!genresRes.ok) throw new Error(`Genres failed with status: ${genresRes.status}`);

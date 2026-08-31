@@ -152,12 +152,29 @@ request — it would be carried by every one of up to 100 rows for the benefit o
 
 ### `GET /titles/search`
 
-Searches title and genre across the **whole** catalog, case-insensitively. Same card projection.
+Searches title and genre across the **whole** catalog, and forgives a misspelling. Same card
+projection, ordered best match first.
 
 | Query param | Notes |
 |-------------|-------|
 | `q` | Under two characters returns `[]` — a single letter would scan the catalog for nothing useful |
 | `limit` | Default 40, capped at 100 |
+
+Ranking lives in `services/titleSearch.js`, not in SQL. A `LIKE` only ever finds what the viewer
+spelled exactly, and "intersteller" or "crary jata" returned nothing at all. Postgres could do this
+with `pg_trgm`, but that needs an extension and a migration on the hosted database, which only the
+deployed API can reach; scoring in the API needs neither.
+
+Order of preference, highest first: exact title, prefix, word-boundary match, substring, every word
+present in any order, then corrections — trigram similarity against the title and against each run
+of words the query could have meant, then word-by-word edit distance. **An exact spelling always
+outranks a correction.** Edit distance counts a swap of neighbouring letters as one edit, not two,
+because that is most of what real typing gets wrong. Stopwords (`the`, `on`, `ka`, `part`…) are
+ignored when scoring partial matches — counting them put *Godzilla Minus One* in the results for
+"carry on jatta".
+
+Scoring runs over an in-memory index of `{id, title, genre, year}`, rebuilt on demand every ten
+minutes and capped at 30,000 rows. On a serverless instance that is roughly once per cold start.
 
 ### `GET /titles/genres`
 

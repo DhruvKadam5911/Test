@@ -94,6 +94,11 @@ Footer                               Footer
 
 The hero and all rows are **replaced**, not filtered in place, while searching.
 
+`Home` owns the search text and passes it to `AppNavbar` as a controlled value. It has to: the
+navbar renders inside the hero while browsing and outside it while searching, so the first
+keystroke moves it in the tree and React remounts it. With the text held in the navbar, that
+remount closed the box and threw the query away mid-word.
+
 ### Exits
 
 | Action | Goes to |

@@ -152,7 +152,7 @@ export default function OnionHome() {
 
       {isSearching ? (
         <>
-          <AppNavbar onSearchChange={setSearchQuery} />
+          <AppNavbar value={searchQuery} onSearchChange={setSearchQuery} />
           <div className="pt-8 pb-16 min-h-[70vh]">
             <div className="px-6 md:px-10 mb-4" style={{ color: colors.textMuted, fontSize: 14 }}>
               {searchLoading
@@ -189,7 +189,7 @@ export default function OnionHome() {
               <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(12,8,18,0.7) 0%, transparent 25%, transparent 60%, #0C0812 100%)" }} />
             </div>
 
-            <AppNavbar onSearchChange={setSearchQuery} />
+            <AppNavbar value={searchQuery} onSearchChange={setSearchQuery} />
 
             <div className="relative z-10 px-6 md:px-10 pb-12 pt-16 md:pt-28 max-w-7xl mx-auto w-full flex-1 flex flex-col justify-end">
 
