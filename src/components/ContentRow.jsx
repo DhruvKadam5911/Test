@@ -4,13 +4,20 @@ import { colors, bodyFont } from "../theme";
 import SmallRing from "./shared/SmallRing";
 import ContentCard, { CardSkeleton } from "./ContentCard";
 
-// The cards expand on hover and the scroller clips them — `overflow-x: auto`
-// forces `overflow-y` to `auto` too, there is no way to have one without the
-// other — so room has to be reserved on every side they grow into. Below is the
-// most of it, but the card also lifts as it scales, and 8px of padding-top left
-// its top edge shaved off. Devices without hover never expand a card, and that
-// reserved strip is then just dead space under every row — five rows of it is
-// most of a phone screen's worth of empty scrolling.
+/*
+ * The cards expand on hover and the scroller clips them — `overflow-x: auto`
+ * forces `overflow-y` to `auto` too, there is no way to have one without the
+ * other — so room has to be reserved on every side they grow into.
+ *
+ * Measured, not guessed: an expanded card reaches 32px above the static one and
+ * 96px below it. The padding is those numbers plus a little — the pop-out's
+ * meta line can wrap and take a few more — and the row's own
+ * bottom margin is nearly nothing, because the padding already separates the
+ * rows. Reserving 128px below and another 56px of margin left 184px of empty
+ * band between every pair of rows.
+ *
+ * Devices without hover never expand a card, so they get neither.
+ */
 const HOVER_CAPABLE =
   typeof window !== "undefined" && window.matchMedia
     ? window.matchMedia("(hover: hover)").matches
@@ -69,7 +76,7 @@ export default function ContentRow({ title, items, size = "md", rank = false, lo
   if (!loading && (!items || items.length === 0)) return null;
 
   return (
-    <div className="mb-14 group/row">
+    <div className={`group/row ${HOVER_CAPABLE ? "mb-1" : "mb-10"}`}>
       <div className="flex items-center gap-2 mb-3 px-6 md:px-10">
         <SmallRing />
         <h2 style={{ fontFamily: bodyFont, fontSize: 16, fontWeight: 700, color: colors.text, letterSpacing: 0.2 }}>{title}</h2>
@@ -102,7 +109,7 @@ export default function ContentRow({ title, items, size = "md", rank = false, lo
 
         <div
           ref={scrollerRef}
-          className={`flex gap-3.5 overflow-x-auto ${HOVER_CAPABLE ? "px-8 md:px-12 pt-10 pb-32" : "px-6 md:px-10 pt-2 pb-3"}`}
+          className={`flex gap-3.5 overflow-x-auto ${HOVER_CAPABLE ? "px-8 md:px-12 pt-9 pb-[104px]" : "px-6 md:px-10 pt-2 pb-3"}`}
           style={{ scrollbarWidth: "none" }}
         >
           {loading ? (
