@@ -42,6 +42,11 @@ const argOf = (name, fallback) => {
 };
 
 const MAX_CALLS = Number(argOf("--max-calls", Infinity));
+// Pages to take from any one query. English alone is 558,000 films; drained in
+// full that is several hundred thousand rows — more than the database is sized
+// for, and hours of calls for titles nobody will scroll to. The cap keeps the
+// most popular of every year and language.
+const MAX_PAGES = Number(argOf("--max-pages", 500));
 const ONLY_MEDIA = argOf("--media", null);
 
 let calls = 0;
@@ -76,7 +81,7 @@ async function drain(label, params) {
   let fromPage = 1;
   let sliceAdded = 0;
 
-  while (fromPage <= 500 && calls < MAX_CALLS) {
+  while (fromPage <= MAX_PAGES && calls < MAX_CALLS) {
     const result = await refresh({ ...params, fromPage: String(fromPage), pages: String(PAGES_PER_CALL) });
     if (!result) break;
 
@@ -88,6 +93,7 @@ async function drain(label, params) {
 
     if (result.pagesRemaining === 0 || result.scanned === 0) break;
     fromPage = result.lastPage + 1;
+    if (fromPage > MAX_PAGES) break;
   }
 
   process.stdout.write("\n");
