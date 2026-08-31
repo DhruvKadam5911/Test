@@ -216,6 +216,10 @@ export default function SplashIntro({ onDone }) {
   // Audio Context and interaction state
   const [started, setStarted] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
+  // The single AudioContext for this mount. Browsers cap concurrent contexts
+  // (~6), so it is created once, reused by handleInteraction, and closed on
+  // unmount rather than left to leak.
+  const audioCtxRef = useRef(null);
 
   useEffect(() => {
     const img = new Image();
@@ -259,14 +263,26 @@ export default function SplashIntro({ onDone }) {
       setStarted(true);
       return;
     }
-    const tempCtx = new AudioContextClass();
-    if (tempCtx.state === "suspended") {
+
+    const ctx = new AudioContextClass();
+    audioCtxRef.current = ctx;
+
+    if (ctx.state === "suspended") {
+      // Autoplay is blocked — keep the context around so handleInteraction can
+      // resume() this one instead of opening a second.
       setShowOverlay(true);
-      tempCtx.close();
     } else {
       setStarted(true);
-      playIntroSound(tempCtx);
+      playIntroSound(ctx);
     }
+
+    // StrictMode double-invokes this in dev; tearing the context down here
+    // means the discarded pass is silenced immediately and only the surviving
+    // one is ever heard.
+    return () => {
+      audioCtxRef.current = null;
+      ctx.close().catch(() => {});
+    };
   }, []);
 
   // Visual Animation Timeline
@@ -295,13 +311,16 @@ export default function SplashIntro({ onDone }) {
   const handleInteraction = () => {
     if (started) return;
     setShowOverlay(false);
+    // The visual timeline runs regardless of whether audio can be resumed.
     setStarted(true);
 
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (AudioContextClass) {
-      const ctx = new AudioContextClass();
-      playIntroSound(ctx);
-    }
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+
+    ctx
+      .resume()
+      .then(() => playIntroSound(ctx))
+      .catch((err) => console.error("Failed to resume audio context:", err));
   };
 
   const scale = ICON_HEIGHT / SOURCE_H;

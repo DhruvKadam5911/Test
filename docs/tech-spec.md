@@ -191,7 +191,6 @@ Expect all five checks green, ending in `🎉 All tests passed successfully!`
 
 | # | Issue | Location | Impact |
 |---|-------|----------|--------|
-| T1 | Intro audio schedules twice in dev; a new `AudioContext` is created per mount and never closed on the non-suspended path | `SplashIntro.jsx` | Doubled sound in dev; browsers cap AudioContexts (~6) so repeated mounts can go silent |
 | T2 | CORS `allowedOrigins` is built, but the callback allows every origin unconditionally | `server.js` | The allowlist is decorative — fully permissive |
 | T3 | Hero description is a hardcoded string while truncated, ignoring `featuredTitle.description` | `Home.jsx` | Wrong copy for any title that isn't *Undertow* |
 | T4 | Player progress is a `setInterval` simulation, not bound to the `<video>` element | `WatchPage.jsx` | Scrubber and real playback disagree once video starts |
@@ -201,5 +200,7 @@ Expect all five checks green, ending in `🎉 All tests passed successfully!`
 | T8 | Search filters only the loaded pool (`?limit=100`), not the server | `Home.jsx` | Silently incomplete past 100 titles |
 | T9 | No auth on `/titles/:id/playback` despite the "(Requires Auth)" comment | `titlesController.js` | Stream URLs are public |
 | T10 | Mixed `.tsx`/`.jsx` with `tsc -b` in the build | root | Build can fail on TS errors in a mostly-JS codebase |
+
+**Resolved:** T1 (splash `AudioContext` lifecycle) — fixed 2026-08-31, see implementation-plan.md 1.1.
 
 Fixes are sequenced in [implementation-plan.md](implementation-plan.md); status lives in [tracker.md](tracker.md).

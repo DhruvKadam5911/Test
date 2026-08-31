@@ -11,13 +11,13 @@
 | | |
 |---|---|
 | **Branch** | `main` |
-| **Last commit** | `525fc27` — Add splash intro audio and a server API smoke test |
-| **Unpushed** | Yes — `525fc27` is local only |
+| **Last commit** | `87ccc80` — Add the project documentation suite |
+| **Unpushed** | Yes — everything since `125d7f8` is local only |
 | **Frontend** | ✅ Runs, Vite 8.2.0 on :5173 |
 | **Backend** | ✅ Runs on :5000, database healthy |
 | **Smoke test** | ✅ All 5 checks pass |
 | **Catalog** | 3 seeded titles |
-| **Current phase** | Phase 1 — Stabilise (not started) |
+| **Current phase** | Phase 1 — Stabilise (1.1 done; 1.2–1.7 open) |
 
 ---
 
@@ -30,7 +30,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Splash intro visuals | ✅ | 3.1s timeline |
-| Splash intro audio | 🟡 | Works, but fires twice in dev and leaks AudioContexts — plan 1.1 |
+| Splash intro audio | ✅ | One `AudioContext` per mount, closed on unmount; the click path resumes it rather than opening a second (plan 1.1, 2026-08-31) |
 | Autoplay-blocked overlay | ✅ | Click-to-enable |
 | Cinematic hero | 🟡 | Renders, but the truncated description is hardcoded *Undertow* copy — plan 1.4 |
 | Trending row | ✅ | With skeleton + retry |
@@ -102,7 +102,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 
 ## Technical debt
 
-Detailed in [tech-spec.md](tech-spec.md) §7 as T1–T10. Open: **all ten**.
+Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 resolved 2026-08-31**, nine open.
 
 ---
 
@@ -122,7 +122,8 @@ Detailed in [tech-spec.md](tech-spec.md) §7 as T1–T10. Open: **all ten**.
 
 | Date | Commit | Change |
 |------|--------|--------|
-| 2026-08-31 | — | Added the `docs/` suite: PRD, tech spec, app flow, design, schema, implementation plan, tracker, rules |
+| 2026-08-31 | — | Plan 1.1: splash `AudioContext` lifecycle fixed — single context per mount, closed on cleanup, resumed instead of re-created on the autoplay-blocked path |
+| 2026-08-31 | `87ccc80` | Added the `docs/` suite: PRD, tech spec, app flow, design, schema, implementation plan, tracker, rules |
 | 2026-08-31 | `525fc27` | Splash intro Web Audio soundtrack + autoplay overlay; `server/test-api.js` smoke test wired to `npm test` |
 | — | `125d7f8` | Application features, services, styling and icons |
 | — | `0f4f40b` | Netflix-style browsing UI; **sign-in system removed** |

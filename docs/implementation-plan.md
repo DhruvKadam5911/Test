@@ -26,19 +26,26 @@
 **Goal:** everything currently shipped behaves correctly. No new features.
 **Exit criteria:** clean console, no simulated behaviour presented as real, `npm test` green.
 
-### 1.1 Fix the splash audio lifecycle — *P0*
+### 1.1 Fix the splash audio lifecycle — DONE 2026-08-31
 `src/components/SplashIntro.jsx`
 
 React StrictMode double-invokes effects in dev, so the whole soundtrack schedules twice, and a
 fresh `AudioContext` is created on every mount without ever being closed on the non-suspended
 path. Browsers cap AudioContexts around six, so repeated mounts eventually go silent.
 
-- Guard the effect with a `useRef` so the sound schedules once per mount cycle.
-- Keep the context in a ref; `close()` it in the effect cleanup.
-- Reuse one context between the autoplay probe and `handleInteraction` instead of creating two.
+**What was done:** the context is held in `audioCtxRef`, and the effect returns a cleanup that
+closes it. Under StrictMode the discarded first pass is torn down within milliseconds, so only
+the surviving context is ever audible and nothing outlives the component. `handleInteraction`
+now calls `resume()` on that same context instead of constructing a second one.
 
-**Verify:** reload three times — the intro sounds identical each time; console shows one
-`[Audio Log] Initializing…` per load.
+**Verified:** instrumented `window.AudioContext` in the running page and forced remounts — every
+context created reached state `closed`, none leaked. Lint clean for this file; `npm run build`
+passes; splash and home render correctly.
+
+**Note:** the `[Audio Log]` lines still print twice per load in dev. That is StrictMode
+re-invoking the effect, not a second soundtrack — the first context is closed before it can be
+heard. Suppressing those logs would mean defeating StrictMode's second pass, which is not worth
+doing.
 
 ### 1.2 Bind the scrubber to the real video element — *P0*
 `src/pages/WatchPage.jsx`
