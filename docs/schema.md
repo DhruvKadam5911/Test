@@ -220,8 +220,16 @@ terms it is allowed under.
 | Route | What it does |
 |-------|--------------|
 | `GET /music/tracks` | What is charting in a region. `limit`, `region` (default `IN`) |
-| `GET /music/search?q=` | Songs, artists, albums. Under two characters returns `[]` |
+| `GET /music/search?q=` | Songs, ranked so the original comes first. Under two characters returns `[]` |
+| `GET /music/albums?q=` | Albums and playlists. Its own 100 units — playlists do not come back from a video search however wide it is asked to be, which was tested |
 | `GET /music/genres` | Counts, for a client that wants to group |
+
+**Putting the original first.** A YouTube search for a song returns the label's upload, a lyric
+video, three reuploads, a slowed-and-reverbed edit and a dance cover, in whatever order YouTube
+likes. There is no "official" flag in the API, so `rankByOriginality` reads the two things that do
+carry the signal: a VEVO or label channel scores up, a title saying "lyrics", "cover", "slowed" or
+"remix" scores down, and YouTube's own relevance stays as the tiebreak rather than being thrown
+away. Cached rows are ranked again on the way out, because the table returns them in insert order.
 
 **Quota is what shapes this.** The free allowance is 10,000 units a day and a search costs 100 of
 them — a hundred searches. So the charts come from `videos.list`, which costs 1 and can run on every

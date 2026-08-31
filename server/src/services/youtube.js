@@ -83,6 +83,66 @@ function toTrack(video) {
   };
 }
 
+/*
+ * Putting the original above everything that sounds like it.
+ *
+ * A YouTube search for a song returns the record label's upload, a lyric video,
+ * three reuploads, a slowed-and-reverbed edit and a dance cover, in whatever
+ * order YouTube likes. Someone searching "kesariya" wants the first of those.
+ *
+ * There is no "official" flag in the API, so this reads the two things that do
+ * carry the signal: who uploaded it, and what they called it.
+ */
+
+// Channels that hold the rights to what they upload. VEVO is matched by suffix.
+const LABELS = [
+  "t-series", "sony music india", "sony music south", "zee music company",
+  "saregama", "tips official", "tips films", "yrf", "speed records",
+  "times music", "aditya music", "lahari music", "divo", "think music india",
+  "muzik247", "wave music", "venus", "shemaroo", "eros now music",
+  "sony music entertainment", "universal music", "believe music",
+];
+
+// What a reupload, an edit or a cover tends to be called.
+const NOT_THE_ORIGINAL = [
+  "lyric", "lyrics", "cover", "karaoke", "instrumental", "slowed", "reverb",
+  "8d", "mashup", "remix", "dj ", "reaction", "review", "status", "ringtone",
+  "tutorial", "choreograph", "dance cover", "flute", "piano", "guitar",
+  "nightcore", "sped up", "loop", "1 hour", "bass boosted",
+];
+
+const OFFICIAL_WORDS = ["official", "full video", "full song", "video song", "audio song"];
+
+function originalityScore(track, index) {
+  const channel = (track.artist || "").toLowerCase();
+  const title = (track.title || "").toLowerCase();
+
+  let score = 0;
+  if (channel.endsWith("vevo")) score += 60;
+  if (LABELS.some((l) => channel.includes(l))) score += 50;
+  if (OFFICIAL_WORDS.some((w) => title.includes(w))) score += 25;
+
+  // One penalty, not one per word: a title can say "lyrics" twice.
+  if (NOT_THE_ORIGINAL.some((w) => title.includes(w))) score -= 45;
+
+  // A minute is too short for a song and usually means a clip; twenty is long
+  // enough to be a jukebox rather than the track someone asked for.
+  const seconds = track.durationSeconds ?? 0;
+  if (seconds && seconds < 60) score -= 30;
+  if (seconds > 1200) score -= 20;
+
+  // YouTube's own relevance, kept as the tiebreak rather than thrown away.
+  return score - index * 0.5;
+}
+
+/** Best first: the label's own upload before the lyric video that copies it. */
+export function rankByOriginality(tracks) {
+  return tracks
+    .map((track, index) => ({ track, score: originalityScore(track, index) }))
+    .sort((a, b) => b.score - a.score)
+    .map((r) => r.track);
+}
+
 /**
  * What is charting in a region right now. One unit, so this is what the page
  * can afford to load on every visit.
@@ -122,5 +182,33 @@ export async function searchMusic({ query, region = "IN", limit = 25 } = {}) {
     id: ids.join(","),
   });
 
-  return (detailed.items ?? []).map(toTrack);
+  return rankByOriginality((detailed.items ?? []).map(toTrack));
+}
+
+/**
+ * Albums and playlists. A separate call, and therefore another hundred units,
+ * because playlists do not come back from a video search however wide it is
+ * asked to be — tested, not assumed.
+ */
+export async function searchAlbums({ query, region = "IN", limit = 25 } = {}) {
+  const found = await get("search", {
+    part: "snippet",
+    q: query,
+    type: "playlist",
+    regionCode: region,
+    maxResults: Math.min(limit, 50),
+  });
+
+  return (found.items ?? [])
+    .map((item) => ({
+      source: "youtube-playlist",
+      sourceId: item.id?.playlistId,
+      title: item.snippet?.title || "Untitled",
+      artist: item.snippet?.channelTitle || "Unknown",
+      artworkUrl: thumbnail(item.snippet?.thumbnails),
+      durationSeconds: null,
+      genre: null,
+      audioUrl: null,
+    }))
+    .filter((p) => p.sourceId);
 }

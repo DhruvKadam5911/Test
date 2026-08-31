@@ -1,5 +1,5 @@
 import prisma from "../config/db.js";
-import { fetchChart, searchMusic, isYoutubeConfigured } from "../services/youtube.js";
+import { fetchChart, searchMusic, searchAlbums, rankByOriginality, isYoutubeConfigured } from "../services/youtube.js";
 
 /*
  * Music.
@@ -86,7 +86,9 @@ export async function searchTracks(req, res) {
       WHERE source = 'youtube' AND (title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`})
       ORDER BY "createdAt" DESC LIMIT ${limit}`;
 
-    if (cached.length >= CACHE_HIT_MIN) return res.status(200).json(cached);
+    // Ranked again on the way out: the rows come back in whatever order the
+    // table holds them, which throws away the ordering the search paid for.
+    if (cached.length >= CACHE_HIT_MIN) return res.status(200).json(rankByOriginality(cached));
 
     if (!isYoutubeConfigured()) {
       return res.status(503).json({ error: "YOUTUBE_API_KEY is not configured on this deployment." });
@@ -114,5 +116,36 @@ export async function getMusicGenres(req, res) {
     if (empty) return empty;
     console.error("getMusicGenres error:", error);
     return res.status(500).json({ error: "Failed to fetch music genres." });
+  }
+}
+
+// GET /music/albums?q=
+export async function searchMusicAlbums(req, res) {
+  const query = String(req.query.q || "").trim();
+  if (query.length < 2) return res.status(200).json([]);
+
+  const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
+
+  try {
+    const cached = await prisma.$queryRaw`
+      SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
+      FROM "Track"
+      WHERE source = 'youtube-playlist' AND (title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`})
+      ORDER BY "createdAt" DESC LIMIT ${limit}`;
+
+    if (cached.length >= CACHE_HIT_MIN) return res.status(200).json(cached);
+
+    if (!isYoutubeConfigured()) {
+      return res.status(503).json({ error: "YOUTUBE_API_KEY is not configured on this deployment." });
+    }
+
+    // Its own call, and therefore its own hundred units: playlists do not come
+    // back from a video search however wide it is asked to be.
+    const found = await searchAlbums({ query, region: req.query.region || "IN", limit });
+    await storeTracks(found);
+    return res.status(200).json(found);
+  } catch (error) {
+    console.error("searchMusicAlbums error:", error);
+    return res.status(500).json({ error: error.message || "Failed to search albums." });
   }
 }
