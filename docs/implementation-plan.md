@@ -79,24 +79,50 @@ naturally (*"This stream could not be loaded."*, `MediaError.code` 4); the reque
 forced by rejecting `/playback` fetches (*"Unable to connect to streaming server…"*). `alert`
 was stubbed during both and never called. No browser dialogs remain anywhere in `src/`.
 
-### 1.4 Fix the hero description — *P1*
-`src/pages/Home.jsx` — the truncated branch renders a hardcoded *Undertow* string. Truncate
-`featuredTitle.description` instead, and only show "Read more" when it actually overflows.
+### 1.4 Fix the hero description — DONE 2026-08-31
+`src/pages/Home.jsx`
 
-### 1.5 Make the CORS allowlist real — *P1*
-`server/server.js` — the `else` branch calls `callback(null, true)`, so `allowedOrigins` does
-nothing. Reject unknown origins outside development, or delete the list and document that CORS
-is intentionally open.
+**What was found:** removing the hardcoded string was not enough. `/titles/trending` returns the
+card projection, which deliberately has no `description`, so truncating
+`featuredTitle.description` would have replaced wrong copy with *no* copy.
 
-### 1.6 Surface pool-fetch failures — *P1*
-`src/pages/Home.jsx` — `fetchPool()` only logs on failure, so Originals and every genre row
-vanish silently. Give it the same error + retry treatment as trending.
+**What was done:** the hero fetches the featured title's own record from `/titles/:id` for its
+description, truncates at a word boundary past `DESCRIPTION_LIMIT`, and only renders the
+"Read more" toggle when something is actually hidden behind it.
 
-### 1.7 Housekeeping — *P2*
-- Remove the unused `import { argv } from "process"` from `server/test-api.js:1`.
-- Rewrite the root `README.md` — it is still the Vite template. Point it at `docs/`.
-- Decide `StudioPage.jsx`: route it, or delete it. Unreachable code rots.
-- Unify the stray `#7C3FC4` usages onto `colors.accent`.
+**Verified:** the page shows the seeded title's real 100-character description, no toggle, and
+the *Undertow* copy is gone from the DOM entirely.
+
+### 1.5 Make the CORS allowlist real — DONE 2026-08-31
+`server/server.js`
+
+Unlisted origins are warned about and allowed when `NODE_ENV !== "production"`, so local tooling
+on arbitrary ports keeps working, and refused by withholding the header otherwise —
+`callback(null, false)` rather than throwing, so a blocked origin does not become a 500.
+
+**Verified:** dev allows `https://evil.example.com` with a logged warning; production returns no
+`Access-Control-Allow-Origin` for it while still sending one for `https://onion.tv`.
+
+**Found while doing this:** `dotenv.config()` sat below the imports, and ESM evaluates imports
+first, so every service module reading `process.env` at its top level saw `undefined` — the
+whole `server/.env` provider surface was inert. Now loaded with `import "dotenv/config"` first.
+
+### 1.6 Surface pool-fetch failures — DONE 2026-08-31
+`src/pages/Home.jsx` — a failed pool fetch sets `errorPool` and renders one `ContentRow` error
+with Retry in place of Originals and the genre rows.
+
+**Verified:** with `?limit=100` forced to fail, the page shows *"Couldn't load the catalog — try
+again"* with a Retry button while the hero and Trending row — a different request — still
+render.
+
+### 1.7 Housekeeping — MOSTLY DONE 2026-08-31
+- Removed the unused `import { argv } from "process"` from `server/test-api.js`.
+- Rewrote the root `README.md`; it points at `docs/` and warns about the seed script.
+- Unified the stray `#7C3FC4` onto `colors.accent` via a new `withAlpha()` helper in
+  `theme.js`, so overlays can use the palette at partial opacity instead of a near-miss hex.
+  `index.html` keeps a literal — it cannot import the palette — but now the correct one.
+- **`StudioPage.jsx` is still undecided.** Routing or deleting a page is a product call, not a
+  housekeeping one; it stays open as decision D3 in tracker.md.
 
 ---
 

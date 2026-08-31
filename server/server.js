@@ -1,11 +1,14 @@
+// Must be the first import. The service modules pulled in below read
+// process.env at their top level, and ESM evaluates every import before this
+// module's body runs — so calling dotenv.config() down there left all of them
+// reading undefined, and every key in server/.env was silently ignored.
+import "dotenv/config";
+
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import prisma from "./src/config/db.js";
 
 import titlesRoutes from "./src/routes/titles.js";
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -19,14 +22,24 @@ const allowedOrigins = [
   "https://onion.tv",
 ];
 
+const isProduction = process.env.NODE_ENV === "production";
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(null, true); // Permissive CORS for dev API access
+      // Non-browser callers — curl, the smoke test, server-to-server — send no
+      // Origin at all, and CORS does not apply to them.
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      if (!isProduction) {
+        console.warn(`CORS: allowing unlisted origin ${origin} (development only)`);
+        return callback(null, true);
       }
+
+      // Refuse by withholding the header rather than throwing: the browser
+      // blocks the response, and the request does not become a 500.
+      return callback(null, false);
     },
     credentials: true,
   })

@@ -68,8 +68,13 @@ clears, Home is usually already populated.
 | `fetchTrending()` | `GET /titles/trending` | Hero (item `[0]`) + "Trending Now" row |
 | `fetchPool()` | `GET /titles?limit=100` | Onion Originals + all genre rows + search |
 
-Trending owns the only visible error state (`errorTrending`) and the only retry button.
-A failed pool fetch logs to console and leaves rows empty — see `tracker.md` H2.
+A third request follows once trending resolves: `GET /titles/{trending[0].id}` for the hero's
+description. The list projections deliberately omit `description` (see schema.md), so the hero
+has to read the featured title's own record. Failing it costs the description only.
+
+Both trending and the pool surface failures with a retry button; a failed pool fetch replaces
+Originals and the genre rows with one *"Couldn't load the catalog — try again"* row rather than
+emptying the page silently.
 
 ### Derived state (all `useMemo` over `pool`)
 

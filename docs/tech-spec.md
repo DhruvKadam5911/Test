@@ -126,6 +126,11 @@ See [design.md](design.md).
 
 ### Backend (`server/.env` — gitignored, template in `server/.env.example`)
 
+`server.js` loads these with `import "dotenv/config"` as its **first** import. That ordering is
+load-bearing: the service modules read `process.env` at their top level, and ESM evaluates every
+import before the importing module's body, so a `dotenv.config()` call in the body runs too late
+and leaves them all reading `undefined`.
+
 | Var | Required | Purpose |
 |-----|----------|---------|
 | `DATABASE_URL` | yes | PostgreSQL connection string |
@@ -188,6 +193,7 @@ Expect all five checks green, ending in `🎉 All tests passed successfully!`
 | Genre rows derived at runtime | New catalog genres need no code change | Home fetches `?limit=100` and groups client-side |
 | Single shared `PrismaClient` | Avoids connection-pool exhaustion | Always import `src/config/db.js`, never `new PrismaClient()` |
 | Design tokens in `theme.js` | One source of truth for brand colors | Do not hardcode hex values in components |
+| CORS allowlist enforced only outside development | Local tooling on arbitrary ports stays usable while production is closed | Unlisted origins are warned about and allowed when `NODE_ENV !== "production"`, and refused by withholding the header otherwise |
 | Splash gated on `App` state, not a route | Intro plays once per session, not per navigation | `showSplash` lives in `App.jsx` |
 | The splash exit is driven by `PickerWheel`'s `onSettled`, not a timer | The fade can never start before the wheel has landed | Changing `SPIN_MS` needs no change to the exit timings |
 | `thumbnailUrl` / `heroImageUrl` accept a CSS gradient *or* an image URL | Ships without real artwork | Always render them through `resolveBackground()` / `resolveBackgroundImage()` |
@@ -198,15 +204,14 @@ Expect all five checks green, ending in `🎉 All tests passed successfully!`
 
 | # | Issue | Location | Impact |
 |---|-------|----------|--------|
-| T2 | CORS `allowedOrigins` is built, but the callback allows every origin unconditionally | `server.js` | The allowlist is decorative — fully permissive |
-| T3 | Hero description is a hardcoded string while truncated, ignoring `featuredTitle.description` | `Home.jsx` | Wrong copy for any title that isn't *Undertow* |
-| T6 | Unused `import { argv } from "process"` | `server/test-api.js:1` | Lint noise |
-| T7 | Root `README.md` is the unmodified Vite template | `README.md` | Misleading first impression |
 | T8 | Search filters only the loaded pool (`?limit=100`), not the server | `Home.jsx` | Silently incomplete past 100 titles |
 | T9 | No auth on `/titles/:id/playback` despite the "(Requires Auth)" comment | `titlesController.js` | Stream URLs are public |
 | T10 | Mixed `.tsx`/`.jsx` with `tsc -b` in the build | root | Build can fail on TS errors in a mostly-JS codebase |
 
-**Resolved:** T1 (splash `AudioContext` lifecycle), T4 (simulated scrubber) and T5 (`alert()`
-for playback errors) — all fixed 2026-08-31, see implementation-plan.md 1.1–1.3.
+**Resolved 2026-08-31:** T1 (splash `AudioContext` lifecycle), T2 (decorative CORS allowlist),
+T3 (hardcoded hero description), T4 (simulated scrubber), T5 (`alert()` for playback errors),
+T6 (unused import), T7 (Vite-template README) — see implementation-plan.md 1.1–1.7. Also fixed
+along the way: `dotenv.config()` ran after the imports that read `process.env`, so **every key
+in `server/.env` was silently ignored** by the service modules.
 
 Fixes are sequenced in [implementation-plan.md](implementation-plan.md); status lives in [tracker.md](tracker.md).

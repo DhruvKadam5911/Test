@@ -143,6 +143,10 @@ Ordered `createdAt desc`. Response is an array of:
 
 No `description`, no `durationMinutes`, no `playbackUrl`, no `seasons`.
 
+**Consequence:** anything needing a description must fetch `/titles/:id`. Home's hero does
+exactly that for the featured title. Do not add `description` to this projection to save a
+request — it would be carried by every one of up to 100 rows for the benefit of one.
+
 - `500` → `{ "error": "Failed to fetch titles." }`
 
 ### `GET /titles/trending`
