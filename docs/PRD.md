@@ -40,7 +40,7 @@ but have no API or UI yet.
 - DRM (Widevine/FairPlay). Streams are currently unprotected URLs.
 - Social features — comments, ratings, sharing, profiles.
 - Mobile native apps. The web app is responsive; that is the whole mobile story.
-- Content moderation / user-generated uploads at scale (Studio page is a UI mock only).
+- Content moderation or user-generated uploads. There is no upload path in the product.
 
 ---
 
@@ -50,7 +50,7 @@ but have no API or UI yet.
 |---------|-------|-------------------|
 | **Viewer** (primary) | Browse, search, pick something, watch it | ✅ Yes |
 | **Returning viewer** | Resume where they left off, keep a watchlist | ❌ Schema exists, no API/UI |
-| **Creator / uploader** | Upload and manage their own titles | ⚠️ `StudioPage.jsx` is a non-functional mock, not routed |
+| **Creator / uploader** | Upload and manage their own titles | ❌ Not a persona this product serves — uploads are a non-goal (D3, decided 2026-08-31) |
 | **Operator / admin** | Add and edit catalog entries | ❌ Currently done by editing `server/prisma/seed.js` |
 
 ---
@@ -82,7 +82,7 @@ but have no API or UI yet.
 | My List | `MyListItem` model exists; no endpoints, no UI |
 | Real video provider | `videoProvider.js` throws for both `cloudflare` and `jwplayer` — TODOs only |
 | TMDB metadata enrichment | `tmdb.js` throws — TODOs only |
-| Creator Studio | `StudioPage.jsx` simulates an upload with a timer; not in the router |
+| ~~Creator Studio~~ | Removed. It simulated an upload with a timer against no backend; see D3 |
 
 ---
 
@@ -100,7 +100,6 @@ but have no API or UI yet.
 
 - Does Onion need accounts at all for v1, or is anonymous browsing the product?
 - Which video provider are we committing to? This unblocks G5 and real playback at scale.
-- Is Creator Studio a real product direction, or should `StudioPage.jsx` be deleted?
 - Where does catalog content come from — manual curation, TMDB import, or creator uploads?
 
 ---

@@ -18,7 +18,7 @@
 | **Backend** | ✅ Runs on :5000, database healthy |
 | **Smoke test** | ✅ All 5 checks pass |
 | **Catalog** | 3 seeded titles |
-| **Current phase** | Phase 1 — Stabilise (1.1–1.6 done; 1.7 all but the StudioPage decision) |
+| **Current phase** | Phase 1 — Stabilise, **complete** (1.1–1.7) |
 
 ---
 
@@ -50,7 +50,6 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | Playback error UX | ✅ | In-player message + Retry, covering both a failed request and a failed `<video>` element (plan 1.3, 2026-08-31) |
 | Pool-fetch error UX | ✅ | Replaces Originals and the genre rows with one error row + Retry (plan 1.6, 2026-08-31) |
 | 404 route | ⛔ | Unmatched paths render blank |
-| Creator Studio | 🗑️ | `StudioPage.jsx` — simulated upload, not routed |
 | Auth UI | ⛔ | Removed in `0f4f40b` |
 | Continue Watching | ⛔ | |
 | My List UI | ⛔ | |
@@ -96,7 +95,6 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H3 | The scrubber is real during playback, but falls back to a `setInterval` preview *before* a stream is fetched. That preview timer is gated on `!playbackUrl` — never let it run alongside the element |
 | H3b | Google's `gtv-videos-bucket` sample URLs in the seed data return **403** from some networks. If playback fails with `MEDIA_ELEMENT_ERROR`, check the network before suspecting the player |
 | H4 | `data/videos.js` is legacy — `videos`, `heroVideo`, `continueWatching`, `trending` are all empty. Only `gradients` is live. Do not read data from it |
-| H5 | `StudioPage.jsx` looks like a feature but is unrouted and simulated |
 | H6 | Setting `VIDEO_PROVIDER` in `.env` without implementing the branch breaks **all** playback |
 | H7 | Route order in `routes/titles.js` — `/trending` must stay above `/:id` |
 | H8 | `npm run build` runs `tsc -b`. TypeScript errors fail a build in a mostly-JSX codebase |
@@ -120,7 +118,6 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 |---|----------|--------|
 | D1 | Cloudflare Stream or JW Player? | All of Phase 2 |
 | D2 | Does v1 need accounts? | Phase 3, therefore Phase 4 |
-| D3 | Keep or delete Creator Studio? | Plan 1.7 |
 | D4 | Where does catalog content come from — manual, TMDB, or uploads? | Phase 5 |
 | D5 | Is Fraunces (loaded, unused) part of the type system or should it be dropped? | design.md |
 | D6 | Should a wordmark join the mark once the wheel lands, or is the mark beside "Onion" enough? | Splash branding |
@@ -131,6 +128,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | **D3 decided: Creator Studio deleted.** Uploads are a PRD non-goal, and the page simulated one against no endpoint, no storage and no auth. Routing it would have shipped a form that silently discards what people give it. Phase 1 is now complete |
 | 2026-08-31 | — | Found checking the live site on a phone: every row reserved 128px below its cards for the hover expansion, which touch devices never trigger. Gated on `(hover: hover)`, removing ~580px of dead scrolling |
 | 2026-08-31 | — | Two fixes found by checking the live site: the ident now starts on the click rather than after the ~600ms stream request, and `OnionMark` processes its raster once per page instead of once per mount, which was stretching the ident past 5s on production |
 | 2026-08-31 | — | `OnionMark` now lifts the bulb to its optical centre. The mark sits 8% low inside its own crop, so every lockup was centring an empty box and showing the mark below the text beside it |

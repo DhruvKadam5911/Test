@@ -144,5 +144,5 @@ describe partial work as finished.
 - Build what was asked. Do not silently widen or narrow it.
 - Found an unrelated problem? Add it to `tracker.md` and mention it. Do not fix it in the same commit.
 - Do not delete code that looks unused without checking `tracker.md` — some of it is documented
-  dead code awaiting a decision (`StudioPage.jsx`, `data/videos.js`, the Fraunces font).
+  dead code awaiting a decision (`data/videos.js`, the Fraunces font).
 - Do not add a dependency without noting it in `tech-spec.md` §2.

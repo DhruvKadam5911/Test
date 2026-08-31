@@ -15,7 +15,7 @@ Defined in `src/App.jsx`, mounted under `BrowserRouter` in `src/main.tsx`.
 | `/watch/:videoId` | `pages/WatchPage.jsx` | Title detail and playback |
 | `/wheel` | `pages/WheelDemo.jsx` | Demo surface for `PickerWheel`. Not linked from anywhere in the app — reachable only by typing the URL |
 
-**Not routed:** `pages/StudioPage.jsx` exists but is unreachable. There is no 404 route —
+**No 404 route** —
 any unmatched path renders an empty page below the splash.
 
 ---
@@ -244,4 +244,4 @@ These have database models but no route, endpoint, or screen. Do not assume they
 - Sign up / sign in / sign out (`User`)
 - Continue watching / resume position (`WatchProgress`)
 - Add to / remove from My List (`MyListItem`)
-- Creator upload (`StudioPage.jsx` simulates progress with a timer and is unrouted)
+- Creator upload — there is no upload path at all; see PRD non-goals

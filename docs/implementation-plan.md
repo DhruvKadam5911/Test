@@ -115,14 +115,16 @@ with Retry in place of Originals and the genre rows.
 again"* with a Retry button while the hero and Trending row — a different request — still
 render.
 
-### 1.7 Housekeeping — MOSTLY DONE 2026-08-31
+### 1.7 Housekeeping — DONE 2026-08-31
 - Removed the unused `import { argv } from "process"` from `server/test-api.js`.
 - Rewrote the root `README.md`; it points at `docs/` and warns about the seed script.
 - Unified the stray `#7C3FC4` onto `colors.accent` via a new `withAlpha()` helper in
   `theme.js`, so overlays can use the palette at partial opacity instead of a near-miss hex.
   `index.html` keeps a literal — it cannot import the palette — but now the correct one.
-- **`StudioPage.jsx` is still undecided.** Routing or deleting a page is a product call, not a
-  housekeeping one; it stays open as decision D3 in tracker.md.
+- **`StudioPage.jsx` deleted** (D3, decided 2026-08-31). It simulated an upload with a timer
+  against no endpoint, no storage and no auth, and uploads are an explicit PRD non-goal. Routing
+  it would have shipped a form that silently discards whatever someone gives it, which is worse
+  than not offering one. Recoverable from git if the product direction changes.
 
 ---
 

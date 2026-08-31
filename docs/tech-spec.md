@@ -83,7 +83,6 @@ See [design.md](design.md).
 │   ├── pages/
 │   │   ├── Home.jsx              Hero, rows, search
 │   │   ├── WatchPage.jsx         Player, metadata, episodes/recommendations overlay
-│   │   ├── StudioPage.jsx        Upload mock — NOT ROUTED
 │   │   └── WheelDemo.jsx         PickerWheel demo at /wheel — not linked from the app
 │   ├── components/
 │   │   ├── SplashIntro.jsx       Picks an intro by viewport; owns the AudioContext
