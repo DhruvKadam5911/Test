@@ -17,7 +17,7 @@
 | **Backend** | ✅ Runs on :5000, database healthy |
 | **Smoke test** | ✅ All 5 checks pass |
 | **Catalog** | 3 seeded titles |
-| **Current phase** | Phase 1 — Stabilise (1.1, 1.2 done; 1.3–1.7 open) |
+| **Current phase** | Phase 1 — Stabilise (1.1–1.3 done; 1.4–1.7 open) |
 
 ---
 
@@ -45,7 +45,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | More Like This | ✅ | Same-genre recommendations |
 | Video playback | ✅ | HTML5 `<video>`, MP4 only. Native controls off — the custom bar drives play/pause, seek, mute and fullscreen |
 | Scrubber | ✅ | Bound to the element via `timeupdate` / `loadedmetadata`; dragging seeks, and duration comes from the video (plan 1.2, 2026-08-31) |
-| Playback error UX | 🟡 | Browser `alert()` — plan 1.3 |
+| Playback error UX | ✅ | In-player message + Retry, covering both a failed request and a failed `<video>` element (plan 1.3, 2026-08-31) |
 | Pool-fetch error UX | ⛔ | Fails silently, rows just vanish — plan 1.6 |
 | 404 route | ⛔ | Unmatched paths render blank |
 | Creator Studio | 🗑️ | `StudioPage.jsx` — simulated upload, not routed |
@@ -108,7 +108,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 
 ## Technical debt
 
-Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 and T4 resolved 2026-08-31**, eight open.
+Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1, T4 and T5 resolved 2026-08-31**, seven open.
 
 ---
 
@@ -129,6 +129,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1 and T4 r
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-08-31 | — | Plan 1.3: playback failures render in the player with a Retry button instead of firing `alert()`, and a failing `<video>` element is now surfaced too rather than leaving a silent black box |
 | 2026-08-31 | — | Desktop/tablet intro replaced with a construction reveal: seed dots become the letterforms' anchor points, outlines draw between them over guides, then thicken into the solid wordmark and the mark joins. Wordmark is now hand-authored SVG geometry — Mr Bedfort and the old written-wordmark intro removed (recoverable from `3615d25`) |
 | 2026-08-31 | — | Plan 1.2: the transport bar is now the real control surface — scrubber, duration, play/pause, mute and fullscreen all drive and follow the `<video>` element; the simulation is confined to the pre-play poster |
 | 2026-08-31 | — | Splash breakpoint moved to 768px: tablets join desktop on the wordmark intro, leaving the wheel to phones |

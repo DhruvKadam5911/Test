@@ -31,6 +31,7 @@ export default function WatchPage() {
   const [error, setError] = useState(null);
 
   const [playbackUrl, setPlaybackUrl] = useState(null);
+  const [playbackError, setPlaybackError] = useState(null);
 
   const [recommendations, setRecommendations] = useState([]);
   const [liked, setLiked] = useState(false);
@@ -98,6 +99,7 @@ export default function WatchPage() {
 
   // Fetch Playback URL
   const fetchPlaybackUrl = async () => {
+    setPlaybackError(null);
     try {
       let endpoint = `/titles/${videoId}/playback`;
       if (isSeries && activeEpisode) {
@@ -107,8 +109,36 @@ export default function WatchPage() {
       setPlaybackUrl(data.playbackUrl);
       setIsPlaying(true);
     } catch (err) {
-      alert(err.message || "Failed to fetch video stream.");
+      console.error("fetchPlaybackUrl error:", err);
+      setPlaybackError(err.message || "Couldn't start playback.");
     }
+  };
+
+  // Clearing the URL first matters: retrying usually resolves to the same
+  // stream, and React would not remount the element for an unchanged src.
+  const retryPlayback = () => {
+    setPlaybackError(null);
+    setPlaybackUrl(null);
+    setIsPlaying(false);
+    fetchPlaybackUrl();
+  };
+
+  // The element failing is a separate failure from the request failing, and it
+  // is the one a viewer actually hits — an unreachable or unsupported stream
+  // otherwise leaves a silent black box.
+  const handleVideoError = (e) => {
+    const code = e.currentTarget.error?.code;
+    const message =
+      code === 2
+        ? "Lost connection to the stream."
+        : code === 3
+        ? "This stream is corrupted or in an unsupported format."
+        : code === 4
+        ? "This stream could not be loaded."
+        : "Playback failed.";
+    console.error("video element error:", code, e.currentTarget.error?.message);
+    setIsPlaying(false);
+    setPlaybackError(message);
   };
 
   // Reset playback position on episode change
@@ -116,6 +146,7 @@ export default function WatchPage() {
     setCurrentTimeSec(0);
     setVideoDurationSec(0);
     setPlaybackUrl(null);
+    setPlaybackError(null);
     setIsPlaying(false);
   }, [activeEpisodeIdx, selectedSeasonIdx, videoId]);
 
@@ -289,6 +320,7 @@ export default function WatchPage() {
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                   onEnded={() => setIsPlaying(false)}
+                  onError={handleVideoError}
                   onClick={togglePlay}
                 />
               ) : (
@@ -418,8 +450,29 @@ export default function WatchPage() {
                 </div>
               )}
 
+              {/* Playback failure — replaces the surface rather than firing a
+                  browser dialog, and offers the same retry affordance the
+                  content rows use. */}
+              {playbackError && (
+                <div
+                  className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 px-6 text-center"
+                  style={{ background: "rgba(12,8,18,0.88)" }}
+                >
+                  <span style={{ fontSize: 13.5, color: colors.textMuted, maxWidth: 360 }}>
+                    {playbackError}
+                  </span>
+                  <button
+                    onClick={retryPlayback}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold"
+                    style={{ background: colors.bgElevated, color: colors.text, border: `1px solid ${colors.ring}`, cursor: "pointer" }}
+                  >
+                    <RefreshCw size={13} /> Retry
+                  </button>
+                </div>
+              )}
+
               {/* Bottom Control Bar — shown over the poster and over the video */}
-              {(
+              {!playbackError && (
                 <div className="absolute bottom-0 left-0 right-0 p-3.5 flex items-center justify-between z-10" style={{ background: "linear-gradient(to top, rgba(12,8,18,0.95), transparent)" }}>
                   <div className="flex items-center gap-3 flex-1 mr-4 min-w-0">
                     <button onClick={togglePlay} style={{ background: "none", border: "none", cursor: "pointer" }}>

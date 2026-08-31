@@ -137,7 +137,18 @@ server: resolvePlaybackUrl(storedUrl)
 { playbackUrl }  →  <video src autoPlay> replaces the poster; the custom bar stays
 ```
 
-On failure the current code shows a browser `alert()` — see `tech-spec.md` T5.
+Two things can fail here, and both land on the same in-player error surface with a Retry
+button — never a browser dialog:
+
+| Failure | Message |
+|---------|---------|
+| The request fails | Whatever `api/client.js` produced, e.g. *"Unable to connect to streaming server…"* |
+| The `<video>` element fails | Mapped from `MediaError.code` — 2 lost connection, 3 corrupt/unsupported, 4 could not be loaded |
+
+The element failure matters as much as the request one: an unreachable or unsupported stream
+would otherwise leave a silent black box. Retry clears `playbackUrl` before refetching, because
+the same stream usually resolves to the same URL and React would not remount the element for an
+unchanged `src`.
 
 ### Overlay panel
 
@@ -203,7 +214,7 @@ must never run alongside the element or the two fight over `currentTimeSec`.
 | Any row | `loading` | `CardSkeleton` placeholders |
 | Search | zero matches | `No matches for "{query}"` |
 | WatchPage | fetch failed | Error message + retry |
-| WatchPage | playback failed | `alert()` (to be replaced) |
+| WatchPage | playback request or element failed | In-player message + Retry, matching `ContentRow`'s pattern |
 | API client | network failure | Normalised to *"Unable to connect to streaming server…"* |
 | Any unmatched route | — | Blank page (no 404 route) |
 

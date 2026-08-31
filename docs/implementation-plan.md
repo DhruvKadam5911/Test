@@ -65,9 +65,19 @@ with ffmpeg to exercise the element. Duration read 20s (not the catalog's 52-min
 the label tracked playback (`00:02 / 00:20` at `currentTime` 2.34), dragging to 75% moved the
 element to 15.34s, the play button paused and resumed it, and mute flipped `video.muted`.
 
-### 1.3 Replace `alert()` with in-UI error state — *P0*
-`src/pages/WatchPage.jsx` — playback fetch failure should render inside the player surface with
-a retry button, matching `ContentRow`'s existing error pattern.
+### 1.3 Replace `alert()` with in-UI error state — DONE 2026-08-31
+`src/pages/WatchPage.jsx`
+
+**What was done:** playback failures render inside the player surface with a Retry button,
+matching `ContentRow`'s pattern. Scope grew by one case: a failing `<video>` element was just as
+silent as the dialog was jarring, so `onError` is handled too and `MediaError.code` is mapped to
+a readable message. Retry clears `playbackUrl` before refetching — the same stream resolves to
+the same URL, and React would not remount the element for an unchanged `src`.
+
+**Verified:** the seeded sample URLs 403 on this network, which exercised the element path
+naturally (*"This stream could not be loaded."*, `MediaError.code` 4); the request path was
+forced by rejecting `/playback` fetches (*"Unable to connect to streaming server…"*). `alert`
+was stubbed during both and never called. No browser dialogs remain anywhere in `src/`.
 
 ### 1.4 Fix the hero description — *P1*
 `src/pages/Home.jsx` — the truncated branch renders a hardcoded *Undertow* string. Truncate
