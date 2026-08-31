@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Search, Bell, X } from "lucide-react";
+import { Search, Bell, X, Music2, ChevronDown } from "lucide-react";
 import { colors } from "../theme";
 import OnionLogo from "./shared/OnionLogo";
+import api from "../api/client";
 
 /**
  * The search box is controlled from outside when `value` is supplied.
@@ -28,7 +29,13 @@ export default function AppNavbar({ value, onSearchChange }) {
   const [manuallyOpen, setManuallyOpen] = useState(false);
   const searchOpen = manuallyOpen || searchValue.length > 0;
 
+  // The genre menu. Fetched once when it is first opened rather than on every
+  // page load — most visits never touch it.
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [genres, setGenres] = useState(null);
+
   const searchInputRef = useRef(null);
+  const categoriesRef = useRef(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60);
@@ -42,6 +49,28 @@ export default function AppNavbar({ value, onSearchChange }) {
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus();
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (!categoriesOpen || genres) return;
+    api
+      .get("/titles/genres")
+      .then(setGenres)
+      .catch((err) => {
+        console.error("fetchGenres error:", err);
+        setGenres([]);
+      });
+  }, [categoriesOpen, genres]);
+
+  // A menu that only closes on a second click on the trigger is a menu people
+  // leave open by accident.
+  useEffect(() => {
+    if (!categoriesOpen) return;
+    const onDown = (e) => {
+      if (!categoriesRef.current?.contains(e.target)) setCategoriesOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [categoriesOpen]);
 
   const closeSearch = () => {
     setManuallyOpen(false);
@@ -68,7 +97,48 @@ export default function AppNavbar({ value, onSearchChange }) {
         </Link>
         <div className="hidden md:flex items-center gap-7">
           <Link to="/" style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted, textDecoration: "none" }}>Browse</Link>
-          <Link to="/music" style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted, textDecoration: "none" }}>Music</Link>
+
+          <div ref={categoriesRef} style={{ position: "relative" }}>
+            <button
+              onClick={() => setCategoriesOpen((open) => !open)}
+              className="flex items-center gap-1"
+              style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}
+            >
+              Categories
+              <ChevronDown size={14} color={colors.textMuted} style={{ transform: categoriesOpen ? "rotate(180deg)" : "none", transition: "transform 200ms ease" }} />
+            </button>
+
+            {categoriesOpen && (
+              <div
+                className="absolute left-0 mt-3 rounded"
+                style={{ background: colors.bgElevated, border: `1px solid ${colors.ring}`, padding: 8, minWidth: 520, boxShadow: "0 18px 40px rgba(0,0,0,0.6)", zIndex: 50 }}
+              >
+                {genres === null ? (
+                  <div style={{ padding: "8px 10px", fontSize: 13, color: colors.textMuted }}>Loading…</div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-x-2">
+                    {genres.map(({ genre, count }) => (
+                      <Link
+                        key={genre}
+                        to={`/genre/${encodeURIComponent(genre)}`}
+                        onClick={() => setCategoriesOpen(false)}
+                        className="flex items-center justify-between rounded"
+                        style={{ fontSize: 13, color: colors.text, textDecoration: "none", padding: "7px 10px" }}
+                      >
+                        <span className="truncate">{genre}</span>
+                        <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 8 }}>{count.toLocaleString()}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Link to="/music" className="flex items-center gap-1.5" style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted, textDecoration: "none" }}>
+            <Music2 size={15} color={colors.textMuted} />
+            Music
+          </Link>
         </div>
       </div>
 

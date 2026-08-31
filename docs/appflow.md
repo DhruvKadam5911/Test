@@ -13,6 +13,7 @@ Defined in `src/App.jsx`, mounted under `BrowserRouter` in `src/main.tsx`.
 |------|-----------|---------|
 | `/` | `pages/Home.jsx` | Browse — hero, then four rows: trending, most viewed, most rated, recently released. Search replaces them |
 | `/music` | `pages/MusicPage.jsx` | The music player. Real `<audio>`, empty until tracks exist |
+| `/genre/:genre` | `pages/GenrePage.jsx` | One genre as a paged grid. Rows hold twenty; these genres hold thousands |
 | `/watch/:videoId` | `pages/WatchPage.jsx` | Title detail and playback |
 | `/wheel` | `pages/WheelDemo.jsx` | Demo surface for `PickerWheel`. Not linked from anywhere in the app — reachable only by typing the URL |
 

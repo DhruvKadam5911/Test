@@ -6,6 +6,7 @@ import RingMotif from "../components/shared/RingMotif";
 import OnionLogo from "../components/shared/OnionLogo";
 import AppNavbar from "../components/AppNavbar";
 import ContentRow from "../components/ContentRow";
+import GenreRow from "../components/GenreRow";
 import api from "../api/client";
 
 // Characters of the featured description shown before "Read more".
@@ -28,12 +29,18 @@ const ROWS = [
   { key: "recent", title: "Recently Released" },
 ];
 
+// How many genre rows follow them. All 29 was the old problem — a page of rows
+// nobody asked for — so this is the biggest handful, ordered by how much of the
+// catalog each holds, and each row loads only when it is scrolled towards.
+const GENRE_ROW_COUNT = 12;
+
 export default function OnionHome() {
   const navigate = useNavigate();
 
   const [trending, setTrending] = useState([]);
   // One entry per row in ROWS, each filled by its own request.
   const [rows, setRows] = useState({});
+  const [genres, setGenres] = useState([]);
 
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [errorTrending, setErrorTrending] = useState(null);
@@ -62,6 +69,15 @@ export default function OnionHome() {
     }
   };
 
+  const fetchGenres = async () => {
+    try {
+      const data = await api.get("/titles/genres");
+      setGenres(data.slice(0, GENRE_ROW_COUNT));
+    } catch (err) {
+      console.error("fetchGenres error:", err);
+    }
+  };
+
   const fetchRows = async () => {
     // Sorted server-side; ordering 148,000 titles in the browser is not an
     // option, and neither is downloading them.
@@ -81,6 +97,7 @@ export default function OnionHome() {
   useEffect(() => {
     fetchTrending();
     fetchRows();
+    fetchGenres();
   }, []);
 
   // Search runs against the whole catalog on the server. Filtering a loaded
@@ -219,7 +236,9 @@ export default function OnionHome() {
                     <span>{featuredTitle.genre}</span>
                     <span>·</span>
                     <span>{featuredTitle.releaseYear}</span>
-                    <span>·</span>
+                    {featuredTitle.rating && featuredTitle.rating !== "NR" && (
+                      <span>·</span>
+                    )}
                     {featuredTitle.rating && featuredTitle.rating !== "NR" && (
                       <span style={{ fontSize: 11, fontWeight: 700, color: colors.text, border: `1px solid ${colors.ring}`, padding: "1px 6px", borderRadius: 3, background: "rgba(255,255,255,0.06)" }}>
                         {featuredTitle.rating}
@@ -291,6 +310,10 @@ export default function OnionHome() {
                 size="md"
                 loading={!rows[key]}
               />
+            ))}
+
+            {genres.map(({ genre }) => (
+              <GenreRow key={genre} genre={genre} />
             ))}
           </div>
         </>
