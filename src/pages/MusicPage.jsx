@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
   Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp, Film,
+  ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
   ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
@@ -67,6 +68,9 @@ const STAGE_MS = 340;
 // How far down the stage the bar waits before appearing — roughly the point
 // where the stage's own controls have scrolled out of sight.
 const BAR_REVEAL_AT = 120;
+// How much of the queue sheet stays on screen when it is down — enough to show
+// the handle and the label, so it reads as something to pull.
+const SHEET_PEEK = 66;
 const RAIL_WIDTH = 232;
 const BAR_HEIGHT = 76;
 // A phone gets the rail as a bottom bar instead, the way music apps do it.
@@ -80,6 +84,32 @@ const MOODS = [
 ];
 
 const RECENT_KEY = "onion.music.recent";
+const SEARCHES_KEY = "onion.music.searches";
+
+// What the search screen offers before anything has been typed.
+const SHORTCUTS = [
+  ["New releases", Sparkles, "new songs 2026"],
+  ["Charts", TrendingUp, "top songs india"],
+  ["Moods and genres", Music, "lofi chill songs"],
+  ["Podcasts", Library, "podcast hindi"],
+];
+
+function readSearches() {
+  try {
+    return JSON.parse(localStorage.getItem(SEARCHES_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function rememberSearch(term) {
+  try {
+    const kept = readSearches().filter((t) => t.toLowerCase() !== term.toLowerCase());
+    localStorage.setItem(SEARCHES_KEY, JSON.stringify([term, ...kept].slice(0, 8)));
+  } catch {
+    // Storage is a convenience here; searching works without it.
+  }
+}
 
 function formatTime(seconds) {
   if (!Number.isFinite(seconds)) return "0:00";
@@ -145,10 +175,12 @@ export default function MusicPage() {
   // appears once they have been scrolled past. Always there when the stage is
   // closed.
   const [barVisible, setBarVisible] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [narrow, setNarrow] = useState(
     () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
   );
   const [mobileSearch, setMobileSearch] = useState(false);
+  const [searches, setSearches] = useState(() => readSearches());
 
   useEffect(() => {
     const q = window.matchMedia?.(NARROW);
@@ -233,6 +265,10 @@ export default function MusicPage() {
         if (searchMode === "albums") setAlbums(data);
         else setTracks(data);
         setError(data.length ? null : `Nothing found for "${q}".`);
+        if (data.length) {
+          rememberSearch(q);
+          setSearches(readSearches());
+        }
       } catch (err) {
         console.error("music search error:", err);
         if (!cancelled) setError(err.message);
@@ -441,6 +477,7 @@ export default function MusicPage() {
     }
     setStageIn(false);
     setBarVisible(true);
+    setSheetOpen(false);
     const timer = setTimeout(() => setStageMounted(false), STAGE_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -559,13 +596,50 @@ export default function MusicPage() {
     else setPlaying(false);
   };
 
-  const seek = (event) => {
+  /*
+   * Scrubbing.
+   *
+   * Pointer events rather than a click, so the position follows a finger or a
+   * held mouse instead of only landing where it is let go. `setPointerCapture`
+   * keeps the drag alive when it wanders off the 4px bar, which is most drags.
+   *
+   * The element is only told the new time when the drag ends: writing
+   * currentTime on every move makes the audio stutter as it re-seeks.
+   */
+  const [scrubbing, setScrubbing] = useState(null);
+
+  const ratioFrom = (event, element) => {
+    const r = element.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (event.clientX - r.left) / r.width));
+  };
+
+  const scrubStart = (event) => {
+    if (!duration) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setScrubbing(ratioFrom(event, event.currentTarget) * duration);
+  };
+
+  const scrubMove = (event) => {
+    if (scrubbing === null || !duration) return;
+    setScrubbing(ratioFrom(event, event.currentTarget) * duration);
+  };
+
+  const scrubEnd = (event) => {
+    if (scrubbing === null) return;
     const audio = audioRef.current;
-    if (!audio || !duration) return;
-    const r = event.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (event.clientX - r.left) / r.width));
-    audio.currentTime = ratio * duration;
-    setPosition(ratio * duration);
+    const to = duration ? ratioFrom(event, event.currentTarget) * duration : 0;
+    if (audio && duration) {
+      audio.currentTime = to;
+      setPosition(to);
+    }
+    setScrubbing(null);
+  };
+
+  const scrubHandlers = {
+    onPointerDown: scrubStart,
+    onPointerMove: scrubMove,
+    onPointerUp: scrubEnd,
+    onPointerCancel: scrubEnd,
   };
 
   const toggleMute = () => {
@@ -578,7 +652,9 @@ export default function MusicPage() {
   // Bound handlers read the current versions from here.
   actionsRef.current = { toggle, skip, resume };
 
-  const progress = duration ? (position / duration) * 100 : 0;
+  // While a finger is down the bar follows the finger, not the audio.
+  const shownPosition = scrubbing ?? position;
+  const progress = duration ? (shownPosition / duration) * 100 : 0;
   const list = searchActive && searchMode === "albums" ? albums : tracks;
 
   const railItem = (key, label, Icon) => (
@@ -718,6 +794,17 @@ export default function MusicPage() {
         }}
       />
 
+      <style>{`
+        @keyframes onion-search-in {
+          from { opacity: 0; transform: translateY(-6px) scaleX(0.94); }
+          to { opacity: 1; transform: none; }
+        }
+        @keyframes onion-fade-up {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: none; }
+        }
+      `}</style>
+
       {/* Rail */}
       <div
         className="hidden md:flex flex-col gap-1 fixed left-0 top-0 bottom-0 px-3 pt-4"
@@ -775,13 +862,35 @@ export default function MusicPage() {
           )}
           {(!narrow || mobileSearch) && (
             <div className="flex items-center gap-3 px-4 py-2.5 rounded w-full mx-auto"
-              style={{ background: "rgba(255,255,255,0.07)", border: `1px solid ${colors.ring}`, maxWidth: 620 }}
+              style={{
+                background: "rgba(255,255,255,0.07)", border: `1px solid ${colors.ring}`, maxWidth: 620,
+                // Grows into place when the magnifier is tapped, rather than
+                // appearing fully formed.
+                animation: mobileSearch ? "onion-search-in 220ms cubic-bezier(.32,.72,0,1)" : "none",
+              }}
             >
-              <Search size={17} color={colors.textMuted} />
+              {narrow && mobileSearch ? (
+                <button
+                  onClick={() => { setQuery(""); setMobileSearch(false); }}
+                  aria-label="Back"
+                  style={{ background: "none", border: "none", cursor: "pointer", display: "flex", color: colors.textMuted }}
+                >
+                  <ArrowLeft size={19} />
+                </button>
+              ) : (
+                <Search size={17} color={colors.textMuted} />
+              )}
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search songs, albums, artists"
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  const term = query.trim();
+                  if (term.length < 2) return;
+                  rememberSearch(term);
+                  setSearches(readSearches());
+                }}
+                placeholder="Type to search"
                 autoFocus={mobileSearch}
                 className="outline-none bg-transparent flex-1"
                 style={{ color: colors.text, fontSize: 14.5 }}
@@ -803,8 +912,50 @@ export default function MusicPage() {
           className="px-4 md:px-8 pt-5"
           style={{ paddingBottom: BAR_HEIGHT + (narrow ? NAV_HEIGHT : 0) + 40 }}
         >
+          {/* The search screen. What a music app shows once the field is open
+              and still empty: what was looked for before, and a way in without
+              typing at all. */}
+          {mobileSearch && !searchActive && (
+            <div style={{ animation: "onion-fade-up 260ms cubic-bezier(.32,.72,0,1)" }}>
+              {searches.length > 0 && (
+                <>
+                  <div style={{ fontSize: 13, color: colors.textMuted, marginBottom: 6 }}>Recent searches</div>
+                  {searches.map((term) => (
+                    <button
+                      key={term}
+                      onClick={() => setQuery(term)}
+                      className="w-full flex items-center gap-3 text-left"
+                      style={{ background: "none", border: "none", padding: "11px 2px", cursor: "pointer" }}
+                    >
+                      <Clock size={17} color={colors.textMuted} />
+                      <span style={{ flex: 1, fontSize: 14.5, color: colors.text }} className="truncate">{term}</span>
+                      <ArrowUpLeft size={16} color={colors.textMuted} />
+                    </button>
+                  ))}
+                </>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 mt-5">
+                {SHORTCUTS.map(([label, Icon, term]) => (
+                  <button
+                    key={label}
+                    onClick={() => setQuery(term)}
+                    className="flex flex-col items-start gap-3 rounded-lg"
+                    style={{
+                      background: "rgba(255,255,255,0.06)", border: `1px solid ${colors.ring}`,
+                      padding: "16px 14px", cursor: "pointer", textAlign: "left",
+                    }}
+                  >
+                    <Icon size={20} color={colors.accentLight} />
+                    <span style={{ fontSize: 14.5, fontWeight: 600, color: colors.text }}>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Moods, the way YouTube Music opens */}
-          {!searchActive && (
+          {!searchActive && !mobileSearch && (
             <div className="flex gap-2.5 overflow-x-auto pb-5" style={{ scrollbarWidth: "none" }}>
               {MOODS.map((mood) => (
                 <button
@@ -845,7 +996,7 @@ export default function MusicPage() {
             </div>
           )}
 
-          {view === "library" && !searchActive ? (
+          {mobileSearch && !searchActive ? null : view === "library" && !searchActive ? (
             recent.length ? (
               <>
                 {cardRow("Listen again", recent)}
@@ -897,7 +1048,7 @@ export default function MusicPage() {
             // reserving its height leaves a strip of nothing and cuts the
             // controls in half. Only the nav is always there; the bar overlays
             // the queue when it does appear, which is what it should do.
-            paddingBottom: narrow ? NAV_HEIGHT : BAR_HEIGHT,
+            paddingBottom: narrow ? NAV_HEIGHT + SHEET_PEEK : BAR_HEIGHT,
             transform: stageIn ? "translateY(0)" : "translateY(100%)",
             transition: `transform ${STAGE_MS}ms cubic-bezier(.32,.72,0,1)`,
             willChange: "transform",
@@ -953,11 +1104,30 @@ export default function MusicPage() {
                   {track?.artist || ""}
                 </div>
               </div>
-              <div onClick={seek} className="mt-4" style={{ height: 4, background: "rgba(255,255,255,0.16)", borderRadius: 2, cursor: "pointer" }}>
-                <div style={{ height: "100%", width: `${progress}%`, background: colors.text, borderRadius: 2 }} />
+              {/* The padding is the hit area: a 4px line is not something a
+                  thumb can catch, so the bar is drawn thin inside a 20px band
+                  that takes the touch. */}
+              <div
+                {...scrubHandlers}
+                className="mt-3"
+                style={{ padding: "8px 0", cursor: duration ? "pointer" : "default", touchAction: "none" }}
+              >
+                <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.16)", borderRadius: 2 }}>
+                  <div style={{ height: "100%", width: `${progress}%`, background: colors.text, borderRadius: 2 }} />
+                  <div
+                    style={{
+                      position: "absolute", top: "50%", left: `${progress}%`,
+                      width: 13, height: 13, marginTop: -6.5, marginLeft: -6.5,
+                      borderRadius: "50%", background: colors.text,
+                      opacity: duration ? 1 : 0,
+                      transform: scrubbing !== null ? "scale(1.3)" : "scale(1)",
+                      transition: "transform 140ms ease",
+                    }}
+                  />
+                </div>
               </div>
-              <div className="flex items-center justify-between mt-2" style={{ fontSize: 11.5, color: colors.textMuted }}>
-                <span>{formatTime(position)}</span>
+              <div className="flex items-center justify-between" style={{ fontSize: 11.5, color: colors.textMuted }}>
+                <span>{formatTime(shownPosition)}</span>
                 <span>{formatTime(duration)}</span>
               </div>
               <div className="flex items-center justify-between mt-5 px-2">
@@ -981,8 +1151,6 @@ export default function MusicPage() {
                   <Repeat size={22} />
                 </button>
               </div>
-              <div style={{ marginTop: 20 }}>{upNextHeading}</div>
-              {(queue.length ? queue : tracks || []).map(trackRow)}
             </div>
           ) : (
             <div onScroll={onStageScroll} className="relative flex-1 min-h-0 overflow-y-auto flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
@@ -1016,6 +1184,52 @@ export default function MusicPage() {
         </div>
       )}
 
+      {/* The queue, as a sheet that comes up over the player.
+          Pulled up by the handle or the label, pushed back down the same way.
+          It leaves the artwork and the controls where they are instead of
+          scrolling them off the top, which is what a music app does. */}
+      {stageMounted && narrow && (
+        <>
+          {sheetOpen && (
+            <div
+              onClick={() => setSheetOpen(false)}
+              className="fixed inset-0"
+              style={{ background: "rgba(0,0,0,0.45)", zIndex: 56 }}
+            />
+          )}
+          <div
+            className="fixed left-0 right-0 flex flex-col"
+            style={{
+              bottom: NAV_HEIGHT,
+              height: "72vh",
+              background: colors.bgElevated,
+              borderTopLeftRadius: 18,
+              borderTopRightRadius: 18,
+              borderTop: `1px solid ${colors.ring}`,
+              zIndex: 57,
+              transform: sheetOpen ? "translateY(0)" : `translateY(calc(100% - ${SHEET_PEEK}px))`,
+              transition: `transform ${STAGE_MS}ms cubic-bezier(.32,.72,0,1)`,
+            }}
+          >
+            <button
+              onClick={() => setSheetOpen((v) => !v)}
+              aria-label={sheetOpen ? "Hide up next" : "Show up next"}
+              className="w-full flex flex-col items-center gap-2"
+              style={{ background: "none", border: "none", cursor: "pointer", padding: "10px 0 12px" }}
+            >
+              <span style={{ width: 38, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.28)" }} />
+              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: colors.textMuted }}>
+                Up next
+              </span>
+            </button>
+
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-6">
+              {(queue.length ? queue : tracks || []).map(trackRow)}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* The bar. Stays across every view, the way a music app's does. */}
       <div
         className="fixed left-0 right-0 flex items-center gap-4 px-3 md:px-6"
@@ -1032,8 +1246,10 @@ export default function MusicPage() {
           zIndex: 58,
         }}
       >
-        <div className="absolute left-0 right-0 top-0" style={{ height: 3, background: "rgba(255,255,255,0.10)", cursor: "pointer" }} onClick={seek}>
-          <div style={{ height: "100%", width: `${progress}%`, background: colors.accent }} />
+        <div className="absolute left-0 right-0" {...scrubHandlers} style={{ top: -6, height: 12, paddingTop: 6, cursor: duration ? "pointer" : "default", touchAction: "none" }}>
+          <div style={{ height: 3, background: "rgba(255,255,255,0.10)" }}>
+            <div style={{ height: "100%", width: `${progress}%`, background: colors.accent }} />
+          </div>
         </div>
 
         <div className="flex items-center gap-3 flex-shrink-0">
