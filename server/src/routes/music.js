@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getTracks, searchTracks, searchMusicAlbums, getMusicGenres } from "../controllers/musicController.js";
+import { getTracks, searchTracks, searchMusicAlbums, relatedTracks, getMusicGenres } from "../controllers/musicController.js";
 
 const router = Router();
 
@@ -7,6 +7,7 @@ const router = Router();
 router.get("/genres", getMusicGenres);
 router.get("/search", searchTracks);
 router.get("/albums", searchMusicAlbums);
+router.get("/related", relatedTracks);
 router.get("/tracks", getTracks);
 
 export default router;

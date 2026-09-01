@@ -1,5 +1,5 @@
 import prisma from "../config/db.js";
-import { fetchChart, searchMusic, searchAlbums, rankByOriginality, isYoutubeConfigured } from "../services/youtube.js";
+import { fetchChart, searchMusic, searchAlbums, searchRelated, titleCore, rankByOriginality, isYoutubeConfigured } from "../services/youtube.js";
 
 /*
  * Music.
@@ -147,5 +147,40 @@ export async function searchMusicAlbums(req, res) {
   } catch (error) {
     console.error("searchMusicAlbums error:", error);
     return res.status(500).json({ error: error.message || "Failed to search albums." });
+  }
+}
+
+// GET /music/related?title=&artist=&exclude=
+export async function relatedTracks(req, res) {
+  const title = String(req.query.title || "").trim();
+  const artist = String(req.query.artist || "").trim();
+  const exclude = String(req.query.exclude || "").trim();
+
+  if (!artist && !title) return res.status(200).json([]);
+
+  const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
+  const seed = titleCore(title);
+
+  try {
+    // The catalog first, as everywhere else — a search costs a hundredth of the
+    // day's quota and this runs every time a track is picked.
+    const cached = await prisma.$queryRaw`
+      SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
+      FROM "Track"
+      WHERE source = 'youtube' AND artist ILIKE ${`%${artist}%`} AND "sourceId" <> ${exclude}
+      ORDER BY "createdAt" DESC LIMIT ${limit * 2}`;
+
+    // Other copies of the same song are the one thing this must not return.
+    const usable = rankByOriginality(cached).filter((t) => !seed || titleCore(t.title) !== seed);
+    if (usable.length >= CACHE_HIT_MIN) return res.status(200).json(usable.slice(0, limit));
+
+    if (!isYoutubeConfigured()) return res.status(200).json(usable);
+
+    const found = await searchRelated({ title, artist, exclude, region: req.query.region || "IN", limit });
+    await storeTracks(found);
+    return res.status(200).json(found);
+  } catch (error) {
+    console.error("relatedTracks error:", error);
+    return res.status(500).json({ error: error.message || "Failed to fetch related tracks." });
   }
 }

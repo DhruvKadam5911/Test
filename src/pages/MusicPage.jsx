@@ -63,6 +63,14 @@ function formatTime(seconds) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** "SonyMusicIndiaVEVO" is a channel name, not something to read in a heading. */
+function channelLabel(name) {
+  return String(name || "")
+    .replace(/vevo$/i, "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .trim();
+}
+
 function readRecent() {
   try {
     return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
@@ -103,6 +111,7 @@ export default function MusicPage() {
   const [tracks, setTracks] = useState(null);
   const [albums, setAlbums] = useState(null);
   const [recent, setRecent] = useState(() => readRecent());
+  const [forYou, setForYou] = useState([]);
   const [error, setError] = useState(null);
 
   const [query, setQuery] = useState("");
@@ -110,6 +119,9 @@ export default function MusicPage() {
   const [searchMode, setSearchMode] = useState("songs");
 
   const [nowPlaying, setNowPlaying] = useState(null);
+  // What plays next, which is not the same thing as what is on screen. Picking
+  // a song fills this with songs like it; browsing away does not disturb it.
+  const [queue, setQueue] = useState([]);
   const [autoplay, setAutoplay] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
@@ -140,17 +152,24 @@ export default function MusicPage() {
   const playerRef = useRef(null);
   const hostRef = useRef(null);
   const tracksRef = useRef(null);
+  const queueRef = useRef([]);
 
   const searchActive = query.trim().length >= 2;
   const track = nowPlaying;
   tracksRef.current = tracks;
+  queueRef.current = queue;
 
   useEffect(() => {
     api
       .get("/music/tracks?limit=50")
       .then((data) => {
         setTracks(data);
-        if (data.length) setNowPlaying(data[0]);
+        // Whatever was on last, rather than whatever is trending today —
+        // reopening the page and being handed the same chart song is not
+        // where anyone left off.
+        const last = readRecent()[0];
+        setNowPlaying(last || data[0] || null);
+        setQueue(last ? [last, ...data] : data);
       })
       .catch((err) => {
         console.error("fetchTracks error:", err);
@@ -158,6 +177,38 @@ export default function MusicPage() {
         setTracks([]);
       });
   }, []);
+
+  /*
+   * "Because you listened to…" — built from the most recent play.
+   *
+   * Only asked for when there is history, and the endpoint answers from the
+   * catalog when it can, so a second visit with the same taste costs nothing.
+   */
+  const seedTrack = recent[0];
+  const seedId = seedTrack?.sourceId;
+
+  useEffect(() => {
+    const seed = seedTrack;
+    if (!seed?.artist) return;
+
+    let cancelled = false;
+    api
+      .get(
+        `/music/related?title=${encodeURIComponent(seed.title || "")}` +
+          `&artist=${encodeURIComponent(seed.artist)}&exclude=${encodeURIComponent(seed.sourceId || "")}&limit=12`
+      )
+      .then((data) => {
+        if (!cancelled) setForYou(data);
+      })
+      .catch((err) => console.error("forYou error:", err));
+
+    return () => {
+      cancelled = true;
+    };
+    // Keyed on the id alone: `recent` is a new array on every read, and
+    // depending on it would refetch on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedId]);
 
   // Debounced: a search costs a hundredth of the day's YouTube quota.
   useEffect(() => {
@@ -197,7 +248,7 @@ export default function MusicPage() {
           onStateChange: (e) => {
             setPlaying(e.data === YT.PlayerState.PLAYING);
             if (e.data === YT.PlayerState.ENDED) {
-              const list = tracksRef.current;
+              const list = queueRef.current?.length ? queueRef.current : tracksRef.current;
               if (!list?.length) return;
               setAutoplay(true);
               setNowPlaying((playingNow) => {
@@ -284,9 +335,24 @@ export default function MusicPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const play = (t) => {
+  const play = async (t) => {
     setAutoplay(true);
     setNowPlaying(t);
+    // Start the queue with what is on, so Up next is never briefly empty.
+    setQueue([t]);
+
+    try {
+      const related = await api.get(
+        `/music/related?title=${encodeURIComponent(t.title || "")}` +
+          `&artist=${encodeURIComponent(t.artist || "")}&exclude=${encodeURIComponent(t.sourceId || "")}`
+      );
+      setQueue([t, ...related]);
+    } catch (err) {
+      // A failed recommendation should not stop the music: fall back to
+      // whatever list the song was picked from.
+      console.error("related error:", err);
+      setQueue([t, ...(tracksRef.current || []).filter((x) => x.sourceId !== t.sourceId)]);
+    }
   };
 
   const toggle = () => {
@@ -297,7 +363,7 @@ export default function MusicPage() {
   };
 
   const skip = (delta) => {
-    const list = tracks;
+    const list = queue.length ? queue : tracks;
     if (!list?.length) return;
     setAutoplay(true);
     if (shuffle && delta > 0) {
@@ -569,6 +635,8 @@ export default function MusicPage() {
           ) : (
             <>
               {!searchActive && recent.length > 0 && cardRow("Listen again", recent)}
+              {!searchActive && forYou.length > 0 &&
+                cardRow(`Because you listened to ${channelLabel(recent[0]?.artist)}`, forYou)}
               {!searchActive && cardRow(view === "explore" ? "New releases" : "Trending in India", list.slice(0, 12))}
               <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 600, marginBottom: 10 }}>
                 {searchActive ? "Results" : "Quick picks"}
@@ -676,7 +744,7 @@ export default function MusicPage() {
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", margin: "20px 0 8px" }}>
                 Up next
               </div>
-              {(tracks || []).map(trackRow)}
+              {(queue.length ? queue : tracks || []).map(trackRow)}
             </div>
           ) : (
             <div className="relative flex-1 min-h-0 overflow-y-auto flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
@@ -703,7 +771,7 @@ export default function MusicPage() {
                 <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", marginBottom: 12 }}>
                   Up next
                 </div>
-                {(tracks || []).map(trackRow)}
+                {(queue.length ? queue : tracks || []).map(trackRow)}
               </div>
             </div>
           )}

@@ -222,6 +222,7 @@ terms it is allowed under.
 | `GET /music/tracks` | What is charting in a region. `limit`, `region` (default `IN`) |
 | `GET /music/search?q=` | Songs, ranked so the original comes first. Under two characters returns `[]` |
 | `GET /music/albums?q=` | Albums and playlists. Its own 100 units — playlists do not come back from a video search however wide it is asked to be, which was tested |
+| `GET /music/related?title=&artist=&exclude=` | Songs like this one — not other copies of it |
 | `GET /music/genres` | Counts, for a client that wants to group |
 
 **Putting the original first.** A YouTube search for a song returns the label's upload, a lyric
@@ -230,6 +231,13 @@ likes. There is no "official" flag in the API, so `rankByOriginality` reads the 
 carry the signal: a VEVO or label channel scores up, a title saying "lyrics", "cover", "slowed" or
 "remix" scores down, and YouTube's own relevance stays as the tiebreak rather than being thrown
 away. Cached rows are ranked again on the way out, because the table returns them in insert order.
+
+**Recommendations, without a recommendations API.** YouTube withdrew
+`relatedToVideoId` in 2023, so "related" is built from what is left. The channel is the strongest
+signal available: a label or artist channel holds work by the same people in the same idiom. Then
+every version of the seed is dropped — the lyric video, the slowed edit, the audio reupload — by
+comparing `titleCore`, the part of a title before the first dash, pipe or bracket, which is where
+the credits start. Someone who just picked a song does not want it back five more times.
 
 **Quota is what shapes this.** The free allowance is 10,000 units a day and a search costs 100 of
 them — a hundred searches. So the charts come from `videos.list`, which costs 1 and can run on every

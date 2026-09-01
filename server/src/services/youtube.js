@@ -186,6 +186,47 @@ export async function searchMusic({ query, region = "IN", limit = 25 } = {}) {
 }
 
 /**
+ * The part of a title that names the song, before the credits start.
+ *
+ * "Kesariya - Brahmāstra | Ranbir Kapoor…" and "Kesariya (Lyrics) Full Song"
+ * are the same song; "Kesariya" is what they have in common. Everything after
+ * the first dash, pipe or bracket is cast, film and label.
+ */
+export function titleCore(title) {
+  return String(title || "")
+    .split(/[|\-–—([]/)[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/(full|video|song|official|audio|lyrical|new|hd|4k|8k)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Songs like this one, rather than other copies of it.
+ *
+ * YouTube withdrew `relatedToVideoId` from the API in 2023, so "related" has to
+ * be built from what is left. The channel is the strongest signal available:
+ * a label or an artist channel holds work by the same people in the same idiom.
+ *
+ * Then every version of the seed itself is dropped — the lyric video, the
+ * slowed edit, the audio-only reupload — because someone who just picked a song
+ * does not want it back five more times.
+ */
+export async function searchRelated({ title, artist, exclude, region = "IN", limit = 25 } = {}) {
+  const query = [artist, titleCore(title)].filter(Boolean).join(" ");
+  if (!query.trim()) return [];
+
+  const tracks = await searchMusic({ query: artist || query, region, limit: 50 });
+  const seed = titleCore(title);
+
+  return tracks
+    .filter((t) => t.sourceId !== exclude)
+    .filter((t) => !seed || titleCore(t.title) !== seed)
+    .slice(0, limit);
+}
+
+/**
  * Albums and playlists. A separate call, and therefore another hundred units,
  * because playlists do not come back from a video search however wide it is
  * asked to be — tested, not assumed.
