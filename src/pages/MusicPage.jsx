@@ -784,7 +784,11 @@ export default function MusicPage() {
           style={{
             background: colors.bg,
             zIndex: 55,
-            paddingBottom: narrow ? BAR_HEIGHT + NAV_HEIGHT : BAR_HEIGHT,
+            // On a phone the bar is hidden until the queue is scrolled to, so
+            // reserving its height leaves a strip of nothing and cuts the
+            // controls in half. Only the nav is always there; the bar overlays
+            // the queue when it does appear, which is what it should do.
+            paddingBottom: narrow ? NAV_HEIGHT : BAR_HEIGHT,
             transform: stageIn ? "translateY(0)" : "translateY(100%)",
             transition: `transform ${STAGE_MS}ms cubic-bezier(.32,.72,0,1)`,
             willChange: "transform",
