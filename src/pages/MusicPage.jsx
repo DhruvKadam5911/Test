@@ -272,25 +272,19 @@ export default function MusicPage() {
   }, [expanded, narrow]);
 
   useEffect(() => {
-    // Measured over the next few frames as well as now: the layout the slot
-    // sits in has not settled on the frame the switch is clicked, and a single
-    // read there leaves the player at its old size.
+    // Two reads: now, and once the layout has settled. The slot no longer moves
+    // while anything scrolls — only the queue does — so there is nothing to
+    // chase frame by frame, and chasing it was itself the visible drift.
     measure();
-    let settle = 0;
-    const chase = () => {
-      measure();
-      if (++settle < 12) requestAnimationFrame(chase);
-    };
-    requestAnimationFrame(chase);
+    const settle = requestAnimationFrame(measure);
 
     let frame = 0;
     const onChange = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(measure);
     };
-    // Capture, not bubble: the stage scrolls inside its own container, and a
-    // listener on `window` never hears that — which left the slot moving up the
-    // page while the player stayed where it was.
+    // Still in the capture phase: the browsing view scrolls under a docked
+    // player, and a listener on `window` misses a scroll inside a container.
     document.addEventListener("scroll", onChange, { passive: true, capture: true });
     window.addEventListener("resize", onChange);
 
@@ -301,6 +295,7 @@ export default function MusicPage() {
 
     return () => {
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(settle);
       document.removeEventListener("scroll", onChange, { capture: true });
       window.removeEventListener("resize", onChange);
       observer.disconnect();
@@ -652,7 +647,7 @@ export default function MusicPage() {
           {narrow ? (
             /* A phone: one column, the artwork in the middle of it, controls
                large enough for a thumb, and the queue underneath. */
-            <div className="relative flex-1 overflow-y-auto px-5 pb-6 flex flex-col">
+            <div className="relative flex-1 min-h-0 px-5 pb-2 flex flex-col">
               {stage === "song" && (
                 <div className="flex justify-center py-2">
                   <div
@@ -710,42 +705,53 @@ export default function MusicPage() {
                 </button>
               </div>
 
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", margin: "26px 0 8px" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", margin: "20px 0 8px" }}>
                 Up next
               </div>
-              {(tracks || []).map(trackRow)}
+              {/* Only the queue scrolls. Everything above it holds still, which
+                  is what keeps the player from being repositioned mid-scroll. */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                {(tracks || []).map(trackRow)}
+              </div>
             </div>
           ) : (
-            <div className="relative flex-1 flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6 overflow-y-auto">
+            <div className="relative flex-1 min-h-0 flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
               <div className="flex-1 flex flex-col items-center justify-start gap-5">
                 {stage === "song" && (
                   <div
                     className="rounded-lg"
                     style={{
-                      width: "min(420px, 82vw)", aspectRatio: "1 / 1",
+                      // Driven by the height available, not a fixed width. The
+                      // column does not scroll any more, so a size that assumes
+                      // a tall window gets cut off by the bar on a short one.
+                      height: "min(400px, 38vh)", aspectRatio: "1 / 1", width: "auto",
                       background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
                       boxShadow: "0 30px 70px rgba(0,0,0,0.6)",
                     }}
                   />
                 )}
-                {/* The slot the player flies into. Bigger in Video, but present
-                    and uncovered in both — that is the condition it plays under. */}
+                {/* The slot the player sits in. Bigger in Video, but present and
+                    uncovered in both — that is the condition it plays under, and
+                    never below YouTube's 200px floor. */}
                 <div
                   ref={slotRef}
                   className="rounded-lg"
                   style={{
-                    width: stage === "video" ? "min(880px, 92vw)" : "min(420px, 82vw)",
+                    height: stage === "video" ? "min(495px, 62vh)" : "min(236px, 26vh)",
+                    minHeight: 200,
+                    maxWidth: stage === "video" ? "min(880px, 92vw)" : "min(420px, 82vw)",
                     aspectRatio: "16 / 9",
+                    width: "auto",
                     background: "#000",
                   }}
                 />
               </div>
 
-              <div className="w-full lg:w-[340px] flex-shrink-0">
+              <div className="w-full lg:w-[340px] flex-shrink-0 flex flex-col min-h-0">
                 <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", marginBottom: 12 }}>
                   Up next
                 </div>
-                <div style={{ maxHeight: "50vh", overflowY: "auto" }}>
+                <div className="flex-1 min-h-0 overflow-y-auto">
                   {(tracks || []).map(trackRow)}
                 </div>
               </div>
