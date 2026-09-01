@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
@@ -136,7 +136,7 @@ export default function MusicPage() {
   const hostRef = useRef(null);
   const slotRef = useRef(null);
   const tracksRef = useRef(null);
-  const [box, setBox] = useState(null);
+  const boxRef = useRef(null);
 
   const searchActive = query.trim().length >= 2;
   const track = nowPlaying;
@@ -252,55 +252,61 @@ export default function MusicPage() {
     return () => clearInterval(timer);
   }, []);
 
-  /** Where the player sits: its slot on the stage, or the corner. */
-  const measure = useCallback(() => {
+  /*
+   * Where the player sits: its slot on the stage, or the corner.
+   *
+   * Written straight to the element's style rather than through React state,
+   * and called synchronously from the scroll event rather than in a
+   * requestAnimationFrame. State plus a frame of delay is what made the player
+   * lag a pixel or two behind the page while scrolling.
+   */
+  const place = useCallback(() => {
+    const el = boxRef.current;
+    if (!el) return;
+
     const slot = slotRef.current;
+    let top;
+    let left;
+    let width;
+    let height;
+
     if (expanded && slot) {
       const r = slot.getBoundingClientRect();
-      setBox({ top: r.top, left: r.left, width: r.width, height: r.height });
-      return;
+      [top, left, width, height] = [r.top, r.left, r.width, r.height];
+    } else {
+      width = Math.min(DOCK_WIDTH, window.innerWidth - DOCK_MARGIN * 2);
+      height = Math.max(DOCK_HEIGHT, Math.round((width * 9) / 16));
+      top = window.innerHeight - height - BAR_HEIGHT - (narrow ? NAV_HEIGHT : 0) - DOCK_MARGIN;
+      left = window.innerWidth - width - DOCK_MARGIN;
     }
 
-    const width = Math.min(DOCK_WIDTH, window.innerWidth - DOCK_MARGIN * 2);
-    const height = Math.max(DOCK_HEIGHT, Math.round((width * 9) / 16));
-    setBox({
-      top: window.innerHeight - height - BAR_HEIGHT - (narrow ? NAV_HEIGHT : 0) - DOCK_MARGIN,
-      left: window.innerWidth - width - DOCK_MARGIN,
-      width,
-      height,
-    });
+    el.style.top = `${top}px`;
+    el.style.left = `${left}px`;
+    el.style.width = `${width}px`;
+    el.style.height = `${height}px`;
   }, [expanded, narrow]);
 
-  useEffect(() => {
-    // Two reads: now, and once the layout has settled. The slot no longer moves
-    // while anything scrolls — only the queue does — so there is nothing to
-    // chase frame by frame, and chasing it was itself the visible drift.
-    measure();
-    const settle = requestAnimationFrame(measure);
+  useLayoutEffect(() => {
+    place();
+    // The layout has not settled on the frame a view changes; one more read
+    // after it has.
+    const settle = requestAnimationFrame(place);
 
-    let frame = 0;
-    const onChange = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(measure);
-    };
-    // Still in the capture phase: the browsing view scrolls under a docked
-    // player, and a listener on `window` misses a scroll inside a container.
-    document.addEventListener("scroll", onChange, { passive: true, capture: true });
-    window.addEventListener("resize", onChange);
+    // Capture, so a scroll inside any container is heard, and synchronous, so
+    // the move lands in the same frame the scroll paints.
+    document.addEventListener("scroll", place, { passive: true, capture: true });
+    window.addEventListener("resize", place);
 
-    // The slot also changes size without anything scrolling — the Song/Video
-    // switch, a rotation, the rail appearing at a wider window.
-    const observer = new ResizeObserver(onChange);
+    const observer = new ResizeObserver(place);
     if (slotRef.current) observer.observe(slotRef.current);
 
     return () => {
-      cancelAnimationFrame(frame);
       cancelAnimationFrame(settle);
-      document.removeEventListener("scroll", onChange, { capture: true });
-      window.removeEventListener("resize", onChange);
+      document.removeEventListener("scroll", place, { capture: true });
+      window.removeEventListener("resize", place);
       observer.disconnect();
     };
-  }, [measure, stage, tracks, view, expanded]);
+  }, [place, stage, tracks, view, expanded]);
 
   const play = (t) => {
     setAutoplay(true);
@@ -647,7 +653,7 @@ export default function MusicPage() {
           {narrow ? (
             /* A phone: one column, the artwork in the middle of it, controls
                large enough for a thumb, and the queue underneath. */
-            <div className="relative flex-1 min-h-0 px-5 pb-2 flex flex-col">
+            <div className="relative flex-1 min-h-0 overflow-y-auto px-5 pb-6 flex flex-col">
               {stage === "song" && (
                 <div className="flex justify-center py-2">
                   <div
@@ -715,23 +721,19 @@ export default function MusicPage() {
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", margin: "20px 0 8px" }}>
                 Up next
               </div>
-              {/* Only the queue scrolls. Everything above it holds still, which
-                  is what keeps the player from being repositioned mid-scroll. */}
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                {(tracks || []).map(trackRow)}
-              </div>
+              {(tracks || []).map(trackRow)}
             </div>
           ) : (
-            <div className="relative flex-1 min-h-0 flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
+            <div className="relative flex-1 min-h-0 overflow-y-auto flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
               <div className="flex-1 flex flex-col items-center justify-start gap-5">
                 {stage === "song" && (
                   <div
                     className="rounded-lg"
                     style={{
-                      // Driven by the height available, not a fixed width. The
-                      // column does not scroll any more, so a size that assumes
-                      // a tall window gets cut off by the bar on a short one.
-                      height: "min(400px, 38vh)", aspectRatio: "1 / 1", width: "auto",
+                      // Capped against the viewport's height as well as its
+                      // width, so a short window shows the artwork and the
+                      // player together rather than the artwork alone.
+                      height: "min(400px, 42vh)", aspectRatio: "1 / 1", width: "auto",
                       background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
                       boxShadow: "0 30px 70px rgba(0,0,0,0.6)",
                     }}
@@ -754,13 +756,11 @@ export default function MusicPage() {
                 />
               </div>
 
-              <div className="w-full lg:w-[340px] flex-shrink-0 flex flex-col min-h-0">
+              <div className="w-full lg:w-[340px] flex-shrink-0">
                 <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", marginBottom: 12 }}>
                   Up next
                 </div>
-                <div className="flex-1 min-h-0 overflow-y-auto">
-                  {(tracks || []).map(trackRow)}
-                </div>
+                {(tracks || []).map(trackRow)}
               </div>
             </div>
           )}
@@ -769,12 +769,13 @@ export default function MusicPage() {
 
       {/* The player. One element, always mounted, moved by animating its box. */}
       <div
+        ref={boxRef}
         style={{
           position: "fixed",
-          top: box?.top ?? -9999,
-          left: box?.left ?? -9999,
-          width: box?.width ?? DOCK_WIDTH,
-          height: box?.height ?? DOCK_HEIGHT,
+          top: -9999,
+          left: -9999,
+          width: DOCK_WIDTH,
+          height: DOCK_HEIGHT,
           zIndex: expanded ? 56 : 40,
           borderRadius: 10,
           overflow: "hidden",
