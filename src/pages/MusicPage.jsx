@@ -90,7 +90,17 @@ function youtubeEngine(player) {
   return {
     dataset: {},
     loop: false,
-    playbackRate: 1,
+    get playbackRate() {
+      return player.getPlaybackRate?.() || 1;
+    },
+    set playbackRate(rate) {
+      // Only the rates the player advertises are accepted; anything else is
+      // silently ignored by YouTube, which looks like a broken control.
+      player.setPlaybackRate?.(rate);
+    },
+    get playbackRates() {
+      return player.getAvailablePlaybackRates?.() || [1];
+    },
     play: () => Promise.resolve(player.playVideo?.()),
     pause: () => player.pauseVideo?.(),
     load: () => {},
@@ -248,6 +258,9 @@ export default function MusicPage() {
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [speed, setSpeed] = useState(1);
+  const [speedRates, setSpeedRates] = useState([1]);
+  const [speedOpen, setSpeedOpen] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
   const [liked, setLiked] = useState(null);
@@ -421,6 +434,10 @@ export default function MusicPage() {
     if (audio.dataset.sourceId !== String(source)) {
       audio.dataset.sourceId = String(source);
       audio.setSource(source, { autoplay });
+      // A rate set for one song should not follow the next one silently.
+      if (speed !== 1) {
+        audio.playbackRate = speed;
+      }
     }
     if (autoplay && audio.paused) {
       audio.play().catch((err) => {
@@ -463,6 +480,7 @@ export default function MusicPage() {
             // From here the rest of the file has something to talk to. The load
             // effect runs again on the next render and cues whatever is current.
             audioRef.current = youtubeEngine(playerRef.current);
+            setSpeedRates(audioRef.current.playbackRates);
             setEngineReady(true);
           },
           onStateChange: (e) => {
@@ -819,6 +837,21 @@ export default function MusicPage() {
     onPointerMove: scrubMove,
     onPointerUp: scrubEnd,
     onPointerCancel: scrubEnd,
+  };
+
+  /*
+   * Speed.
+   *
+   * YouTube accepts only the rates it advertises — 0.25 to 2 in quarters,
+   * usually — so the control offers those and nothing between. It also pitch
+   * corrects on its own and exposes no way to stop it, which is why there is a
+   * speed control here and not a tempo-and-pitch one.
+   */
+  const setPlaybackSpeed = (rate) => {
+    const audio = audioRef.current;
+    if (audio) audio.playbackRate = rate;
+    setSpeed(rate);
+    setSpeedOpen(false);
   };
 
   const setVolumeLevel = (level) => {
@@ -1571,6 +1604,50 @@ export default function MusicPage() {
               className="onion-volume"
             />
           </div>
+          {/* Speed. A menu rather than a slider, because the player will only
+              take the rates it advertises and a slider would imply otherwise. */}
+          <div className="relative flex">
+            <button
+              onClick={() => setSpeedOpen((v) => !v)}
+              aria-label="Playback speed"
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontFamily: bodyFont, fontSize: 12.5, fontWeight: 700,
+                color: speed === 1 ? colors.textMuted : colors.accentLight,
+                minWidth: 30,
+              }}
+            >
+              {speed}x
+            </button>
+
+            {speedOpen && (
+              <div
+                className="absolute rounded"
+                style={{
+                  bottom: "calc(100% + 10px)", right: 0, zIndex: 70,
+                  background: colors.bgElevated, border: `1px solid ${colors.ring}`,
+                  padding: 6, minWidth: 92, boxShadow: "0 16px 36px rgba(0,0,0,0.6)",
+                }}
+              >
+                {speedRates.map((rate) => (
+                  <button
+                    key={rate}
+                    onClick={() => setPlaybackSpeed(rate)}
+                    className="w-full text-left rounded"
+                    style={{
+                      background: rate === speed ? "rgba(255,255,255,0.10)" : "none",
+                      border: "none", cursor: "pointer", padding: "7px 10px",
+                      fontFamily: bodyFont, fontSize: 13,
+                      color: rate === speed ? colors.text : colors.textMuted,
+                    }}
+                  >
+                    {rate}x{rate === 1 ? "  ·  normal" : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button onClick={() => setRepeat((v) => !v)} aria-label="Repeat" className="hidden sm:flex" style={{ background: "none", border: "none", cursor: "pointer", color: repeat ? colors.accentLight : colors.textMuted }}>
             <Repeat size={17} />
           </button>
