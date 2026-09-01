@@ -67,6 +67,18 @@ function thumbnail(thumbnails = {}) {
   return (thumbnails.maxres || thumbnails.high || thumbnails.medium || thumbnails.default)?.url || null;
 }
 
+/**
+ * Whether the embed will actually play it.
+ *
+ * A video whose owner has turned embedding off still comes back from search and
+ * still has artwork and a title; it just shows "This video is unavailable" in
+ * the player. Dropping it here is the difference between a catalogue and a
+ * catalogue of disappointments.
+ */
+function isEmbeddable(video) {
+  return video?.status?.embeddable !== false;
+}
+
 function toTrack(video) {
   return {
     source: "youtube",
@@ -149,13 +161,13 @@ export function rankByOriginality(tracks) {
  */
 export async function fetchChart({ region = "IN", limit = 50 } = {}) {
   const data = await get("videos", {
-    part: "snippet,contentDetails",
+    part: "snippet,contentDetails,status",
     chart: "mostPopular",
     videoCategoryId: MUSIC_CATEGORY,
     regionCode: region,
     maxResults: Math.min(limit, 50),
   });
-  return (data.items ?? []).map(toTrack);
+  return (data.items ?? []).filter(isEmbeddable).map(toTrack);
 }
 
 /**
@@ -177,12 +189,16 @@ export async function searchMusic({ query, region = "IN", limit = 25 } = {}) {
   const ids = (found.items ?? []).map((i) => i.id?.videoId).filter(Boolean);
   if (!ids.length) return [];
 
+  // `status` comes free — the cost of videos.list is per call, not per part —
+  // and it is the difference between a result that plays and one that shows
+  // "This video is unavailable". Labels and VEVO block embedding often, and
+  // those are exactly the uploads the ranking puts at the top.
   const detailed = await get("videos", {
-    part: "snippet,contentDetails",
+    part: "snippet,contentDetails,status",
     id: ids.join(","),
   });
 
-  return rankByOriginality((detailed.items ?? []).map(toTrack));
+  return rankByOriginality((detailed.items ?? []).filter(isEmbeddable).map(toTrack));
 }
 
 /**

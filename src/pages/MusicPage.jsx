@@ -473,9 +473,21 @@ export default function MusicPage() {
             }
             if (e.data === state.ENDED) actionsRef.current.ended?.();
           },
-          onError: () => {
+          onError: (e) => {
             setBuffering(false);
-            setError("That one would not play here — the owner may have blocked embedding.");
+            /*
+             * 101 and 150 both mean the same thing: the owner has turned off
+             * embedding. Nothing to retry and nothing to fix — the only useful
+             * response is to move on, which is what a listener would do anyway.
+             * 2 is a malformed id and 5 an HTML5 failure; those stop.
+             */
+            const blocked = e?.data === 101 || e?.data === 150;
+            setError(
+              blocked
+                ? "That one cannot be played outside YouTube — skipping it."
+                : "That one would not play."
+            );
+            if (blocked) actionsRef.current.skip?.(1);
           },
         },
       });
