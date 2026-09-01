@@ -136,6 +136,14 @@ export default function MusicPage() {
   // instant it closes has nothing left to animate, so it would just vanish.
   const [stageMounted, setStageMounted] = useState(false);
   const [stageIn, setStageIn] = useState(false);
+  const [panel, setPanel] = useState("queue");
+  const [lyrics, setLyrics] = useState(null);
+  const [lyricsError, setLyricsError] = useState(null);
+  // The stage has its own controls, so the bar is not shown with it — it comes
+  // back on a scroll up, the gesture people already use for a hidden toolbar,
+  // and is always there when the stage is closed.
+  const [barVisible, setBarVisible] = useState(true);
+  const lastScroll = useRef(0);
   const [narrow, setNarrow] = useState(
     () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
   );
@@ -290,6 +298,74 @@ export default function MusicPage() {
   }, [track?.sourceId, autoplay, track]);
 
   /*
+   * Keyboard, on anything with one. Space for play, up and down for volume,
+   * left and right for the previous and next song.
+   *
+   * Ignored while typing, or the search box would pause the music on its first
+   * space. `preventDefault` on the arrows and space, since both scroll the page
+   * otherwise.
+   */
+  useEffect(() => {
+    const onKey = (e) => {
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+
+      const player = playerRef.current;
+      if (!player) return;
+
+      switch (e.key) {
+        case " ":
+        case "k":
+          e.preventDefault();
+          toggle();
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          player.setVolume?.(Math.min(100, (player.getVolume?.() ?? 100) + 10));
+          if (player.isMuted?.()) { player.unMute(); setMuted(false); }
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          player.setVolume?.(Math.max(0, (player.getVolume?.() ?? 100) - 10));
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          skip(1);
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          skip(-1);
+          break;
+        default:
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  /* Lyrics, fetched when the panel is opened rather than on every track. */
+  useEffect(() => {
+    if (panel !== "lyrics" || !track?.title) return;
+
+    let cancelled = false;
+    setLyrics(null);
+    setLyricsError(null);
+    api
+      .get(`/music/lyrics?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist || "")}`)
+      .then((data) => {
+        if (!cancelled) setLyrics(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setLyricsError(err.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [panel, track?.title, track?.artist]);
+
+  /*
    * Sliding the stage up and down.
    *
    * There has to be a gap between mounting the stage and moving it: applied in
@@ -301,11 +377,15 @@ export default function MusicPage() {
   useEffect(() => {
     if (expanded) {
       setStageMounted(true);
+      setBarVisible(false);
+      lastScroll.current = 0;
       const timer = setTimeout(() => setStageIn(true), 20);
       return () => clearTimeout(timer);
     }
 
     setStageIn(false);
+    setBarVisible(true);
+    lastScroll.current = 0;
     const timer = setTimeout(() => setStageMounted(false), STAGE_MS);
     return () => clearTimeout(timer);
   }, [expanded]);
@@ -334,6 +414,50 @@ export default function MusicPage() {
     }, 400);
     return () => clearInterval(timer);
   }, []);
+
+  const onStageScroll = (e) => {
+    const y = e.currentTarget.scrollTop;
+    const previous = lastScroll.current;
+    lastScroll.current = y;
+    // A few pixels of jitter should not flip it back and forth.
+    if (Math.abs(y - previous) < 6) return;
+    setBarVisible(y < previous || y <= 4);
+  };
+
+  const panelTabs = (
+    <div className="flex items-center gap-5" style={{ marginBottom: 10 }}>
+      {["queue", "lyrics"].map((key) => (
+        <button
+          key={key}
+          onClick={() => setPanel(key)}
+          style={{
+            fontFamily: bodyFont, fontSize: 12, fontWeight: 700, letterSpacing: "0.12em",
+            textTransform: "uppercase", background: "none", border: "none", cursor: "pointer",
+            padding: 0, color: panel === key ? colors.text : colors.textMuted,
+            borderBottom: panel === key ? `2px solid ${colors.accent}` : "2px solid transparent",
+            paddingBottom: 4,
+          }}
+        >
+          {key === "queue" ? "Up next" : "Lyrics"}
+        </button>
+      ))}
+    </div>
+  );
+
+  const lyricsPanel = lyricsError ? (
+    <div style={{ fontSize: 13, color: colors.textMuted, lineHeight: 1.7, maxWidth: 460 }}>{lyricsError}</div>
+  ) : lyrics ? (
+    <div>
+      <div style={{ fontSize: 14, color: colors.text, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{lyrics.text}</div>
+      {lyrics.partial && (
+        <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 14, lineHeight: 1.6 }}>
+          {lyrics.attribution}
+        </div>
+      )}
+    </div>
+  ) : (
+    <div style={{ fontSize: 13, color: colors.textMuted }}>Looking for the words…</div>
+  );
 
   const play = async (t) => {
     setAutoplay(true);
@@ -690,10 +814,13 @@ export default function MusicPage() {
           {narrow ? (
             /* A phone: one column, the artwork in the middle of it, controls
                large enough for a thumb, and the queue underneath. */
-            <div className="relative flex-1 min-h-0 overflow-y-auto px-5 pb-6 flex flex-col">
+            <div onScroll={onStageScroll} className="relative flex-1 min-h-0 overflow-y-auto px-5 pb-6 flex flex-col">
               <div className="flex justify-center py-3">
                 <div
-                  className="rounded-lg"
+                  onClick={toggle}
+                  role="button"
+                  aria-label={playing ? "Pause" : "Play"}
+                  className="rounded-lg cursor-pointer"
                   style={{
                     width: "min(300px, 74vw)", aspectRatio: "1 / 1",
                     background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
@@ -741,16 +868,17 @@ export default function MusicPage() {
                 </button>
               </div>
 
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", margin: "20px 0 8px" }}>
-                Up next
-              </div>
-              {(queue.length ? queue : tracks || []).map(trackRow)}
+              <div style={{ marginTop: 20 }}>{panelTabs}</div>
+              {panel === "lyrics" ? lyricsPanel : (queue.length ? queue : tracks || []).map(trackRow)}
             </div>
           ) : (
-            <div className="relative flex-1 min-h-0 overflow-y-auto flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
+            <div onScroll={onStageScroll} className="relative flex-1 min-h-0 overflow-y-auto flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
               <div className="flex-1 flex flex-col items-center justify-center gap-6">
                 <div
-                  className="rounded-lg"
+                  onClick={toggle}
+                  role="button"
+                  aria-label={playing ? "Pause" : "Play"}
+                  className="rounded-lg cursor-pointer"
                   style={{
                     height: "min(460px, 56vh)", aspectRatio: "1 / 1", width: "auto",
                     background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
@@ -768,10 +896,8 @@ export default function MusicPage() {
               </div>
 
               <div className="w-full lg:w-[340px] flex-shrink-0">
-                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", marginBottom: 12 }}>
-                  Up next
-                </div>
-                {(queue.length ? queue : tracks || []).map(trackRow)}
+                {panelTabs}
+                {panel === "lyrics" ? lyricsPanel : (queue.length ? queue : tracks || []).map(trackRow)}
               </div>
             </div>
           )}
@@ -805,6 +931,10 @@ export default function MusicPage() {
         className="fixed left-0 right-0 flex items-center gap-4 px-3 md:px-6"
         style={{
           bottom: narrow ? NAV_HEIGHT : 0,
+          // Out of the way while the stage is being scrolled through, back on
+          // the way up. The stage has its own controls, so nothing is lost.
+          transform: barVisible ? "translateY(0)" : `translateY(${BAR_HEIGHT + 8}px)`,
+          transition: "transform 260ms cubic-bezier(.32,.72,0,1)",
           height: BAR_HEIGHT,
           background: colors.bgElevated,
           borderTop: `1px solid ${colors.ring}`,

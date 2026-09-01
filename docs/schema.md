@@ -223,6 +223,7 @@ terms it is allowed under.
 | `GET /music/search?q=` | Songs, ranked so the original comes first. Under two characters returns `[]` |
 | `GET /music/albums?q=` | Albums and playlists. Its own 100 units — playlists do not come back from a video search however wide it is asked to be, which was tested |
 | `GET /music/related?title=&artist=&exclude=` | Songs like this one — not other copies of it |
+| `GET /music/lyrics?title=&artist=` | The lyric, as far as the free tier goes. 503 without a key |
 | `GET /music/genres` | Counts, for a client that wants to group |
 
 **Putting the original first.** A YouTube search for a song returns the label's upload, a lyric
@@ -231,6 +232,13 @@ likes. There is no "official" flag in the API, so `rankByOriginality` reads the 
 carry the signal: a VEVO or label channel scores up, a title saying "lyrics", "cover", "slowed" or
 "remix" scores down, and YouTube's own relevance stays as the tiebreak rather than being thrown
 away. Cached rows are ranked again on the way out, because the table returns them in insert order.
+
+**Lyrics need a key, and there is no way around that.** Genius's API returns metadata and a link
+but never the words; every service that does return them licenses them from the publishers, because
+the words are licensed work separate from the recording. Musixmatch has the free tier — the first
+30% with mandatory attribution — so `MUSIXMATCH_API_KEY` is what the endpoint wants, and it says so
+plainly rather than showing an empty panel. Scraping a lyrics site is the same mistake as ripping
+the audio, one layer up.
 
 **Recommendations, without a recommendations API.** YouTube withdrew
 `relatedToVideoId` in 2023, so "related" is built from what is left. The channel is the strongest

@@ -1,5 +1,6 @@
 import prisma from "../config/db.js";
 import { fetchChart, searchMusic, searchAlbums, searchRelated, titleCore, rankByOriginality, isYoutubeConfigured } from "../services/youtube.js";
+import { fetchLyrics, isLyricsConfigured } from "../services/lyrics.js";
 
 /*
  * Music.
@@ -182,5 +183,33 @@ export async function relatedTracks(req, res) {
   } catch (error) {
     console.error("relatedTracks error:", error);
     return res.status(500).json({ error: error.message || "Failed to fetch related tracks." });
+  }
+}
+
+// GET /music/lyrics?title=&artist=
+export async function getLyrics(req, res) {
+  const title = String(req.query.title || "").trim();
+  const artist = String(req.query.artist || "").trim();
+  if (!title) return res.status(400).json({ error: "A title is required." });
+
+  if (!isLyricsConfigured()) {
+    return res.status(503).json({
+      error: "Lyrics need a Musixmatch API key (MUSIXMATCH_API_KEY). No free source returns full lyrics without one.",
+    });
+  }
+
+  try {
+    // A YouTube title carries the film, the cast and the label; the song is the
+    // part before all of that, which is what a lyrics service can match on.
+    const lyrics = await fetchLyrics({
+      track: titleCore(title) || title,
+      artist: artist.replace(/vevo$/i, "").trim(),
+    });
+
+    if (!lyrics) return res.status(404).json({ error: "No lyrics found for this one." });
+    return res.status(200).json(lyrics);
+  } catch (error) {
+    console.error("getLyrics error:", error);
+    return res.status(500).json({ error: error.message || "Failed to fetch lyrics." });
   }
 }
