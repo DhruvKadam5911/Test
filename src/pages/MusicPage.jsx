@@ -664,7 +664,14 @@ export default function MusicPage() {
                 </div>
               )}
 
-              <div ref={slotRef} className="rounded-lg w-full" style={{ aspectRatio: "16 / 9", background: "#000" }} />
+              {/* Full-bleed, cancelling the column's padding: at 16:9 inside a
+                  375px screen's padded width the player comes out 189px tall,
+                  under YouTube's 200px floor. Edge to edge it clears it. */}
+              <div
+                ref={slotRef}
+                className="rounded-lg"
+                style={{ marginLeft: -20, marginRight: -20, aspectRatio: "16 / 9", minHeight: 200, background: "#000" }}
+              />
 
               <div className="mt-4">
                 <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 600, color: colors.text }} className="line-clamp-2">
