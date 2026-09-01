@@ -93,6 +93,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | H1 | **`prisma/seed.js` deletes all six tables before inserting.** Never run it against real data |
 | H2 | `server.js` loads env with `import "dotenv/config"` as its **first** import. Do not move it below the others — the service modules read `process.env` at import time, and every key in `server/.env` goes silently undefined if it loads late |
 | H3 | The scrubber is real during playback, but falls back to a `setInterval` preview *before* a stream is fetched. That preview timer is gated on `!playbackUrl` — never let it run alongside the element |
+| H3g | Music stops when a phone's screen goes off, and no amount of front-end work fixes it: an embedded YouTube player is suspended by the browser when the page is backgrounded, and YouTube gates background audio behind Premium. The Media Session metadata is in place for the day the audio is our own |
 | H3f | **Nothing in the catalog plays.** The three seeded demo titles were the only ones with a stream and were deleted on request; everything else is TMDB metadata. The player, the download link and the resolution label are all correct and all have nothing to act on |
 | H3e | Series imported from TMDB have no `Season` or `Episode` rows. Playback needs an `episodeId` it cannot supply, so a series card opens to a detail page with no episodes |
 | H3d | Titles imported in bulk have no `playbackUrl` and cannot play. That is the accepted cost of cataloguing other platforms' films, not a player bug — check the catalog before diagnosing a playback report |
@@ -132,6 +133,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-09-01 | — | Lock-screen controls via the Media Session API, and the bar's slide is a phone behaviour only — a wide screen has room for the bar and the stage at once. **Background playback is not possible with the YouTube embed**: browsers suspend an embedded player when the page is backgrounded and YouTube keeps background audio behind Premium. Own audio through an `<audio>` element is what survives a locked screen |
 | 2026-09-01 | — | Lyrics pulled back out. There is no free legal source — every service that returns the words licenses them from the publishers — so it needed a Musixmatch key to be anything but an empty panel, and it was not worth a tab until someone wants to add one |
 | 2026-09-01 | — | Music player gains keyboard control (space, arrows for volume and for the next song), artwork that plays and pauses on a click, and a bar that steps out of the stage's way and returns on a scroll up |
 | 2026-09-01 | — | Music recommends: picking a song fills the queue with songs like it rather than five more copies of it, the home page gains a "Because you listened to…" row, and reopening the page resumes the last track instead of handing back the day's top chart entry. Built without a recommendations API — YouTube withdrew `relatedToVideoId` in 2023 |

@@ -298,6 +298,59 @@ export default function MusicPage() {
   }, [track?.sourceId, autoplay, track]);
 
   /*
+   * Lock-screen and notification controls.
+   *
+   * The Media Session API is what puts the track, its artwork and a set of
+   * buttons on a phone's lock screen and in the notification shade.
+   *
+   * Worth being straight about what it does not do: it does not keep the audio
+   * going once the screen is off. An embedded YouTube player is suspended by
+   * the browser when the page is backgrounded, and YouTube itself keeps
+   * background playback behind Premium — no web page can override either.
+   * Playing our own audio through an <audio> element is what survives a locked
+   * screen, and this metadata is already in the right place for that day.
+   */
+  useEffect(() => {
+    const session = navigator.mediaSession;
+    if (!session || !track) return;
+
+    session.metadata = new window.MediaMetadata({
+      title: track.title || "",
+      artist: channelLabel(track.artist) || "",
+      album: "Onion Music",
+      artwork: track.artworkUrl
+        ? [{ src: track.artworkUrl, sizes: "512x512", type: "image/jpeg" }]
+        : [],
+    });
+
+    session.playbackState = playing ? "playing" : "paused";
+
+    const handlers = [
+      ["play", () => playerRef.current?.playVideo?.()],
+      ["pause", () => playerRef.current?.pauseVideo?.()],
+      ["previoustrack", () => skip(-1)],
+      ["nexttrack", () => skip(1)],
+    ];
+    for (const [action, handler] of handlers) {
+      try {
+        session.setActionHandler(action, handler);
+      } catch {
+        // Not every browser offers every action; the ones it does still work.
+      }
+    }
+
+    return () => {
+      for (const [action] of handlers) {
+        try {
+          session.setActionHandler(action, null);
+        } catch {
+          // Nothing to undo if it was never accepted.
+        }
+      }
+    };
+  });
+
+  /*
    * Keyboard, on anything with one. Space for play, up and down for volume,
    * left and right for the previous and next song.
    *
@@ -356,7 +409,7 @@ export default function MusicPage() {
   useEffect(() => {
     if (expanded) {
       setStageMounted(true);
-      setBarVisible(false);
+      setBarVisible(!narrow);
       const timer = setTimeout(() => setStageIn(true), 20);
       return () => clearTimeout(timer);
     }
@@ -400,6 +453,7 @@ export default function MusicPage() {
    * they leave — that is when the bar is worth having, and when it appears.
    */
   const onStageScroll = (e) => {
+    if (!narrow) return;
     setBarVisible(e.currentTarget.scrollTop > BAR_REVEAL_AT);
   };
 
@@ -881,10 +935,11 @@ export default function MusicPage() {
         className="fixed left-0 right-0 flex items-center gap-4 px-3 md:px-6"
         style={{
           bottom: narrow ? NAV_HEIGHT : 0,
-          // Out of the way while the stage is being scrolled through, back on
-          // the way up. The stage has its own controls, so nothing is lost.
-          transform: barVisible ? "translateY(0)" : `translateY(${BAR_HEIGHT + 8}px)`,
-          transition: "transform 260ms cubic-bezier(.32,.72,0,1)",
+          // Only a phone hides it. A wide screen has room for the bar and the
+          // stage at once, and a bar that slid away there would be movement for
+          // its own sake.
+          transform: !narrow || barVisible ? "translateY(0)" : `translateY(${BAR_HEIGHT + 8}px)`,
+          transition: narrow ? "transform 260ms cubic-bezier(.32,.72,0,1)" : "none",
           height: BAR_HEIGHT,
           background: colors.bgElevated,
           borderTop: `1px solid ${colors.ring}`,
