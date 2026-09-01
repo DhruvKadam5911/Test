@@ -43,6 +43,10 @@ const HOST_HEIGHT = 200;
 // asked to close.
 const STAGE_MS = 340;
 
+// How far down the stage the bar waits before appearing — roughly the point
+// where the stage's own controls have scrolled out of sight.
+const BAR_REVEAL_AT = 120;
+
 const RAIL_WIDTH = 232;
 const BAR_HEIGHT = 76;
 // A phone gets the rail as a bottom bar instead, the way music apps do it.
@@ -136,11 +140,10 @@ export default function MusicPage() {
   // instant it closes has nothing left to animate, so it would just vanish.
   const [stageMounted, setStageMounted] = useState(false);
   const [stageIn, setStageIn] = useState(false);
-  // The stage has its own controls, so the bar is not shown with it — it comes
-  // back on a scroll up, the gesture people already use for a hidden toolbar,
-  // and is always there when the stage is closed.
+  // The stage opens with its own controls in view, so the bar starts hidden and
+  // appears once they have been scrolled past. Always there when the stage is
+  // closed.
   const [barVisible, setBarVisible] = useState(true);
-  const lastScroll = useRef(0);
   const [narrow, setNarrow] = useState(
     () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
   );
@@ -354,14 +357,12 @@ export default function MusicPage() {
     if (expanded) {
       setStageMounted(true);
       setBarVisible(false);
-      lastScroll.current = 0;
       const timer = setTimeout(() => setStageIn(true), 20);
       return () => clearTimeout(timer);
     }
 
     setStageIn(false);
     setBarVisible(true);
-    lastScroll.current = 0;
     const timer = setTimeout(() => setStageMounted(false), STAGE_MS);
     return () => clearTimeout(timer);
   }, [expanded]);
@@ -391,13 +392,15 @@ export default function MusicPage() {
     return () => clearInterval(timer);
   }, []);
 
+  /*
+   * The bar follows the stage's own controls.
+   *
+   * At the top of the stage the big play button and the scrubber are on screen,
+   * so the bar would be a second copy of them. Scroll down into the queue and
+   * they leave — that is when the bar is worth having, and when it appears.
+   */
   const onStageScroll = (e) => {
-    const y = e.currentTarget.scrollTop;
-    const previous = lastScroll.current;
-    lastScroll.current = y;
-    // A few pixels of jitter should not flip it back and forth.
-    if (Math.abs(y - previous) < 6) return;
-    setBarVisible(y < previous || y <= 4);
+    setBarVisible(e.currentTarget.scrollTop > BAR_REVEAL_AT);
   };
 
   const upNextHeading = (
