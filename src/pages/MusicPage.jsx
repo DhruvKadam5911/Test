@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
@@ -19,48 +19,108 @@ import api from "../api/client";
  * browse. Opening the bar gives the full now-playing view.
  *
  * ---------------------------------------------------------------------------
- * Playback: a plain <audio> element, and why.
+ * Playback: YouTube's player behind a media-element interface.
  * ---------------------------------------------------------------------------
  *
- * This used to run on YouTube's IFrame player with the iframe parked off-screen.
- * That works on a desktop and stops dead on a phone the moment the screen locks,
- * and no amount of JavaScript fixes it:
+ * This was written for a plain <audio> element, which is the right shape: an
+ * element the page owns is the only thing that keeps playing when a phone's
+ * screen locks, and it takes Media Session metadata straight to the lock
+ * screen. All of that is still here.
  *
- *   - Android Chrome suspends media inside a cross-origin iframe when the page
- *     is hidden. The tab keeps living; the iframe does not get to keep playing.
- *   - iOS Safari (and every iOS browser, since they are all WebKit) pauses an
- *     embedded video on screen lock. Only a media element the page itself owns
- *     is allowed to continue.
- *   - YouTube deliberately gates audio-only background playback behind Premium,
- *     and its embedded player pauses itself on `visibilitychange`.
+ * What it does not have is bytes. Every track in the catalog comes from YouTube,
+ * which supplies metadata and no audio file, so `<audio>` had nothing to load
+ * and nothing played at all. The engine underneath is YouTube's IFrame player
+ * again, wrapped in `youtubeEngine()` so it answers the same handful of
+ * properties a media element does — paused, currentTime, duration, muted,
+ * play(), pause(). Everything above that line is unchanged.
  *
- * A media element the page owns is a different animal. An <audio> tag that is
- * already playing keeps playing when the screen goes off on both platforms, and
- * with Media Session metadata attached the OS puts real controls on the lock
- * screen. That is what this file does now.
+ * The costs, which are YouTube's rules rather than choices made here:
  *
- * The tradeoff is that the bytes have to come from somewhere we control:
- * `streamUrl()` below points at our own endpoint (see server/routes/musicStream.js).
- * Two things that endpoint MUST do or none of this works:
+ *   - The player is visible. Hiding any part of it is against the API terms and
+ *     gets keys revoked, so it sits in the stage rather than off-screen.
+ *   - It stops when a phone's screen goes off. A cross-origin iframe is
+ *     suspended by the browser when the page is hidden, and YouTube gates
+ *     background audio behind Premium.
  *
- *   1. Answer HTTP Range requests with 206 and a correct Content-Range. iOS
- *      opens with `Range: bytes=0-1` and refuses to play if it gets a 200 back.
- *   2. Send a real audio Content-Type (audio/mpeg, audio/mp4, audio/ogg).
+ * Both go away the day tracks carry a real `audioUrl`: swap `youtubeEngine`
+ * for an <audio> element against /music/stream/:id and nothing else changes.
  */
 
 const SEARCH_DEBOUNCE_MS = 500;
+const IFRAME_API = "https://www.youtube.com/iframe_api";
 
-// Where the bytes come from. A track may carry its own `streamUrl` from the
-// API — preferred, because it lets the backend hand out signed or CDN URLs
-// without this file knowing about it. Otherwise we fall back to the id route.
-// The API is its own deployment, so a relative path would ask the frontend's
-// own host for the bytes and get the SPA's index.html back.
-const STREAM_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/music/stream`;
-function streamUrl(track) {
-  if (!track) return "";
-  if (track.streamUrl) return track.streamUrl;
-  if (!track.sourceId) return "";
-  return `${STREAM_BASE}/${encodeURIComponent(track.sourceId)}`;
+/** Loads YouTube's IFrame API once, however many callers ask for it. */
+let apiPromise = null;
+function loadYoutubeApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (apiPromise) return apiPromise;
+
+  apiPromise = new Promise((resolve) => {
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.();
+      resolve(window.YT);
+    };
+    const script = document.createElement("script");
+    script.src = IFRAME_API;
+    document.head.appendChild(script);
+  });
+  return apiPromise;
+}
+
+/**
+ * A YouTube player wearing a media element's clothes.
+ *
+ * Only the surface the rest of this file already uses: the properties it reads,
+ * the two methods it calls, and `dataset` so the load effect can tell whether
+ * the source actually changed. Anything else a real element offers is not here,
+ * because nothing asks for it.
+ */
+function youtubeEngine(player) {
+  return {
+    dataset: {},
+    loop: false,
+    playbackRate: 1,
+    play: () => Promise.resolve(player.playVideo?.()),
+    pause: () => player.pauseVideo?.(),
+    load: () => {},
+    setSource(videoId, { autoplay }) {
+      if (autoplay) player.loadVideoById?.(videoId);
+      else player.cueVideoById?.(videoId);
+    },
+    get paused() {
+      return player.getPlayerState?.() !== window.YT?.PlayerState?.PLAYING;
+    },
+    get currentTime() {
+      return player.getCurrentTime?.() || 0;
+    },
+    set currentTime(to) {
+      player.seekTo?.(to, true);
+    },
+    get duration() {
+      return player.getDuration?.() || 0;
+    },
+    get muted() {
+      return Boolean(player.isMuted?.());
+    },
+    set muted(value) {
+      if (value) player.mute?.();
+      else player.unMute?.();
+    },
+    get volume() {
+      return (player.getVolume?.() ?? 100) / 100;
+    },
+    set volume(value) {
+      player.setVolume?.(Math.round(value * 100));
+    },
+  };
+}
+
+// What the engine is asked to load. A track that carries its own audio would
+// give a URL here; a YouTube one gives the video id, which is what its player
+// wants. Either way the load effect below only cares whether it changed.
+function sourceOf(track) {
+  return track?.streamUrl || track?.sourceId || "";
 }
 
 // How long the stage takes to slide, and how long it stays mounted after being
@@ -72,6 +132,12 @@ const BAR_REVEAL_AT = 120;
 // How much of the queue sheet stays on screen when it is down — enough to show
 // the handle and the label, so it reads as something to pull.
 const SHEET_PEEK = 66;
+// YouTube's terms floor the player at 200x200, so the docked size is the
+// smallest 16:9 box that clears it rather than the smallest that looks tidy.
+const DOCK_WIDTH = 356;
+const DOCK_HEIGHT = 200;
+const DOCK_MARGIN = 14;
+
 const RAIL_WIDTH = 232;
 const BAR_HEIGHT = 76;
 // A phone gets the rail as a bottom bar instead, the way music apps do it.
@@ -161,6 +227,7 @@ export default function MusicPage() {
   const [autoplay, setAutoplay] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
+  const [engineReady, setEngineReady] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
@@ -181,6 +248,9 @@ export default function MusicPage() {
     () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
   );
   const [mobileSearch, setMobileSearch] = useState(false);
+  // A wide screen has no magnifier to tap, so the field's own focus is what
+  // opens the search screen there.
+  const [searchFocused, setSearchFocused] = useState(false);
   const [searches, setSearches] = useState(() => readSearches());
 
   useEffect(() => {
@@ -192,6 +262,10 @@ export default function MusicPage() {
   }, []);
 
   const audioRef = useRef(null);
+  const playerRef = useRef(null);
+  const playerHostRef = useRef(null);
+  const playerBoxRef = useRef(null);
+  const playerSlotRef = useRef(null);
   const tracksRef = useRef(null);
   const queueRef = useRef([]);
   // The keyboard and lock-screen handlers are bound once but have to call the
@@ -200,6 +274,10 @@ export default function MusicPage() {
   const actionsRef = useRef({});
 
   const searchActive = query.trim().length >= 2;
+  // Declared after `searchActive`, not beside the state it reads: a const that
+  // uses a later const is a temporal dead zone error, and it took the whole
+  // page down rather than just this line.
+  const searchScreen = (narrow ? mobileSearch : searchFocused) && !searchActive;
   const track = nowPlaying;
   tracksRef.current = tracks;
   queueRef.current = queue;
@@ -299,15 +377,14 @@ export default function MusicPage() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !track) return;
-    const url = streamUrl(track);
-    if (!url) {
+    const source = sourceOf(track);
+    if (!source) {
       setError("No audio for that one yet.");
       return;
     }
-    if (audio.dataset.sourceId !== String(track.sourceId)) {
-      audio.dataset.sourceId = String(track.sourceId);
-      audio.src = url;
-      audio.load();
+    if (audio.dataset.sourceId !== String(source)) {
+      audio.dataset.sourceId = String(source);
+      audio.setSource(source, { autoplay });
     }
     if (autoplay && audio.paused) {
       audio.play().catch((err) => {
@@ -317,7 +394,7 @@ export default function MusicPage() {
         console.warn("play() rejected:", err?.name || err);
       });
     }
-  }, [track?.sourceId, track?.streamUrl, autoplay]);
+  }, [track?.sourceId, track?.streamUrl, autoplay, engineReady]);
 
   useEffect(() => {
     if (!track || !autoplay) return;
@@ -331,6 +408,111 @@ export default function MusicPage() {
   useEffect(() => {
     if (audioRef.current) audioRef.current.loop = repeat;
   }, [repeat]);
+
+  /*
+   * Where the player sits: the slot the stage leaves for it, or the corner.
+   *
+   * Written straight to the element and called synchronously from the scroll
+   * event — through React state and a frame of delay it lags the page by a
+   * pixel or two, which reads as a wobble.
+   */
+  const placePlayer = useCallback(() => {
+    const el = playerBoxRef.current;
+    if (!el) return;
+
+    const slot = playerSlotRef.current;
+    let box;
+    if (stageMounted && slot) {
+      const r = slot.getBoundingClientRect();
+      box = { top: r.top, left: r.left, width: r.width, height: r.height };
+    } else {
+      const width = Math.min(DOCK_WIDTH, window.innerWidth - DOCK_MARGIN * 2);
+      const height = Math.max(DOCK_HEIGHT, Math.round((width * 9) / 16));
+      box = {
+        top: window.innerHeight - height - BAR_HEIGHT - (narrow ? NAV_HEIGHT : 0) - DOCK_MARGIN,
+        left: window.innerWidth - width - DOCK_MARGIN,
+        width,
+        height,
+      };
+    }
+
+    el.style.top = `${box.top}px`;
+    el.style.left = `${box.left}px`;
+    el.style.width = `${box.width}px`;
+    el.style.height = `${box.height}px`;
+  }, [stageMounted, narrow]);
+
+  useLayoutEffect(() => {
+    placePlayer();
+    const settle = requestAnimationFrame(placePlayer);
+    document.addEventListener("scroll", placePlayer, { passive: true, capture: true });
+    window.addEventListener("resize", placePlayer);
+
+    const observer = new ResizeObserver(placePlayer);
+    if (playerSlotRef.current) observer.observe(playerSlotRef.current);
+
+    return () => {
+      cancelAnimationFrame(settle);
+      document.removeEventListener("scroll", placePlayer, { capture: true });
+      window.removeEventListener("resize", placePlayer);
+      observer.disconnect();
+    };
+  }, [placePlayer, stageIn, sheetOpen, tracks, view]);
+
+  /*
+   * The player itself, built once and then left alone.
+   *
+   * Its events are what drive `playing`, `duration` and the queue advancing —
+   * the same job the <audio> element's own events used to do, so the state
+   * above it never learns which engine it is talking to.
+   */
+  useEffect(() => {
+    let destroyed = false;
+
+    loadYoutubeApi().then((YT) => {
+      if (destroyed || !playerHostRef.current || playerRef.current) return;
+
+      playerRef.current = new YT.Player(playerHostRef.current, {
+        playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+        events: {
+          onReady: () => {
+            // From here the rest of the file has something to talk to. The load
+            // effect runs again on the next render and cues whatever is current.
+            audioRef.current = youtubeEngine(playerRef.current);
+            setEngineReady(true);
+          },
+          onStateChange: (e) => {
+            const state = YT.PlayerState;
+            setPlaying(e.data === state.PLAYING);
+            setBuffering(e.data === state.BUFFERING);
+            if (e.data === state.PLAYING || e.data === state.PAUSED) {
+              setDuration(playerRef.current?.getDuration?.() || 0);
+            }
+            if (e.data === state.ENDED) actionsRef.current.ended?.();
+          },
+          onError: () => {
+            setBuffering(false);
+            setError("That one would not play here — the owner may have blocked embedding.");
+          },
+        },
+      });
+    });
+
+    return () => {
+      destroyed = true;
+    };
+  }, []);
+
+  // The player has no timeupdate event, so it has to be asked.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.hidden || !playerRef.current?.getCurrentTime) return;
+      setPosition(playerRef.current.getCurrentTime() || 0);
+      const d = playerRef.current.getDuration?.() || 0;
+      if (d) setDuration(d);
+    }, 400);
+    return () => clearInterval(timer);
+  }, []);
 
   /*
    * Lock-screen and notification controls.
@@ -529,13 +711,16 @@ export default function MusicPage() {
    */
   const play = (t) => {
     const audio = audioRef.current;
-    const url = streamUrl(t);
-    if (audio && url) {
-      if (audio.dataset.sourceId !== String(t.sourceId)) {
-        audio.dataset.sourceId = String(t.sourceId);
-        audio.src = url;
+    const source = sourceOf(t);
+    if (audio && source) {
+      // Loaded and started inside the tap, not from an effect a tick later:
+      // that first gesture is what unlocks audio for every later start.
+      if (audio.dataset.sourceId !== String(source)) {
+        audio.dataset.sourceId = String(source);
+        audio.setSource(source, { autoplay: true });
+      } else {
+        audio.play();
       }
-      audio.play().catch((err) => console.warn("play() rejected:", err?.name || err));
     }
     setAutoplay(true);
     setNowPlaying(t);
@@ -651,7 +836,7 @@ export default function MusicPage() {
   };
 
   // Bound handlers read the current versions from here.
-  actionsRef.current = { toggle, skip, resume };
+  actionsRef.current = { toggle, skip, resume, ended: onEnded };
 
   // While a finger is down the bar follows the finger, not the audio.
   const shownPosition = scrubbing ?? position;
@@ -763,37 +948,30 @@ export default function MusicPage() {
        * silent. `preload="metadata"` so a cued song knows its own length without
        * pulling the whole file down.
        */}
-      <audio
-        ref={audioRef}
-        preload="metadata"
-        playsInline
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onWaiting={() => setBuffering(true)}
-        onPlaying={() => { setBuffering(false); setPlaying(true); }}
-        onCanPlay={() => setBuffering(false)}
-        onTimeUpdate={(e) => {
-          // With the screen off this still fires. Nothing is on screen to update,
-          // so skip the render and save the battery.
-          if (document.hidden) return;
-          setPosition(e.currentTarget.currentTime || 0);
+      {/* The player. One instance for the life of the page, moved by animating
+          its box rather than re-rendered anywhere — moving an iframe in the DOM
+          reloads it and the music stops.
+
+          It is visible, at YouTube's 200x200 floor or above, because the API
+          terms do not allow any part of it to be covered. */}
+      <div
+        ref={playerBoxRef}
+        style={{
+          position: "fixed",
+          top: -9999,
+          left: -9999,
+          width: DOCK_WIDTH,
+          height: DOCK_HEIGHT,
+          zIndex: stageMounted ? 58 : 40,
+          borderRadius: 10,
+          overflow: "hidden",
+          background: "#000",
+          boxShadow: stageMounted ? "none" : "0 16px 40px rgba(0,0,0,0.7)",
+          border: stageMounted ? "none" : `1px solid ${colors.ring}`,
         }}
-        onLoadedMetadata={(e) => {
-          const d = e.currentTarget.duration;
-          setDuration(Number.isFinite(d) ? d : 0);
-          setPosition(0);
-        }}
-        onDurationChange={(e) => {
-          const d = e.currentTarget.duration;
-          setDuration(Number.isFinite(d) ? d : 0);
-        }}
-        onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
-        onEnded={onEnded}
-        onError={() => {
-          setBuffering(false);
-          setError("That one would not play — the stream is missing or the server refused a range request.");
-        }}
-      />
+      >
+        <div ref={playerHostRef} className="w-full h-full" />
+      </div>
 
       <style>{`
         @keyframes onion-search-in {
@@ -892,6 +1070,12 @@ export default function MusicPage() {
                 }}
                 placeholder="Type to search"
                 autoFocus={mobileSearch}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => {
+                  // Late enough that a click on a shortcut lands before the
+                  // screen it sits on is taken away.
+                  setTimeout(() => setSearchFocused(false), 160);
+                }}
                 className="outline-none bg-transparent flex-1"
                 style={{ color: colors.text, fontSize: 14.5 }}
               />
@@ -915,7 +1099,7 @@ export default function MusicPage() {
           {/* The search screen. What a music app shows once the field is open
               and still empty: what was looked for before, and a way in without
               typing at all. */}
-          {mobileSearch && !searchActive && (
+          {searchScreen && (
             <div style={{ animation: "onion-fade-up 260ms cubic-bezier(.32,.72,0,1)" }}>
               {searches.length > 0 && (
                 <>
@@ -955,7 +1139,7 @@ export default function MusicPage() {
           )}
 
           {/* Moods, the way YouTube Music opens */}
-          {!searchActive && !mobileSearch && (
+          {!searchActive && !searchScreen && (
             <div className="flex gap-2.5 overflow-x-auto pb-5" style={{ scrollbarWidth: "none" }}>
               {MOODS.map((mood) => (
                 <button
@@ -996,7 +1180,7 @@ export default function MusicPage() {
             </div>
           )}
 
-          {mobileSearch && !searchActive ? null : view === "library" && !searchActive ? (
+          {searchScreen ? null : view === "library" && !searchActive ? (
             recent.length ? (
               <>
                 {cardRow("Listen again", recent)}
@@ -1090,12 +1274,20 @@ export default function MusicPage() {
                   aria-label={playing ? "Pause" : "Play"}
                   className="rounded-lg cursor-pointer"
                   style={{
-                    width: "min(300px, 74vw)", aspectRatio: "1 / 1",
+                    width: "min(176px, 46vw)", aspectRatio: "1 / 1",
                     background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
                     boxShadow: "0 26px 60px rgba(0,0,0,0.6)",
                   }}
                 />
               </div>
+              {/* The slot the player is flown into. Full-bleed so that at 16:9
+                  on a 375px screen it still clears YouTube's 200px floor. */}
+              <div
+                ref={playerSlotRef}
+                className="rounded-lg"
+                style={{ marginLeft: -20, marginRight: -20, marginTop: 12, aspectRatio: "16 / 9", minHeight: 200, background: "#000" }}
+              />
+
               <div className="mt-4">
                 <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 600, color: colors.text }} className="line-clamp-2">
                   {track?.title || "Nothing playing"}
@@ -1161,10 +1353,18 @@ export default function MusicPage() {
                   aria-label={playing ? "Pause" : "Play"}
                   className="rounded-lg cursor-pointer"
                   style={{
-                    height: "min(460px, 56vh)", aspectRatio: "1 / 1", width: "auto",
+                    height: "min(300px, 34vh)", aspectRatio: "1 / 1", width: "auto",
                     background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
                     boxShadow: "0 30px 70px rgba(0,0,0,0.6)",
                   }}
+                />
+                {/* The slot the player is flown into, beside nothing and under
+                    the artwork — visible, which is the condition it plays
+                    under, and never below the 200px floor. */}
+                <div
+                  ref={playerSlotRef}
+                  className="rounded-lg"
+                  style={{ width: "min(560px, 90vw)", aspectRatio: "16 / 9", minHeight: 200, background: "#000" }}
                 />
                 <div className="text-center" style={{ maxWidth: 520 }}>
                   <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 600, color: colors.text }} className="line-clamp-2">
