@@ -4,7 +4,7 @@ import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
   Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp,
   Film, History, ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
-  ThumbsUp, ThumbsDown,
+  ThumbsUp, ThumbsDown, Gauge, Link2, Unlink, Minus, Plus,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
 import OnionMark from "../components/shared/OnionMark";
@@ -20,20 +20,20 @@ import api from "../api/client";
  * browse. Opening the bar gives the full now-playing view.
  *
  *
- * Playback: YouTube's player behind a media-element interface.
+ * Playback: two engines behind one media-element interface.
  *
  *
- * This was written for a plain <audio> element, which is the right shape: an
- * element the page owns is the only thing that keeps playing when a phone's
- * screen locks, and it takes Media Session metadata straight to the lock
- * screen. All of that is still here.
+ * `mediaEngine` wraps a real <audio> element and is the one this app wants: the
+ * page owns it, it keeps playing when a phone's screen locks, it takes Media
+ * Session metadata to the lock screen, and — the reason it exists here — the
+ * page can actually change how it sounds. It is used for any track that carries
+ * a `streamUrl`.
  *
- * What it does not have is bytes. Every track in the catalog comes from YouTube,
- * which supplies metadata and no audio file, so `<audio>` had nothing to load
- * and nothing played at all. The engine underneath is YouTube's IFrame player
- * again, wrapped in `youtubeEngine()` so it answers the same handful of
- * properties a media element does — paused, currentTime, duration, muted,
- * play(), pause(). Everything above that line is unchanged.
+ * `youtubeEngine` wraps YouTube's IFrame player and is the fallback, because
+ * every track in the catalog today comes from YouTube, which supplies metadata
+ * and no audio file. Both answer the same handful of properties — paused,
+ * currentTime, duration, muted, play(), pause(), setRates() — so nothing above
+ * this line knows which one is playing.
  *
  * The iframe is not shown anywhere in the interface. It is mounted once, at a
  * real size, off to the side of the viewport with opacity 0, and left there for
@@ -42,23 +42,58 @@ import api from "../api/client";
  * throttled or refused by several browsers and the audio stops. Off-screen at
  * full size is the shape that keeps playing.
  *
- * Two things follow from the engine being YouTube's, and neither is a choice
- * made here:
  *
- *   - It stops when a phone's screen goes off. A cross-origin iframe is
- *     suspended by the browser when the page is hidden, and YouTube gates
- *     background audio behind Premium.
+ * Tempo and pitch — what each engine can actually do.
  *
- *   - Hiding the player is against YouTube's API terms, which require it to be
- *     visible and at least 200x200. That is fine for a local or personal build;
- *     on a public deployment it is what gets an API key revoked.
  *
- * Both go away the day tracks carry a real `audioUrl`: swap `youtubeEngine`
- * for an <audio> element against /music/stream/:id and nothing else changes.
+ * The panel offers tempo, pitch, and an Unhook switch that decides whether the
+ * two move together. What is behind them is not the same on both engines, and
+ * the panel says so rather than pretending:
+ *
+ *   <audio> (`streamUrl` tracks) — `playbackRate` moves tempo, and
+ *   `preservesPitch` decides whether pitch rides along with it. Hooked is
+ *   `preservesPitch = false`, so 1.2x is faster AND higher, the way a record
+ *   spun faster is. Unhooked with pitch at 100% is `preservesPitch = true`:
+ *   faster, same key. Those two are exact. A pitch that is neither 100% nor
+ *   equal to the tempo needs real time-stretching (a phase vocoder — SoundTouch,
+ *   Rubber Band); the panel applies what it can and says the rest did not land,
+ *   rather than moving a knob that does nothing.
+ *
+ *   YouTube — tempo only, and only at the rates the player advertises (0.25 to
+ *   2 in quarters), so the slider snaps. YouTube pitch-corrects internally and
+ *   exposes no way to turn that off, and the audio lives in a cross-origin
+ *   iframe that Web Audio cannot reach, so there is nothing to hang a pitch
+ *   shifter on. Pitch and Unhook are disabled, not hidden, with the reason
+ *   under them.
+ *
+ * The whole gap closes the day tracks carry `streamUrl`: same panel, same
+ * state, and the <audio> engine picks itself.
  */
 
 const SEARCH_DEBOUNCE_MS = 500;
 const IFRAME_API = "https://www.youtube.com/iframe_api";
+
+// The range the tempo and pitch sliders cover, and what Reset goes back to.
+const RATE_MIN = 0.1;
+const RATE_MAX = 3;
+const RATE_STEPS = [
+  ["1%", 0.01],
+  ["5%", 0.05],
+  ["10%", 0.1],
+  ["25%", 0.25],
+  ["100%", 1],
+];
+
+// What YouTube offers when it has not been asked yet.
+const YT_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+const clampRate = (v) =>
+  Math.min(RATE_MAX, Math.max(RATE_MIN, Math.round(Number(v) * 100) / 100));
+
+const nearestRate = (list, value) =>
+  list.reduce((best, r) => (Math.abs(r - value) < Math.abs(best - value) ? r : best), list[0]);
+
+const sameRate = (a, b) => Math.abs(a - b) < 0.005;
 
 /* Loads YouTube's IFrame API once, however many callers ask for it. */
 let apiPromise = null;
@@ -79,6 +114,77 @@ function loadYoutubeApi() {
 }
 
 /*
+ * A real <audio> element behind the same interface.
+ *
+ * `setRates` is the interesting one. The element gives two knobs, not three:
+ * `playbackRate` sets the tempo, and `preservesPitch` decides whether the pitch
+ * is dragged along with it. So the pairs it can hit exactly are (tempo, tempo)
+ * — hooked, the vinyl behaviour — and (tempo, 1) — unhooked with the pitch left
+ * alone. Anything else is reported back as not applied.
+ */
+function mediaEngine(el) {
+  return {
+    el,
+    canPitch: true,
+    snapsTempo: false,
+    dataset: el.dataset,
+    get loop() {
+      return el.loop;
+    },
+    set loop(value) {
+      el.loop = value;
+    },
+    play: () => el.play(),
+    pause: () => el.pause(),
+    load: () => el.load(),
+    setSource(url, { autoplay }) {
+      el.src = url;
+      el.load();
+      if (autoplay) el.play().catch(() => {});
+    },
+    get paused() {
+      return el.paused;
+    },
+    get currentTime() {
+      return el.currentTime || 0;
+    },
+    set currentTime(to) {
+      el.currentTime = to;
+    },
+    get duration() {
+      return Number.isFinite(el.duration) ? el.duration : 0;
+    },
+    get muted() {
+      return el.muted;
+    },
+    set muted(value) {
+      el.muted = value;
+    },
+    get volume() {
+      return el.volume;
+    },
+    set volume(value) {
+      el.volume = Math.min(1, Math.max(0, value));
+    },
+    get playbackRate() {
+      return el.playbackRate;
+    },
+    setRates(tempo, pitch) {
+      const hooked = sameRate(pitch, tempo);
+      const held = sameRate(pitch, 1);
+      // preservesPitch off lets the pitch ride the rate; on holds it at the
+      // original key. Prefixed spellings for the browsers still on them.
+      const preserve = !hooked;
+      el.playbackRate = tempo;
+      el.preservesPitch = preserve;
+      if ("mozPreservesPitch" in el) el.mozPreservesPitch = preserve;
+      if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = preserve;
+      return { tempo, pitch: hooked ? tempo : 1, exact: hooked || held };
+    },
+  };
+}
+
+/*
  * A YouTube player wearing a media element's clothes.
  *
  * Only the surface the rest of this file already uses: the properties it reads,
@@ -88,18 +194,18 @@ function loadYoutubeApi() {
  */
 function youtubeEngine(player) {
   return {
+    // No Web Audio reaches into a cross-origin iframe, and YouTube corrects
+    // pitch itself with no way to ask it not to. Tempo is the whole surface.
+    canPitch: false,
+    snapsTempo: true,
     dataset: {},
     loop: false,
     get playbackRate() {
       return player.getPlaybackRate?.() || 1;
     },
-    set playbackRate(rate) {
-      // Only the rates the player advertises are accepted; anything else is
-      // silently ignored by YouTube, which looks like a broken control.
-      player.setPlaybackRate?.(rate);
-    },
-    get playbackRates() {
-      return player.getAvailablePlaybackRates?.() || [1];
+    get rateList() {
+      const list = player.getAvailablePlaybackRates?.();
+      return list?.length ? list : YT_RATES;
     },
     play: () => Promise.resolve(player.playVideo?.()),
     pause: () => player.pauseVideo?.(),
@@ -133,12 +239,30 @@ function youtubeEngine(player) {
     set volume(value) {
       player.setVolume?.(Math.round(value * 100));
     },
+    setRates(tempo) {
+      // Only the rates the player advertises are accepted; anything else is
+      // silently ignored by YouTube, which looks like a broken control. Snap to
+      // the nearest and report what actually took.
+      const applied = nearestRate(this.rateList, tempo);
+      player.setPlaybackRate?.(applied);
+      return { tempo: applied, pitch: 1, exact: sameRate(applied, tempo) };
+    },
   };
 }
 
-// What the engine is asked to load. A track that carries its own audio would
-// give a URL here; a YouTube one gives the video id, which is what its player
-// wants. Either way the load effect below only cares whether it changed.
+function applyRates(engine, tempo, pitch) {
+  if (!engine?.setRates) return null;
+  try {
+    return engine.setRates(tempo, pitch);
+  } catch (err) {
+    console.warn("setRates failed:", err);
+    return null;
+  }
+}
+
+// What the engine is asked to load. A track that carries its own audio gives a
+// URL here, and that is also what picks the engine; a YouTube one gives the
+// video id, which is what its player wants.
 function sourceOf(track) {
   return track?.streamUrl || track?.sourceId || "";
 }
@@ -253,14 +377,31 @@ export default function MusicPage() {
   const [autoplay, setAutoplay] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
-  const [engineReady, setEngineReady] = useState(false);
+  const [engineReady, setEngineReady] = useState(0);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
-  const [speed, setSpeed] = useState(1);
-  const [speedRates, setSpeedRates] = useState([1]);
-  const [speedOpen, setSpeedOpen] = useState(false);
+
+  /*
+   * Tempo, pitch, and whether they are tied together.
+   *
+   * Both are multipliers on the original: 1 is the song as recorded. Hooked —
+   * `unhook` false, which is the default — is the record-player relationship,
+   * where turning one turns the other, so faster is also higher. Unhooked lets
+   * them be set apart, which is the whole reason the switch exists.
+   */
+  const [tempo, setTempo] = useState(1);
+  const [pitch, setPitch] = useState(1);
+  const [unhook, setUnhook] = useState(false);
+  const [rateStep, setRateStep] = useState(0.05);
+  const [ratesOpen, setRatesOpen] = useState(false);
+  // What the panel was showing when it opened, so Cancel has somewhere to go.
+  const [ratesBefore, setRatesBefore] = useState(null);
+  // Set when the engine could not do exactly what was asked, so the panel can
+  // say so instead of leaving a knob that looks like it worked.
+  const [rateNote, setRateNote] = useState(null);
+
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
   const [liked, setLiked] = useState(null);
@@ -293,7 +434,12 @@ export default function MusicPage() {
     return () => q.removeEventListener("change", onChange);
   }, []);
 
+  // `audioRef` is whichever engine is currently in charge; the two below are
+  // the engines themselves, each built once.
   const audioRef = useRef(null);
+  const mediaEngineRef = useRef(null);
+  const ytEngineRef = useRef(null);
+  const mediaElRef = useRef(null);
   const playerRef = useRef(null);
   const playerHostRef = useRef(null);
   const tracksRef = useRef(null);
@@ -311,6 +457,21 @@ export default function MusicPage() {
   const track = nowPlaying;
   tracksRef.current = tracks;
   queueRef.current = queue;
+
+  // Which engine this track belongs to, and therefore what the panel can offer.
+  // Derived from the track rather than read off the ref, so the UI re-renders
+  // when it changes.
+  const onMedia = Boolean(track?.streamUrl);
+  const canPitch = onMedia;
+
+  /* Hands the track to its engine and stands the other one down. */
+  const selectEngine = (t) => {
+    const next = t?.streamUrl ? mediaEngineRef.current : ytEngineRef.current;
+    const previous = audioRef.current;
+    if (previous && next && previous !== next) previous.pause();
+    if (next) audioRef.current = next;
+    return audioRef.current;
+  };
 
   useEffect(() => {
     api
@@ -411,21 +572,21 @@ export default function MusicPage() {
   }, [query, searchMode]);
 
   /*
-   * Point the element at a song.
+   * Point the engine at a song.
    *
    * `dataset.sourceId` is the record of what is loaded, and it is checked before
-   * touching `src`: assigning the same URL again restarts the song from zero.
-   * The tap handler in `play()` gets there first for anything a person clicked,
-   * so in practice this effect is what loads the resumed track on a cold open
-   * and what advances the queue.
+   * touching the source: assigning the same URL again restarts the song from
+   * zero. Each engine keeps its own dataset, so switching between them counts
+   * as a change and reloads, which is what should happen.
    *
    * A load without `autoplay` deliberately does not call play() — opening the
    * page should be silent, and a search should not start something nobody asked
    * for.
    */
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !track) return;
+    if (!track) return;
+    const audio = selectEngine(track);
+    if (!audio) return;
     const source = sourceOf(track);
     if (!source) {
       setError("No audio for that one yet.");
@@ -434,9 +595,10 @@ export default function MusicPage() {
     if (audio.dataset.sourceId !== String(source)) {
       audio.dataset.sourceId = String(source);
       audio.setSource(source, { autoplay });
-      // A rate set for one song should not follow the next one silently.
-      if (speed !== 1) {
-        audio.playbackRate = speed;
+      // Rates set for one song should carry to the next rather than quietly
+      // snapping back to normal partway through a listen.
+      if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
+        applyRates(audio, tempo, audio.canPitch ? pitch : 1);
       }
     }
     if (autoplay && audio.paused) {
@@ -447,6 +609,7 @@ export default function MusicPage() {
         console.warn("play() rejected:", err?.name || err);
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track?.sourceId, track?.streamUrl, autoplay, engineReady]);
 
   useEffect(() => {
@@ -456,18 +619,48 @@ export default function MusicPage() {
     setLiked(null);
   }, [track?.sourceId, autoplay, track]);
 
-  // Repeat is the element's own loop flag rather than something reimplemented
-  // on `ended` — looping this way has no gap and no second network trip.
+  // Repeat is the engine's own loop flag rather than something reimplemented on
+  // `ended` — looping this way has no gap and no second network trip.
   useEffect(() => {
     if (audioRef.current) audioRef.current.loop = repeat;
   }, [repeat]);
 
   /*
-   * The player itself, built once and then left alone.
+   * The <audio> engine, built once, with the events the page listens to.
+   *
+   * These fire only while it is the engine in charge, since it is the only one
+   * that is ever told to play.
+   */
+  useEffect(() => {
+    const el = mediaElRef.current;
+    if (!el) return;
+    mediaEngineRef.current = mediaEngine(el);
+    const handlers = [
+      ["play", () => { setPlaying(true); setBuffering(false); }],
+      ["playing", () => { setPlaying(true); setBuffering(false); }],
+      ["pause", () => setPlaying(false)],
+      ["waiting", () => setBuffering(true)],
+      ["loadedmetadata", () => setDuration(el.duration || 0)],
+      ["durationchange", () => setDuration(el.duration || 0)],
+      ["ended", () => actionsRef.current.ended?.()],
+      ["error", () => {
+        setBuffering(false);
+        setError("That file would not play.");
+      }],
+    ];
+    for (const [event, handler] of handlers) el.addEventListener(event, handler);
+    setEngineReady((n) => n + 1);
+    return () => {
+      for (const [event, handler] of handlers) el.removeEventListener(event, handler);
+    };
+  }, []);
+
+  /*
+   * The YouTube player, built once and then left alone.
    *
    * Its events are what drive `playing`, `duration` and the queue advancing —
-   * the same job the <audio> element's own events used to do, so the state
-   * above it never learns which engine it is talking to.
+   * the same job the <audio> element's own events do above, so the state around
+   * them never learns which engine it is talking to.
    */
   useEffect(() => {
     let destroyed = false;
@@ -477,13 +670,13 @@ export default function MusicPage() {
         playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
         events: {
           onReady: () => {
-            // From here the rest of the file has something to talk to. The load
-            // effect runs again on the next render and cues whatever is current.
-            audioRef.current = youtubeEngine(playerRef.current);
-            setSpeedRates(audioRef.current.playbackRates);
-            setEngineReady(true);
+            ytEngineRef.current = youtubeEngine(playerRef.current);
+            setEngineReady((n) => n + 1);
           },
           onStateChange: (e) => {
+            // Only while YouTube is the engine in charge: a stale event from a
+            // paused player should not overwrite the <audio> element's state.
+            if (audioRef.current !== ytEngineRef.current) return;
             const state = YT.PlayerState;
             setPlaying(e.data === state.PLAYING);
             setBuffering(e.data === state.BUFFERING);
@@ -493,6 +686,7 @@ export default function MusicPage() {
             if (e.data === state.ENDED) actionsRef.current.ended?.();
           },
           onError: (e) => {
+            if (audioRef.current !== ytEngineRef.current) return;
             setBuffering(false);
             /*
              * 101 and 150 both mean the same thing: the owner has turned off
@@ -516,12 +710,14 @@ export default function MusicPage() {
     };
   }, []);
 
-  // The player has no timeupdate event, so it has to be asked.
+  // Neither engine reports progress often enough to drive a scrubber, so the
+  // one in charge is asked.
   useEffect(() => {
     const timer = setInterval(() => {
-      if (document.hidden || !playerRef.current?.getCurrentTime) return;
-      setPosition(playerRef.current.getCurrentTime() || 0);
-      const d = playerRef.current.getDuration?.() || 0;
+      const audio = audioRef.current;
+      if (document.hidden || !audio) return;
+      setPosition(audio.currentTime || 0);
+      const d = audio.duration || 0;
       if (d) setDuration(d);
     }, 400);
     return () => clearInterval(timer);
@@ -598,6 +794,8 @@ export default function MusicPage() {
         session.setPositionState({
           duration,
           position: Math.min(position, duration),
+          // The OS scrubber runs on wall-clock time, so it needs the rate the
+          // song is actually moving at, not 1.
           playbackRate: audioRef.current?.playbackRate || 1,
         });
       }
@@ -630,6 +828,7 @@ export default function MusicPage() {
         case "ArrowUp":
           e.preventDefault();
           audio.volume = Math.min(1, audio.volume + 0.1);
+          setVolume(audio.volume);
           if (audio.muted) {
             audio.muted = false;
             setMuted(false);
@@ -638,6 +837,7 @@ export default function MusicPage() {
         case "ArrowDown":
           e.preventDefault();
           audio.volume = Math.max(0, audio.volume - 0.1);
+          setVolume(audio.volume);
           break;
         case "ArrowRight":
           e.preventDefault();
@@ -713,8 +913,8 @@ export default function MusicPage() {
   /*
    * Starting a song from a tap.
    *
-   * The src is assigned and play() is called right here, inside the handler for
-   * the gesture that asked for it. That is not a stylistic choice: iOS only
+   * The source is assigned and play() is called right here, inside the handler
+   * for the gesture that asked for it. That is not a stylistic choice: iOS only
    * counts a play() as user-initiated if it happens synchronously in the
    * gesture, and the first one in the page's life is the one that unlocks audio
    * for every later start — including the ones the queue makes on its own with
@@ -722,14 +922,15 @@ export default function MusicPage() {
    * exactly the shape that leaves iOS silent.
    */
   const play = (t) => {
-    const audio = audioRef.current;
+    const audio = selectEngine(t);
     const source = sourceOf(t);
     if (audio && source) {
-      // Loaded and started inside the tap, not from an effect a tick later:
-      // that first gesture is what unlocks audio for every later start.
       if (audio.dataset.sourceId !== String(source)) {
         audio.dataset.sourceId = String(source);
         audio.setSource(source, { autoplay: true });
+        if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
+          applyRates(audio, tempo, audio.canPitch ? pitch : 1);
+        }
       } else {
         audio.play();
       }
@@ -756,7 +957,7 @@ export default function MusicPage() {
     const audio = audioRef.current;
     if (!audio) return;
     setAutoplay(true);
-    audio.play().catch((err) => console.warn("play() rejected:", err?.name || err));
+    audio.play()?.catch?.((err) => console.warn("play() rejected:", err?.name || err));
   };
 
   const toggle = () => {
@@ -779,7 +980,7 @@ export default function MusicPage() {
   };
 
   // What the queue does when a song runs out. `repeat` never reaches here — the
-  // element loops itself and never fires `ended`.
+  // engine loops itself and never fires `ended`.
   const onEnded = () => {
     const list = queueRef.current?.length ? queueRef.current : tracksRef.current;
     if (!list?.length) return;
@@ -800,7 +1001,7 @@ export default function MusicPage() {
    * held mouse instead of only landing where it is let go. `setPointerCapture`
    * keeps the drag alive when it wanders off the 4px bar, which is most drags.
    *
-   * The element is only told the new time when the drag ends: writing
+   * The engine is only told the new time when the drag ends: writing
    * currentTime on every move makes the audio stutter as it re-seeks.
    */
   const [scrubbing, setScrubbing] = useState(null);
@@ -840,18 +1041,89 @@ export default function MusicPage() {
   };
 
   /*
-   * Speed.
+   * Tempo and pitch.
    *
-   * YouTube accepts only the rates it advertises — 0.25 to 2 in quarters,
-   * usually — so the control offers those and nothing between. It also pitch
-   * corrects on its own and exposes no way to stop it, which is why there is a
-   * speed control here and not a tempo-and-pitch one.
+   * One place decides what the pair should be, tells the engine, and then takes
+   * the engine's answer as the truth — because the engine may not have been
+   * able to do what was asked. YouTube snaps the tempo to a rate it knows; the
+   * <audio> element cannot hold a pitch that is neither the tempo nor the
+   * original. Storing what was requested instead of what happened is how a
+   * slider ends up sitting somewhere the sound is not.
    */
-  const setPlaybackSpeed = (rate) => {
+  const commitRates = (nextTempo, nextPitch) => {
     const audio = audioRef.current;
-    if (audio) audio.playbackRate = rate;
-    setSpeed(rate);
-    setSpeedOpen(false);
+    const wantTempo = clampRate(nextTempo);
+    const wantPitch = clampRate(nextPitch);
+    const applied = applyRates(audio, wantTempo, audio?.canPitch ? wantPitch : 1);
+
+    if (!applied) {
+      // Nothing is loaded yet. Keep the choice; the load effect applies it.
+      setTempo(wantTempo);
+      setPitch(wantPitch);
+      setRateNote(null);
+      return;
+    }
+
+    setTempo(applied.tempo);
+    setPitch(applied.pitch);
+
+    if (applied.exact && sameRate(applied.tempo, wantTempo)) {
+      setRateNote(null);
+    } else if (!audio.canPitch) {
+      setRateNote(
+        `YouTube only plays at the rates it offers, so the tempo snapped to ${applied.tempo}x. ` +
+          "It also corrects pitch itself and gives no way to turn that off."
+      );
+    } else if (!sameRate(applied.tempo, wantTempo)) {
+      setRateNote(`Tempo landed on ${applied.tempo}x.`);
+    } else {
+      setRateNote(
+        "A pitch that is neither the original nor the tempo needs a time-stretcher " +
+          "(SoundTouch, Rubber Band). Pitch is held at 100% until one is wired in."
+      );
+    }
+  };
+
+  /*
+   * Hooked, the default, is the record-player relationship: one knob, two
+   * things move. Unhooked lets the tempo go without the pitch — the reason
+   * anyone opens this panel.
+   */
+  const onTempoChange = (value) => {
+    if (!canPitch) return commitRates(value, 1);
+    return commitRates(value, unhook ? pitch : value);
+  };
+
+  const onPitchChange = (value) => {
+    if (!canPitch) return;
+    return commitRates(unhook ? tempo : value, value);
+  };
+
+  const onUnhookChange = (on) => {
+    setUnhook(on);
+    // Hooking back up has to reconcile the two, or the switch would leave them
+    // apart while claiming they are tied. The tempo is what wins.
+    if (!on) commitRates(tempo, tempo);
+  };
+
+  const openRates = () => {
+    setRatesBefore({ tempo, pitch, unhook });
+    setRateNote(null);
+    setRatesOpen(true);
+  };
+
+  const cancelRates = () => {
+    if (ratesBefore) {
+      setUnhook(ratesBefore.unhook);
+      commitRates(ratesBefore.tempo, ratesBefore.pitch);
+    }
+    setRateNote(null);
+    setRatesOpen(false);
+  };
+
+  const resetRates = () => {
+    setUnhook(false);
+    commitRates(1, 1);
   };
 
   const setVolumeLevel = (level) => {
@@ -880,6 +1152,7 @@ export default function MusicPage() {
   const shownPosition = scrubbing ?? position;
   const progress = duration ? (shownPosition / duration) * 100 : 0;
   const list = searchActive && searchMode === "albums" ? albums : tracks;
+  const ratesTouched = !sameRate(tempo, 1) || !sameRate(pitch, 1);
 
   const railItem = (key, label, Icon) => (
     <button
@@ -896,6 +1169,56 @@ export default function MusicPage() {
       <Icon size={20} />
       {label}
     </button>
+  );
+
+  /*
+   * One row of the tempo/pitch panel: the label and current value over a
+   * slider, with a nudge button at each end that moves by the chosen step.
+   */
+  const rateRow = ({ label, value, display, onChange, disabled }) => (
+    <div style={{ padding: "12px 0" }}>
+      <div className="flex items-baseline justify-between" style={{ marginBottom: 4 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: colors.textMuted }}>
+          {label}
+        </span>
+        <span style={{ fontFamily: displayFont, fontSize: 19, fontWeight: 700, color: disabled ? colors.textMuted : colors.text, fontVariantNumeric: "tabular-nums" }}>
+          {display}
+        </span>
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => onChange(value - rateStep)}
+          disabled={disabled}
+          aria-label={`${label} down`}
+          style={{ background: "none", border: "none", cursor: disabled ? "default" : "pointer", display: "flex", color: colors.textMuted, opacity: disabled ? 0.4 : 1, padding: 2 }}
+        >
+          <Minus size={16} />
+        </button>
+        <input
+          type="range"
+          min={RATE_MIN}
+          max={RATE_MAX}
+          step={0.01}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(Number(e.target.value))}
+          aria-label={label}
+          className="onion-rate"
+        />
+        <button
+          onClick={() => onChange(value + rateStep)}
+          disabled={disabled}
+          aria-label={`${label} up`}
+          style={{ background: "none", border: "none", cursor: disabled ? "default" : "pointer", display: "flex", color: colors.textMuted, opacity: disabled ? 0.4 : 1, padding: 2 }}
+        >
+          <Plus size={16} />
+        </button>
+      </div>
+      <div className="flex items-center justify-between" style={{ fontSize: 11, color: colors.textMuted, marginTop: 3, paddingLeft: 27, paddingRight: 27 }}>
+        <span>{label === "Tempo" ? `${RATE_MIN}x` : `${RATE_MIN * 100}%`}</span>
+        <span>{label === "Tempo" ? `${RATE_MAX}x` : `${RATE_MAX * 100}%`}</span>
+      </div>
+    </div>
   );
 
   const cardRow = (title, items) =>
@@ -978,7 +1301,14 @@ export default function MusicPage() {
   return (
     <div style={{ background: colors.bg, minHeight: "100vh", fontFamily: bodyFont, color: colors.text }}>
       {/*
-       * The audio engine.
+       * The <audio> engine. Hidden, but a real element the page owns — which is
+       * what makes tempo and pitch possible at all, and what will keep playing
+       * with the screen off once tracks carry their own audio.
+       */}
+      <audio ref={mediaElRef} preload="metadata" playsInline style={{ display: "none" }} />
+
+      {/*
+       * The YouTube engine.
        *
        * One player, mounted for the life of the page, never unmounted and never
        * moved — moving an iframe in the DOM reloads it and the music stops. It
@@ -1025,22 +1355,50 @@ export default function MusicPage() {
           margin-left: 0;
           height: 4px;
           appearance: none;
+          -webkit-appearance: none;
           background: rgba(255,255,255,0.22);
           border-radius: 2px;
           outline: none;
           cursor: pointer;
           transition: width 220ms cubic-bezier(.32,.72,0,1), opacity 180ms ease, margin-left 220ms ease;
         }
-        .group\/vol:hover .onion-volume,
+        .group\\/vol:hover .onion-volume,
         .onion-volume:focus-visible { width: 84px; opacity: 1; margin-left: 10px; }
         .onion-volume::-webkit-slider-thumb {
-          appearance: none; width: 11px; height: 11px; border-radius: 50%;
+          appearance: none; -webkit-appearance: none;
+          width: 11px; height: 11px; border-radius: 50%;
           background: #fff; cursor: pointer;
         }
         .onion-volume::-moz-range-thumb {
           width: 11px; height: 11px; border: none; border-radius: 50%;
           background: #fff; cursor: pointer;
         }
+
+        /* Tempo and pitch. Wide enough to aim with, and a thumb big enough to
+           catch on a touchscreen. */
+        .onion-rate {
+          flex: 1;
+          height: 4px;
+          appearance: none;
+          -webkit-appearance: none;
+          background: rgba(255,255,255,0.18);
+          border-radius: 2px;
+          outline: none;
+          cursor: pointer;
+          touch-action: none;
+        }
+        .onion-rate::-webkit-slider-thumb {
+          appearance: none; -webkit-appearance: none;
+          width: 16px; height: 16px; border-radius: 50%;
+          background: ${colors.accent}; cursor: pointer;
+        }
+        .onion-rate::-moz-range-thumb {
+          width: 16px; height: 16px; border: none; border-radius: 50%;
+          background: ${colors.accent}; cursor: pointer;
+        }
+        .onion-rate:disabled { opacity: 0.35; cursor: not-allowed; }
+        .onion-rate:disabled::-webkit-slider-thumb { background: ${colors.textMuted}; cursor: not-allowed; }
+        .onion-rate:disabled::-moz-range-thumb { background: ${colors.textMuted}; cursor: not-allowed; }
 
         @keyframes onion-search-in {
           from { opacity: 0; transform: translateY(-6px) scaleX(0.94); }
@@ -1049,6 +1407,10 @@ export default function MusicPage() {
         @keyframes onion-fade-up {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: none; }
+        }
+        @keyframes onion-panel-in {
+          from { opacity: 0; transform: translate(-50%, 14px); }
+          to { opacity: 1; transform: translate(-50%, 0); }
         }
       `}</style>
 
@@ -1354,7 +1716,15 @@ export default function MusicPage() {
             <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: colors.textMuted, margin: "0 auto" }}>
               {buffering ? "Buffering" : "Now playing"}
             </div>
-            <span style={{ width: 24 }} />
+            {/* Tempo and pitch are reachable from the stage too, since that is
+                where someone is listening closely enough to want them. */}
+            <button
+              onClick={openRates}
+              aria-label="Tempo and pitch"
+              style={{ background: "none", border: "none", cursor: "pointer", display: "flex", color: ratesTouched ? colors.accentLight : colors.textMuted }}
+            >
+              <Gauge size={22} />
+            </button>
           </div>
 
           {narrow ? (
@@ -1519,6 +1889,161 @@ export default function MusicPage() {
         </>
       )}
 
+      {/*
+       * Tempo and pitch.
+       *
+       * Hooked — the default — is one knob wearing two labels: turning either
+       * turns the other, which is the record-player relationship and what most
+       * people mean by "play it faster". Unhook separates them, which is the
+       * only reason to open this at all: a song sped up for practice that has
+       * not also gone sharp.
+       *
+       * Everything the panel cannot do on the current engine is disabled with
+       * the reason under it, rather than left live and inert.
+       */}
+      {ratesOpen && (
+        <>
+          <div onClick={cancelRates} className="fixed inset-0" style={{ background: "rgba(0,0,0,0.55)", zIndex: 70 }} />
+          <div
+            className="fixed rounded-xl"
+            style={{
+              left: "50%",
+              bottom: narrow ? NAV_HEIGHT + 12 : BAR_HEIGHT + 14,
+              width: "min(540px, 94vw)",
+              maxHeight: "78vh",
+              overflowY: "auto",
+              background: colors.bgElevated,
+              border: `1px solid ${colors.ring}`,
+              boxShadow: "0 24px 60px rgba(0,0,0,0.7)",
+              zIndex: 71,
+              padding: "16px 20px 14px",
+              animation: "onion-panel-in 200ms cubic-bezier(.32,.72,0,1)",
+            }}
+          >
+            {rateRow({
+              label: "Tempo",
+              value: tempo,
+              display: `${tempo.toFixed(2)}x`,
+              onChange: onTempoChange,
+              disabled: false,
+            })}
+
+            <div style={{ borderTop: `1px solid ${colors.ring}` }} />
+
+            {rateRow({
+              label: "Pitch",
+              value: pitch,
+              display: `${Math.round(pitch * 100)}%`,
+              onChange: onPitchChange,
+              disabled: !canPitch,
+            })}
+
+            <div style={{ borderTop: `1px solid ${colors.ring}` }} />
+
+            {/* How far a nudge button moves, and how coarse the sliders feel. */}
+            <div className="flex items-center gap-2 flex-wrap" style={{ padding: "12px 0" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: colors.textMuted, marginRight: 4 }}>
+                Step
+              </span>
+              {RATE_STEPS.map(([label, value]) => (
+                <button
+                  key={label}
+                  onClick={() => setRateStep(value)}
+                  style={{
+                    fontFamily: bodyFont, fontSize: 12.5, fontWeight: 600,
+                    color: rateStep === value ? colors.bg : colors.text,
+                    background: rateStep === value ? colors.text : "rgba(255,255,255,0.07)",
+                    border: `1px solid ${colors.ring}`, borderRadius: 999,
+                    padding: "5px 13px", cursor: "pointer",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ borderTop: `1px solid ${colors.ring}` }} />
+
+            {/* The switch this panel exists for. */}
+            <button
+              onClick={() => onUnhookChange(!unhook)}
+              disabled={!canPitch}
+              className="w-full flex items-start gap-3 text-left"
+              style={{
+                background: "none", border: "none", padding: "13px 0",
+                cursor: canPitch ? "pointer" : "not-allowed", opacity: canPitch ? 1 : 0.5,
+              }}
+            >
+              <span
+                className="flex items-center justify-center flex-shrink-0"
+                style={{
+                  width: 21, height: 21, borderRadius: 5, marginTop: 1,
+                  border: `1.5px solid ${unhook ? colors.accent : colors.ring}`,
+                  background: unhook ? colors.accent : "transparent",
+                }}
+              >
+                {unhook ? <Unlink size={13} color="#fff" /> : <Link2 size={13} color={colors.textMuted} />}
+              </span>
+              <span className="min-w-0">
+                <span style={{ display: "block", fontSize: 14.5, fontWeight: 600, color: colors.text }}>
+                  Unhook tempo from pitch
+                </span>
+                <span style={{ display: "block", fontSize: 12.5, color: colors.textMuted, marginTop: 3, lineHeight: 1.5 }}>
+                  {unhook
+                    ? "Set apart. Speed can change without the key going with it."
+                    : "Tied together, like a record spun faster — moving one moves the other."}
+                </span>
+              </span>
+            </button>
+
+            {/* Whatever the engine could not do, said out loud. */}
+            {(rateNote || !canPitch) && (
+              <div
+                className="rounded"
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: `1px solid ${colors.ring}`,
+                  padding: "10px 12px",
+                  fontSize: 12.5,
+                  lineHeight: 1.55,
+                  color: colors.textMuted,
+                  marginBottom: 4,
+                }}
+              >
+                {rateNote ||
+                  "This track plays through YouTube, which corrects pitch itself and gives no way " +
+                    "to turn that off — and its audio sits in a cross-origin frame that no pitch " +
+                    "shifter can reach. Tempo only here, snapped to the rates YouTube offers."}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between" style={{ paddingTop: 10 }}>
+              <button
+                onClick={resetRates}
+                style={{ background: "none", border: "none", cursor: "pointer", fontFamily: bodyFont, fontSize: 13.5, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted, padding: "8px 2px" }}
+              >
+                RESET
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={cancelRates}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontFamily: bodyFont, fontSize: 13.5, fontWeight: 700, letterSpacing: "0.06em", color: colors.textMuted, padding: "8px 14px" }}
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={() => { setRatesOpen(false); setRateNote(null); }}
+                  className="rounded"
+                  style={{ background: colors.accent, border: "none", cursor: "pointer", fontFamily: bodyFont, fontSize: 13.5, fontWeight: 700, letterSpacing: "0.06em", color: "#fff", padding: "8px 20px" }}
+                >
+                  OKAY
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* The bar. Stays across every view, the way a music app's does. */}
       <div
         className="fixed left-0 right-0 flex items-center gap-4 px-3 md:px-6"
@@ -1587,6 +2112,7 @@ export default function MusicPage() {
           <button onClick={() => setLiked(liked === "down" ? null : "down")} aria-label="Dislike" className="hidden sm:flex" style={{ background: "none", border: "none", cursor: "pointer", color: liked === "down" ? colors.accentLight : colors.textMuted }}>
             <ThumbsDown size={17} />
           </button>
+
           {/* Volume: the button mutes, the slider that slides out of it sets the
               level. Hidden until the group is hovered, so it costs no width
               until someone reaches for it. */}
@@ -1604,49 +2130,22 @@ export default function MusicPage() {
               className="onion-volume"
             />
           </div>
-          {/* Speed. A menu rather than a slider, because the player will only
-              take the rates it advertises and a slider would imply otherwise. */}
-          <div className="relative flex">
-            <button
-              onClick={() => setSpeedOpen((v) => !v)}
-              aria-label="Playback speed"
-              style={{
-                background: "none", border: "none", cursor: "pointer",
-                fontFamily: bodyFont, fontSize: 12.5, fontWeight: 700,
-                color: speed === 1 ? colors.textMuted : colors.accentLight,
-                minWidth: 30,
-              }}
-            >
-              {speed}x
-            </button>
 
-            {speedOpen && (
-              <div
-                className="absolute rounded"
-                style={{
-                  bottom: "calc(100% + 10px)", right: 0, zIndex: 70,
-                  background: colors.bgElevated, border: `1px solid ${colors.ring}`,
-                  padding: 6, minWidth: 92, boxShadow: "0 16px 36px rgba(0,0,0,0.6)",
-                }}
-              >
-                {speedRates.map((rate) => (
-                  <button
-                    key={rate}
-                    onClick={() => setPlaybackSpeed(rate)}
-                    className="w-full text-left rounded"
-                    style={{
-                      background: rate === speed ? "rgba(255,255,255,0.10)" : "none",
-                      border: "none", cursor: "pointer", padding: "7px 10px",
-                      fontFamily: bodyFont, fontSize: 13,
-                      color: rate === speed ? colors.text : colors.textMuted,
-                    }}
-                  >
-                    {rate}x{rate === 1 ? "  ·  normal" : ""}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Tempo and pitch. The reading is the tempo, since that is the one
+              that is always live; the dial goes accent when either is off 1. */}
+          <button
+            onClick={openRates}
+            aria-label="Tempo and pitch"
+            className="flex items-center gap-1.5"
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              fontFamily: bodyFont, fontSize: 12.5, fontWeight: 700,
+              color: ratesTouched ? colors.accentLight : colors.textMuted,
+            }}
+          >
+            <Gauge size={17} />
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>{tempo.toFixed(2)}x</span>
+          </button>
 
           <button onClick={() => setRepeat((v) => !v)} aria-label="Repeat" className="hidden sm:flex" style={{ background: "none", border: "none", cursor: "pointer", color: repeat ? colors.accentLight : colors.textMuted }}>
             <Repeat size={17} />
