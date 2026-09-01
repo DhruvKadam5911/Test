@@ -223,6 +223,7 @@ terms it is allowed under.
 | `GET /music/search?q=` | Songs, ranked so the original comes first. Under two characters returns `[]` |
 | `GET /music/albums?q=` | Albums and playlists. Its own 100 units — playlists do not come back from a video search however wide it is asked to be, which was tested |
 | `GET /music/related?title=&artist=&exclude=` | Songs like this one — not other copies of it |
+| `GET /music/stream/:id` | The audio itself, proxied from the track's `audioUrl`. GET and HEAD |
 | `GET /music/genres` | Counts, for a client that wants to group |
 
 **Putting the original first.** A YouTube search for a song returns the label's upload, a lyric
@@ -231,6 +232,20 @@ likes. There is no "official" flag in the API, so `rankByOriginality` reads the 
 carry the signal: a VEVO or label channel scores up, a title saying "lyrics", "cover", "slowed" or
 "remix" scores down, and YouTube's own relevance stays as the tiebreak rather than being thrown
 away. Cached rows are ranked again on the way out, because the table returns them in insert order.
+
+**Why there is a streaming proxy.** The player is a plain `<audio>` element, because that is the
+only thing that keeps playing when a phone's screen goes off — a player inside an iframe is
+suspended by the browser whatever the page does. The element needs bytes, and `/music/stream/:id`
+is where it asks: a proxy in front of whatever URL the catalog holds, so storage can move and URLs
+can be signed without the browser knowing.
+
+Two details it lives or dies by, both verified against the deployed endpoint: a Range request is
+answered with **206** and a correct `Content-Range` (iOS opens with `Range: bytes=0-1` and refuses
+to play on a 200, and a framework will normalise that away if the status is not set explicitly),
+and the upstream `Content-Type` is passed through rather than invented.
+
+It is not a way to pull audio out of YouTube. Rows imported from YouTube carry no `audioUrl` and
+are refused with a message saying so.
 
 **Recommendations, without a recommendations API.** YouTube withdrew
 `relatedToVideoId` in 2023, so "related" is built from what is left. The channel is the strongest

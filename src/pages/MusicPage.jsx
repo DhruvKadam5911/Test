@@ -51,7 +51,9 @@ const SEARCH_DEBOUNCE_MS = 500;
 // Where the bytes come from. A track may carry its own `streamUrl` from the
 // API — preferred, because it lets the backend hand out signed or CDN URLs
 // without this file knowing about it. Otherwise we fall back to the id route.
-const STREAM_BASE = "/api/music/stream";
+// The API is its own deployment, so a relative path would ask the frontend's
+// own host for the bytes and get the SPA's index.html back.
+const STREAM_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/music/stream`;
 function streamUrl(track) {
   if (!track) return "";
   if (track.streamUrl) return track.streamUrl;

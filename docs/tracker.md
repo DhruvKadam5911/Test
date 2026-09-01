@@ -133,6 +133,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-09-01 | — | `GET /music/stream/:id` added, the half the `<audio>` rewrite was missing: a Range-capable proxy in front of a track's `audioUrl`. Verified on the deployment — 206 with a correct Content-Range for `bytes=0-1` and for a mid-file seek. Nothing in the catalog has an `audioUrl` yet, so nothing plays through it until licensed audio is added |
 | 2026-09-01 | — | Lock-screen controls via the Media Session API, and the bar's slide is a phone behaviour only — a wide screen has room for the bar and the stage at once. **Background playback is not possible with the YouTube embed**: browsers suspend an embedded player when the page is backgrounded and YouTube keeps background audio behind Premium. Own audio through an `<audio>` element is what survives a locked screen |
 | 2026-09-01 | — | Lyrics pulled back out. There is no free legal source — every service that returns the words licenses them from the publishers — so it needed a Musixmatch key to be anything but an empty panel, and it was not worth a tab until someone wants to add one |
 | 2026-09-01 | — | Music player gains keyboard control (space, arrows for volume and for the next song), artwork that plays and pauses on a click, and a bar that steps out of the stage's way and returns on a scroll up |
