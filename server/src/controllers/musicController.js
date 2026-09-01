@@ -172,7 +172,21 @@ export async function relatedTracks(req, res) {
 
     // Other copies of the same song are the one thing this must not return.
     const usable = rankByOriginality(cached).filter((t) => !seed || titleCore(t.title) !== seed);
-    if (usable.length >= CACHE_HIT_MIN) return res.status(200).json(usable.slice(0, limit));
+
+    /*
+     * The cache is keyed on the artist, which is fine for "more by them" and
+     * wrong for "more like this": every song on a label would answer from the
+     * same rows. So a cached answer only counts when enough of it shares a word
+     * with the song asked about — otherwise it is worth the hundred units to
+     * ask for a set that belongs to this song.
+     */
+    const words = seed.split(" ").filter((w) => w.length > 3);
+    const nearby = words.length
+      ? usable.filter((t) => words.some((w) => titleCore(t.title).includes(w)))
+      : usable;
+
+    if (nearby.length >= CACHE_HIT_MIN) return res.status(200).json(nearby.slice(0, limit));
+    if (!seed && usable.length >= CACHE_HIT_MIN) return res.status(200).json(usable.slice(0, limit));
 
     if (!isYoutubeConfigured()) return res.status(200).json(usable);
 

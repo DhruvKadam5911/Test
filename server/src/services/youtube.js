@@ -197,7 +197,7 @@ export function titleCore(title) {
     .split(/[|\-–—([]/)[0]
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/(full|video|song|official|audio|lyrical|new|hd|4k|8k)/g, " ")
+    .replace(/(full|video|song|music|mix|version|official|audio|lyrical|new|hd|4k|8k|remastered)/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -214,11 +214,15 @@ export function titleCore(title) {
  * does not want it back five more times.
  */
 export async function searchRelated({ title, artist, exclude, region = "IN", limit = 25 } = {}) {
-  const query = [artist, titleCore(title)].filter(Boolean).join(" ");
-  if (!query.trim()) return [];
-
-  const tracks = await searchMusic({ query: artist || query, region, limit: 50 });
   const seed = titleCore(title);
+  // The song, not the channel. Searching the artist alone gave every track on
+  // a label the same list of recommendations — pick any Sony song and get the
+  // same twenty back — so the mood of the one playing was lost immediately.
+  // Its own title is what YouTube's relatedness has to work with.
+  const query = [seed, artist].filter(Boolean).join(" ").trim();
+  if (!query) return [];
+
+  const tracks = await searchMusic({ query, region, limit: 50 });
 
   return tracks
     .filter((t) => t.sourceId !== exclude)

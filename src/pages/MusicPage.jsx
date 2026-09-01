@@ -2,13 +2,14 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from
 import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
-  Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp, Film,
+  Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp, Film, History,
   ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
   ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
 import OnionMark from "../components/shared/OnionMark";
 import BrandWord from "../components/shared/BrandWord";
+import ExploreView from "../components/music/ExploreView";
 import api from "../api/client";
 
 /*
@@ -216,6 +217,9 @@ export default function MusicPage() {
   const [albums, setAlbums] = useState(null);
   const [recent, setRecent] = useState(() => readRecent());
   const [forYou, setForYou] = useState([]);
+  // Explore's own rows, fetched once when it is first opened rather than on
+  // every visit to the page.
+  const [explore, setExplore] = useState({ albums: [], top: [] });
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -300,6 +304,27 @@ export default function MusicPage() {
         setTracks([]);
       });
   }, []);
+
+  /*
+   * Explore's rows. The albums come from the album search, the top songs from
+   * the chart the page already knows how to ask for — one request each, and
+   * only the first time Explore is opened.
+   */
+  useEffect(() => {
+    if (view !== "explore" || explore.albums.length || explore.top.length) return;
+
+    let cancelled = false;
+    Promise.all([
+      api.get("/music/albums?q=new%20album%202026&limit=12").catch(() => []),
+      api.get("/music/tracks?limit=8").catch(() => []),
+    ]).then(([albums, top]) => {
+      if (!cancelled) setExplore({ albums, top });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, explore.albums.length, explore.top.length]);
 
   /*
    * "Because you listened to…" — built from the most recent play.
@@ -1000,6 +1025,7 @@ export default function MusicPage() {
         </Link>
         {railItem("home", "Home", Home)}
         {railItem("explore", "Explore", Compass)}
+        {railItem("history", "History", History)}
         {railItem("library", "Library", Library)}
         <div style={{ borderTop: `1px solid ${colors.ring}`, margin: "14px 8px" }} />
         <Link to="/" style={{ fontSize: 13, color: colors.textMuted, textDecoration: "none", padding: "8px 14px" }}>
@@ -1076,8 +1102,13 @@ export default function MusicPage() {
                   // screen it sits on is taken away.
                   setTimeout(() => setSearchFocused(false), 160);
                 }}
-                className="outline-none bg-transparent flex-1"
-                style={{ color: colors.text, fontSize: 14.5 }}
+                className="bg-transparent flex-1"
+                style={{
+                  color: colors.text, fontSize: 14.5,
+                  // Both, and inline: the browser draws its own ring on a
+                  // focused field, and Tailwind's outline-none was losing to it.
+                  outline: "none", boxShadow: "none", border: "none",
+                }}
               />
               {(query || mobileSearch) && (
                 <button
@@ -1180,19 +1211,36 @@ export default function MusicPage() {
             </div>
           )}
 
-          {searchScreen ? null : view === "library" && !searchActive ? (
+          {searchScreen ? null : (view === "history" || view === "library") && !searchActive ? (
             recent.length ? (
               <>
+                {view === "history" && (
+                  <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 600, marginBottom: 14 }}>History</div>
+                )}
                 {cardRow("Listen again", recent)}
-                <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 600, marginBottom: 10 }}>Recent</div>
+                <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 600, marginBottom: 10 }}>
+                  {view === "history" ? "Everything you have played" : "Recent"}
+                </div>
                 {recent.map(trackRow)}
               </>
             ) : (
               <div style={{ color: colors.textMuted, fontSize: 14, paddingTop: 24 }}>
-                <Library size={26} />
+                {view === "history" ? <History size={26} /> : <Library size={26} />}
                 <p className="mt-3">Nothing here yet. Whatever you play shows up in this list.</p>
               </div>
             )
+          ) : view === "explore" && !searchActive ? (
+            <ExploreView
+              shortcuts={SHORTCUTS}
+              onShortcut={setQuery}
+              albums={explore.albums}
+              top={explore.top}
+              moods={MOODS}
+              onMood={(mood) => setQuery(`${mood} songs`)}
+              onPlay={play}
+              cardRow={cardRow}
+              trackRow={trackRow}
+            />
           ) : list === null ? (
             <div className="space-y-3 animate-pulse">
               {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -1522,6 +1570,7 @@ export default function MusicPage() {
           {[
             ["home", "Home", Home],
             ["explore", "Explore", Compass],
+            ["history", "History", History],
             ["library", "Library", Library],
           ].map(([key, label, Icon]) => (
             <button

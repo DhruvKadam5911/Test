@@ -23,6 +23,9 @@ export const STROKE_WIREFRAME = 2;
 export const STROKE_SOLID = 20;
 
 const LETTER_GAP = 30;
+// Letters that end on a straight stem need less air after them than a circle
+// does, or the word falls into pieces. Applied per glyph in layOutWord.
+const TIGHT_GAP = 20;
 
 // `o` — a ring. Nodes at the four quadrants.
 const o = {
@@ -38,6 +41,8 @@ const o = {
 
 // `n` — a stem that turns into a semicircular shoulder and back down.
 const n = {
+  flatLeft: true,
+  flatRight: true,
   width: 100,
   paths: ["M 0,100 L 0,50 A 50,50 0 0 1 100,50 L 100,100"],
   anchors: [
@@ -52,6 +57,8 @@ const n = {
 // `i` — a short stem plus a tittle. The tittle's radius tracks the stroke
 // width, so it thickens with the rest of the word instead of being a fixed dot.
 const i = {
+  flatLeft: true,
+  flatRight: true,
   width: 16,
   paths: ["M 8,100 L 8,45"],
   tittle: [8, 14],
@@ -73,6 +80,7 @@ const i = {
 // the whole glyph is 150 wide and fills it. The paths have to span the declared
 // width or the layout leaves a hole after the letter.
 const m = {
+  flatRight: true,
   width: 150,
   paths: ["M 0,100 L 0,50 A 37.5,37.5 0 0 1 75,50 L 75,100 M 75,50 A 37.5,37.5 0 0 1 150,50 L 150,100"],
   anchors: [[0, 100], [0, 50], [37.5, 12.5], [75, 50], [75, 100], [112.5, 12.5], [150, 50], [150, 100]],
@@ -81,6 +89,8 @@ const m = {
 // `u` — n turned over: stems from the x-height down to the centre line, then a
 // semicircular bowl to the baseline. Mirrors n's construction exactly.
 const u = {
+  flatLeft: true,
+  flatRight: true,
   width: 100,
   paths: ["M 0,0 L 0,50 A 50,50 0 0 0 100,50 L 100,0"],
   anchors: [[0, 0], [0, 50], [50, 100], [100, 50], [100, 0]],
@@ -93,12 +103,18 @@ const c = {
   anchors: [[100, 25], [50, 0], [0, 50], [50, 100], [100, 75]],
 };
 
-// `s` — two half-arcs meeting at the centre line. The only glyph here whose
-// nodes are not on a circle's quadrants, because an s has none to sit on.
+/*
+ * `s` — two arcs that meet on the centre line, the top one opening left and the
+ * bottom one opening right.
+ *
+ * The only glyph here whose nodes are not on a circle's quadrants, because an s
+ * has none to sit on. Drawn narrower than the round letters: at the same width
+ * the two bowls read as a figure eight rather than an s.
+ */
 const s = {
-  width: 90,
-  paths: ["M 85,25 A 27,27 0 1 0 45,50 A 27,27 0 1 1 5,75"],
-  anchors: [[85, 25], [45, 50], [5, 75]],
+  width: 78,
+  paths: ["M 74,22 A 26,26 0 1 0 39,50 A 26,26 0 1 1 4,78"],
+  anchors: [[74, 22], [39, 50], [4, 78]],
 };
 
 const WORD = [o, n, i, o, n];
@@ -136,9 +152,10 @@ export function layOutWord(word) {
   if (glyphs.some((g) => !g)) return null;
 
   let x = 0;
-  const letters = glyphs.map((glyph) => {
+  const letters = glyphs.map((glyph, index) => {
     const at = x;
-    x += glyph.width + LETTER_GAP;
+    const next = glyphs[index + 1];
+    x += glyph.width + (glyph.flatRight || next?.flatLeft ? TIGHT_GAP : LETTER_GAP);
     return {
       x: at,
       width: glyph.width,
