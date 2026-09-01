@@ -43,6 +43,10 @@ const DOCK_MARGIN = 14;
 const RAIL_WIDTH = 232;
 const BAR_HEIGHT = 76;
 
+// A phone gets the rail as a bottom bar instead, the way music apps do it.
+const NAV_HEIGHT = 58;
+const NARROW = "(max-width: 767px)";
+
 const MOODS = [
   "Podcasts", "Work out", "Energise", "Romance", "Feel good",
   "Sleep", "Commute", "Relax", "Party", "Sad", "Focus",
@@ -115,6 +119,18 @@ export default function MusicPage() {
 
   const [expanded, setExpanded] = useState(false);
   const [stage, setStage] = useState("song");
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
+  );
+  const [mobileSearch, setMobileSearch] = useState(false);
+
+  useEffect(() => {
+    const q = window.matchMedia?.(NARROW);
+    if (!q) return;
+    const onChange = (e) => setNarrow(e.matches);
+    q.addEventListener("change", onChange);
+    return () => q.removeEventListener("change", onChange);
+  }, []);
 
   const playerRef = useRef(null);
   const hostRef = useRef(null);
@@ -248,12 +264,12 @@ export default function MusicPage() {
     const width = Math.min(DOCK_WIDTH, window.innerWidth - DOCK_MARGIN * 2);
     const height = Math.max(DOCK_HEIGHT, Math.round((width * 9) / 16));
     setBox({
-      top: window.innerHeight - height - BAR_HEIGHT - DOCK_MARGIN,
+      top: window.innerHeight - height - BAR_HEIGHT - (narrow ? NAV_HEIGHT : 0) - DOCK_MARGIN,
       left: window.innerWidth - width - DOCK_MARGIN,
       width,
       height,
     });
-  }, [expanded]);
+  }, [expanded, narrow]);
 
   useEffect(() => {
     // Measured over the next few frames as well as now: the layout the slot
@@ -444,33 +460,59 @@ export default function MusicPage() {
         @media (min-width: 768px) { .music-shell { padding-left: ${RAIL_WIDTH}px; } }
       `}</style>
       <div className="music-shell">
-        {/* Search */}
+        {/* Search. A phone gets the app bar a music app has — mark, then a
+            magnifier that opens the field — rather than a search box taking a
+            third of the screen before anything has been looked at. */}
         <div
-          className="sticky top-0 flex items-center justify-center px-6 py-3"
+          className="sticky top-0 flex items-center gap-3 px-4 md:px-6 py-3"
           style={{ background: colors.bg, borderBottom: `1px solid ${colors.ring}`, zIndex: 25 }}
         >
-          <div
-            className="flex items-center gap-3 px-4 py-2.5 rounded w-full"
-            style={{ background: "rgba(255,255,255,0.07)", border: `1px solid ${colors.ring}`, maxWidth: 620 }}
-          >
-            <Search size={17} color={colors.textMuted} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Backspace" && !query && e.preventDefault()}
-              placeholder="Search songs, albums, artists"
-              className="outline-none bg-transparent flex-1"
-              style={{ color: colors.text, fontSize: 14.5 }}
-            />
-            {query && (
-              <button onClick={() => setQuery("")} aria-label="Clear search" style={{ background: "none", border: "none", cursor: "pointer", display: "flex" }}>
-                <X size={16} color={colors.textMuted} />
+          {narrow && !mobileSearch && (
+            <>
+              <Link to="/" style={{ textDecoration: "none", display: "flex" }}>
+                <OnionLogo height={44} />
+              </Link>
+              <button
+                onClick={() => setMobileSearch(true)}
+                aria-label="Search"
+                style={{ background: "none", border: "none", cursor: "pointer", display: "flex", marginLeft: "auto", color: colors.textMuted }}
+              >
+                <Search size={21} />
               </button>
-            )}
-          </div>
+            </>
+          )}
+
+          {(!narrow || mobileSearch) && (
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded w-full mx-auto"
+              style={{ background: "rgba(255,255,255,0.07)", border: `1px solid ${colors.ring}`, maxWidth: 620 }}
+            >
+              <Search size={17} color={colors.textMuted} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Backspace" && !query && e.preventDefault()}
+                placeholder="Search songs, albums, artists"
+                autoFocus={mobileSearch}
+                className="outline-none bg-transparent flex-1"
+                style={{ color: colors.text, fontSize: 14.5 }}
+              />
+              {(query || mobileSearch) && (
+                <button
+                  onClick={() => { setQuery(""); setMobileSearch(false); }}
+                  aria-label="Clear search"
+                  style={{ background: "none", border: "none", cursor: "pointer", display: "flex" }}
+                >
+                  <X size={16} color={colors.textMuted} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="px-6 md:px-8 pt-6" style={{ paddingBottom: BAR_HEIGHT + DOCK_HEIGHT + 40 }}>
+        <div
+          className="px-4 md:px-8 pt-5"
+          style={{ paddingBottom: BAR_HEIGHT + DOCK_HEIGHT + (narrow ? NAV_HEIGHT : 0) + 40 }}
+        >
           {/* Moods, the way YouTube Music opens */}
           {!searchActive && (
             <div className="flex gap-2.5 overflow-x-auto pb-5" style={{ scrollbarWidth: "none" }}>
@@ -557,7 +599,7 @@ export default function MusicPage() {
       {expanded && (
         <div
           className="fixed inset-0 flex flex-col"
-          style={{ background: colors.bg, zIndex: 55, paddingBottom: BAR_HEIGHT }}
+          style={{ background: colors.bg, zIndex: 55, paddingBottom: narrow ? BAR_HEIGHT + NAV_HEIGHT : BAR_HEIGHT }}
         >
           {track?.artworkUrl && (
             <div
@@ -570,8 +612,15 @@ export default function MusicPage() {
           )}
           <div className="absolute inset-0 pointer-events-none" style={{ background: "rgba(12,8,18,0.62)" }} />
 
-          <div className="relative flex items-center justify-center pt-5 pb-3">
-            <div className="flex rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.10)", border: `1px solid ${colors.ring}` }}>
+          <div className="relative flex items-center px-4 pt-4 pb-2">
+            <button
+              onClick={() => setExpanded(false)}
+              aria-label="Collapse"
+              style={{ background: "none", border: "none", cursor: "pointer", display: "flex", color: colors.text }}
+            >
+              <ChevronDown size={24} />
+            </button>
+            <div className="flex rounded-full overflow-hidden mx-auto" style={{ background: "rgba(255,255,255,0.10)", border: `1px solid ${colors.ring}` }}>
               {["song", "video"].map((m) => (
                 <button
                   key={m}
@@ -587,42 +636,111 @@ export default function MusicPage() {
                 </button>
               ))}
             </div>
+            <span style={{ width: 24 }} />
           </div>
 
-          <div className="relative flex-1 flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6 overflow-y-auto">
-            <div className="flex-1 flex flex-col items-center justify-start gap-5">
+          {narrow ? (
+            /* A phone: one column, the artwork in the middle of it, controls
+               large enough for a thumb, and the queue underneath. */
+            <div className="relative flex-1 overflow-y-auto px-5 pb-6 flex flex-col">
               {stage === "song" && (
-                <div
-                  className="rounded-lg"
-                  style={{
-                    width: "min(420px, 82vw)", aspectRatio: "1 / 1",
-                    background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
-                    boxShadow: "0 30px 70px rgba(0,0,0,0.6)",
-                  }}
-                />
+                <div className="flex justify-center py-2">
+                  <div
+                    className="rounded-lg"
+                    style={{
+                      // Small enough that the artwork, the player and the
+                      // controls all fit above the bar on a phone. The video
+                      // takes 190px that a music app does not have to spend.
+                      width: "min(168px, 44vw)", aspectRatio: "1 / 1",
+                      background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
+                      boxShadow: "0 26px 60px rgba(0,0,0,0.6)",
+                    }}
+                  />
+                </div>
               )}
-              {/* The slot the player flies into. Bigger in Video, but present
-                  and uncovered in both — that is the condition it plays under. */}
-              <div
-                ref={slotRef}
-                className="rounded-lg"
-                style={{
-                  width: stage === "video" ? "min(880px, 92vw)" : "min(420px, 82vw)",
-                  aspectRatio: "16 / 9",
-                  background: "#000",
-                }}
-              />
-            </div>
 
-            <div className="w-full lg:w-[340px] flex-shrink-0">
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", marginBottom: 12 }}>
+              <div ref={slotRef} className="rounded-lg w-full" style={{ aspectRatio: "16 / 9", background: "#000" }} />
+
+              <div className="mt-4">
+                <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 600, color: colors.text }} className="line-clamp-2">
+                  {track?.title || "Nothing playing"}
+                </div>
+                <div style={{ fontSize: 14, color: colors.textMuted, marginTop: 4 }} className="truncate">
+                  {track?.artist || ""}
+                </div>
+              </div>
+
+              <div onClick={seek} className="mt-4" style={{ height: 4, background: "rgba(255,255,255,0.16)", borderRadius: 2, cursor: "pointer" }}>
+                <div style={{ height: "100%", width: `${progress}%`, background: colors.text, borderRadius: 2 }} />
+              </div>
+              <div className="flex items-center justify-between mt-2" style={{ fontSize: 11.5, color: colors.textMuted }}>
+                <span>{formatTime(position)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
+
+              <div className="flex items-center justify-between mt-5 px-2">
+                <button onClick={() => setShuffle((v) => !v)} aria-label="Shuffle" style={{ background: "none", border: "none", cursor: "pointer", color: shuffle ? colors.accentLight : colors.textMuted }}>
+                  <Shuffle size={22} />
+                </button>
+                <button onClick={() => skip(-1)} aria-label="Previous" style={{ background: "none", border: "none", cursor: "pointer", color: colors.text }}>
+                  <SkipBack size={30} />
+                </button>
+                <button
+                  onClick={toggle}
+                  aria-label={playing ? "Pause" : "Play"}
+                  style={{ background: colors.text, border: "none", borderRadius: "50%", width: 68, height: 68, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                  {playing ? <Pause size={28} color={colors.bg} /> : <Play size={28} color={colors.bg} style={{ marginLeft: 3 }} />}
+                </button>
+                <button onClick={() => skip(1)} aria-label="Next" style={{ background: "none", border: "none", cursor: "pointer", color: colors.text }}>
+                  <SkipForward size={30} />
+                </button>
+                <button onClick={() => setRepeat((v) => !v)} aria-label="Repeat" style={{ background: "none", border: "none", cursor: "pointer", color: repeat ? colors.accentLight : colors.textMuted }}>
+                  <Repeat size={22} />
+                </button>
+              </div>
+
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", margin: "26px 0 8px" }}>
                 Up next
               </div>
-              <div style={{ maxHeight: "50vh", overflowY: "auto" }}>
-                {(tracks || []).map(trackRow)}
+              {(tracks || []).map(trackRow)}
+            </div>
+          ) : (
+            <div className="relative flex-1 flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6 overflow-y-auto">
+              <div className="flex-1 flex flex-col items-center justify-start gap-5">
+                {stage === "song" && (
+                  <div
+                    className="rounded-lg"
+                    style={{
+                      width: "min(420px, 82vw)", aspectRatio: "1 / 1",
+                      background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
+                      boxShadow: "0 30px 70px rgba(0,0,0,0.6)",
+                    }}
+                  />
+                )}
+                {/* The slot the player flies into. Bigger in Video, but present
+                    and uncovered in both — that is the condition it plays under. */}
+                <div
+                  ref={slotRef}
+                  className="rounded-lg"
+                  style={{
+                    width: stage === "video" ? "min(880px, 92vw)" : "min(420px, 82vw)",
+                    aspectRatio: "16 / 9",
+                    background: "#000",
+                  }}
+                />
+              </div>
+
+              <div className="w-full lg:w-[340px] flex-shrink-0">
+                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", marginBottom: 12 }}>
+                  Up next
+                </div>
+                <div style={{ maxHeight: "50vh", overflowY: "auto" }}>
+                  {(tracks || []).map(trackRow)}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -648,8 +766,14 @@ export default function MusicPage() {
 
       {/* The bar. Stays across every view, the way a music app's does. */}
       <div
-        className="fixed left-0 right-0 bottom-0 flex items-center gap-4 px-4 md:px-6"
-        style={{ height: BAR_HEIGHT, background: colors.bgElevated, borderTop: `1px solid ${colors.ring}`, zIndex: 58 }}
+        className="fixed left-0 right-0 flex items-center gap-4 px-3 md:px-6"
+        style={{
+          bottom: narrow ? NAV_HEIGHT : 0,
+          height: BAR_HEIGHT,
+          background: colors.bgElevated,
+          borderTop: `1px solid ${colors.ring}`,
+          zIndex: 58,
+        }}
       >
         <div className="absolute left-0 right-0 top-0" style={{ height: 3, background: "rgba(255,255,255,0.10)", cursor: "pointer" }} onClick={seek}>
           <div style={{ height: "100%", width: `${progress}%`, background: colors.accent }} />
@@ -715,6 +839,33 @@ export default function MusicPage() {
           </button>
         </div>
       </div>
+      {/* A phone gets the rail here instead, where a thumb can reach it. */}
+      {narrow && (
+        <div
+          className="fixed left-0 right-0 bottom-0 flex items-stretch"
+          style={{ height: NAV_HEIGHT, background: colors.bg, borderTop: `1px solid ${colors.ring}`, zIndex: 59 }}
+        >
+          {[
+            ["home", "Home", Home],
+            ["explore", "Explore", Compass],
+            ["library", "Library", Library],
+          ].map(([key, label, Icon]) => (
+            <button
+              key={key}
+              onClick={() => { setView(key); setQuery(""); setMobileSearch(false); setExpanded(false); }}
+              className="flex-1 flex flex-col items-center justify-center gap-1"
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: view === key ? colors.text : colors.textMuted,
+                fontFamily: bodyFont, fontSize: 10.5, fontWeight: view === key ? 700 : 500,
+              }}
+            >
+              <Icon size={19} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
