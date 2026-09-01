@@ -330,3 +330,20 @@ this document.
 
 There is no light mode. `<html class="dark">` is hardcoded in `index.html` and every token
 assumes a dark surface. Do not add `prefers-color-scheme` handling without a product decision.
+
+## Spelling other words in the brand's letterforms
+
+`components/splash/wordmarkGeometry.js` holds the wordmark as geometry — rings, arcs and stems on
+three lines — rather than as a font, because the construction intro takes it apart and a webfont's
+outlines would read as noise. It started with the five glyphs "onion" needs.
+
+`m`, `u`, `s` and `c` were added for "music", drawn the same way: `m` is `n` twice, `u` is `n`
+turned over, `c` is the ring of `o` left open on the right. `s` is the one shape whose nodes are not
+on a circle's quadrants, because an `s` has none to sit on.
+
+`layOutWord()` sets any word from the glyphs that exist and returns null for one that needs a letter
+nobody has drawn — these are shapes, not a typeface with a character set. `<BrandWord word="music" />`
+renders it; `OnionWordmark` still draws "onion" and only "onion".
+
+**A glyph's paths must span its declared `width`.** `m` was authored 150 wide with paths reaching
+100, and the layout dutifully left the missing 50 as a gap — on screen it read as "m usic".

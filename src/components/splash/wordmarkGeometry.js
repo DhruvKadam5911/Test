@@ -62,6 +62,45 @@ const i = {
   ],
 };
 
+/*
+ * The rest of the alphabet the brand needs, built the same way: rings, arcs and
+ * stems on the same three lines. `m` is `n` twice at half width; `u` is `n`
+ * turned over; `c` is a ring with its right side left open; `s` is the one
+ * shape here that is not a quadrant arc, since an s cannot be.
+ */
+
+// `m` — n twice: one stem, two shoulders, each three quarters of n's width so
+// the whole glyph is 150 wide and fills it. The paths have to span the declared
+// width or the layout leaves a hole after the letter.
+const m = {
+  width: 150,
+  paths: ["M 0,100 L 0,50 A 37.5,37.5 0 0 1 75,50 L 75,100 M 75,50 A 37.5,37.5 0 0 1 150,50 L 150,100"],
+  anchors: [[0, 100], [0, 50], [37.5, 12.5], [75, 50], [75, 100], [112.5, 12.5], [150, 50], [150, 100]],
+};
+
+// `u` — n turned over: stems from the x-height down to the centre line, then a
+// semicircular bowl to the baseline. Mirrors n's construction exactly.
+const u = {
+  width: 100,
+  paths: ["M 0,0 L 0,50 A 50,50 0 0 0 100,50 L 100,0"],
+  anchors: [[0, 0], [0, 50], [50, 100], [100, 50], [100, 0]],
+};
+
+// `c` — the ring of o with its right quadrant left open.
+const c = {
+  width: 100,
+  paths: ["M 100,25 A 50,50 0 1 0 100,75"],
+  anchors: [[100, 25], [50, 0], [0, 50], [50, 100], [100, 75]],
+};
+
+// `s` — two half-arcs meeting at the centre line. The only glyph here whose
+// nodes are not on a circle's quadrants, because an s has none to sit on.
+const s = {
+  width: 90,
+  paths: ["M 85,25 A 27,27 0 1 0 45,50 A 27,27 0 1 1 5,75"],
+  anchors: [[85, 25], [45, 50], [5, 75]],
+};
+
 const WORD = [o, n, i, o, n];
 
 // Lay the glyphs out left to right and bake the offsets in, so every consumer
@@ -81,6 +120,36 @@ export const LETTERS = WORD.map((glyph) => {
 });
 
 export const WORDMARK_WIDTH = cursor - LETTER_GAP;
+
+// Everything the brand can spell. Anything not here simply cannot be drawn in
+// these letterforms — they are shapes, not a typeface with a full character set.
+const GLYPHS = { o, n, i, m, u, s, c };
+
+/**
+ * Lay out an arbitrary word in the same letterforms.
+ *
+ * Returns null for a word containing a glyph that has not been drawn, so a
+ * caller can fall back rather than render a gap.
+ */
+export function layOutWord(word) {
+  const glyphs = [...String(word).toLowerCase()].map((ch) => GLYPHS[ch]);
+  if (glyphs.some((g) => !g)) return null;
+
+  let x = 0;
+  const letters = glyphs.map((glyph) => {
+    const at = x;
+    x += glyph.width + LETTER_GAP;
+    return {
+      x: at,
+      width: glyph.width,
+      paths: glyph.paths.map((d) => translatePath(d, at)),
+      tittle: glyph.tittle ? [glyph.tittle[0] + at, glyph.tittle[1]] : null,
+      anchors: glyph.anchors.map(([ax, ay]) => [ax + at, ay]),
+    };
+  });
+
+  return { letters, width: x - LETTER_GAP };
+}
 
 export const ANCHORS = LETTERS.flatMap((l) => l.anchors);
 

@@ -7,7 +7,8 @@ import {
   ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
-import OnionLogo from "../components/shared/OnionLogo";
+import OnionMark from "../components/shared/OnionMark";
+import BrandWord from "../components/shared/BrandWord";
 import api from "../api/client";
 
 /*
@@ -812,11 +813,12 @@ export default function MusicPage() {
       >
         {/* The mark alone says Onion, which is the film app. This is a
             different room in the same house, so it says which one. */}
-        <Link to="/music" className="flex items-baseline gap-2" style={{ textDecoration: "none", marginBottom: 8, paddingLeft: 6 }}>
-          <OnionLogo height={62} />
-          <span style={{ fontFamily: displayFont, fontSize: 21, fontWeight: 600, color: colors.text, letterSpacing: "-0.01em" }}>
-            Music
-          </span>
+        {/* The mark, and "music" drawn in the same letterforms as the logo —
+            not set in a typeface next to it. The word "onion" is gone: the mark
+            already says it, and saying it twice made the lockup a mouthful. */}
+        <Link to="/music" className="flex items-center gap-1" style={{ textDecoration: "none", marginBottom: 10, paddingLeft: 2 }}>
+          <OnionMark height={86} />
+          <BrandWord word="music" height={30} />
         </Link>
         {railItem("home", "Home", Home)}
         {railItem("explore", "Explore", Compass)}
@@ -845,11 +847,9 @@ export default function MusicPage() {
         >
           {narrow && !mobileSearch && (
             <>
-              <Link to="/music" className="flex items-baseline gap-1.5" style={{ textDecoration: "none" }}>
-                <OnionLogo height={44} />
-                <span style={{ fontFamily: displayFont, fontSize: 16, fontWeight: 600, color: colors.text }}>
-                  Music
-                </span>
+              <Link to="/music" className="flex items-center gap-0.5" style={{ textDecoration: "none" }}>
+                <OnionMark height={62} />
+                <BrandWord word="music" height={21} />
               </Link>
               <button
                 onClick={() => setMobileSearch(true)}
