@@ -247,6 +247,7 @@ export default function MusicPage() {
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
   const [liked, setLiked] = useState(null);
@@ -820,6 +821,18 @@ export default function MusicPage() {
     onPointerCancel: scrubEnd,
   };
 
+  const setVolumeLevel = (level) => {
+    const audio = audioRef.current;
+    setVolume(level);
+    if (!audio) return;
+    audio.volume = level;
+    // Dragging away from zero should unmute, or the slider does nothing.
+    if (level > 0 && audio.muted) {
+      audio.muted = false;
+      setMuted(false);
+    }
+  };
+
   const toggleMute = () => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -959,6 +972,43 @@ export default function MusicPage() {
       </div>
 
       <style>{`
+        /*
+         * The ring around the search field is the browser's, not ours, and it
+         * is drawn on whichever element takes focus — so it is turned off on
+         * the field, on the box around it, and on whatever inside it might take
+         * focus next. Turning it off on the element alone kept losing.
+         */
+        .onion-search, .onion-search *, .onion-search:focus-within {
+          outline: none !important;
+          box-shadow: none !important;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .onion-search input:focus,
+        .onion-search input:focus-visible { outline: none !important; }
+
+        .onion-volume {
+          width: 0;
+          opacity: 0;
+          margin-left: 0;
+          height: 4px;
+          appearance: none;
+          background: rgba(255,255,255,0.22);
+          border-radius: 2px;
+          outline: none;
+          cursor: pointer;
+          transition: width 220ms cubic-bezier(.32,.72,0,1), opacity 180ms ease, margin-left 220ms ease;
+        }
+        .group\/vol:hover .onion-volume,
+        .onion-volume:focus-visible { width: 84px; opacity: 1; margin-left: 10px; }
+        .onion-volume::-webkit-slider-thumb {
+          appearance: none; width: 11px; height: 11px; border-radius: 50%;
+          background: #fff; cursor: pointer;
+        }
+        .onion-volume::-moz-range-thumb {
+          width: 11px; height: 11px; border: none; border-radius: 50%;
+          background: #fff; cursor: pointer;
+        }
+
         @keyframes onion-search-in {
           from { opacity: 0; transform: translateY(-6px) scaleX(0.94); }
           to { opacity: 1; transform: none; }
@@ -1023,7 +1073,7 @@ export default function MusicPage() {
             </>
           )}
           {(!narrow || mobileSearch) && (
-            <div className="flex items-center gap-3 px-4 py-2.5 rounded w-full mx-auto"
+            <div className="onion-search flex items-center gap-3 px-4 py-2.5 rounded w-full mx-auto"
               style={{
                 background: "rgba(255,255,255,0.07)",
                 border: `1px solid ${colors.ring}`,
@@ -1353,8 +1403,11 @@ export default function MusicPage() {
               </div>
             </div>
           ) : (
-            <div onScroll={onStageScroll} className="relative flex-1 min-h-0 overflow-y-auto flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
-              <div className="flex-1 flex flex-col items-center justify-center gap-6">
+            // Two columns that scroll independently. The artwork and the
+            // controls stay put — they are what someone is looking at — and
+            // only the queue moves under them.
+            <div className="relative flex-1 min-h-0 flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
+              <div className="flex-1 flex flex-col items-center justify-center gap-6 min-h-0">
                 <div
                   onClick={toggle}
                   role="button"
@@ -1377,9 +1430,11 @@ export default function MusicPage() {
                 </div>
               </div>
 
-              <div className="w-full lg:w-[340px] flex-shrink-0">
+              <div className="w-full lg:w-[340px] flex-shrink-0 flex flex-col min-h-0">
                 {upNextHeading}
-                {(queue.length ? queue : tracks || []).map(trackRow)}
+                <div onScroll={onStageScroll} className="flex-1 min-h-0 overflow-y-auto pr-1">
+                  {(queue.length ? queue : tracks || []).map(trackRow)}
+                </div>
               </div>
             </div>
           )}
@@ -1499,9 +1554,23 @@ export default function MusicPage() {
           <button onClick={() => setLiked(liked === "down" ? null : "down")} aria-label="Dislike" className="hidden sm:flex" style={{ background: "none", border: "none", cursor: "pointer", color: liked === "down" ? colors.accentLight : colors.textMuted }}>
             <ThumbsDown size={17} />
           </button>
-          <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} className="hidden sm:flex" style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted }}>
-            {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-          </button>
+          {/* Volume: the button mutes, the slider that slides out of it sets the
+              level. Hidden until the group is hovered, so it costs no width
+              until someone reaches for it. */}
+          <div className="hidden sm:flex items-center group/vol">
+            <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted, display: "flex" }}>
+              {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={Math.round(volume * 100)}
+              onChange={(e) => setVolumeLevel(Number(e.target.value) / 100)}
+              aria-label="Volume"
+              className="onion-volume"
+            />
+          </div>
           <button onClick={() => setRepeat((v) => !v)} aria-label="Repeat" className="hidden sm:flex" style={{ background: "none", border: "none", cursor: "pointer", color: repeat ? colors.accentLight : colors.textMuted }}>
             <Repeat size={17} />
           </button>
