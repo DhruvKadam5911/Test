@@ -39,6 +39,10 @@ const SEARCH_DEBOUNCE_MS = 500;
 const HOST_WIDTH = 356;
 const HOST_HEIGHT = 200;
 
+// How long the stage takes to slide, and how long it stays mounted after being
+// asked to close.
+const STAGE_MS = 340;
+
 const RAIL_WIDTH = 232;
 const BAR_HEIGHT = 76;
 // A phone gets the rail as a bottom bar instead, the way music apps do it.
@@ -116,6 +120,10 @@ export default function MusicPage() {
   const [liked, setLiked] = useState(null);
 
   const [expanded, setExpanded] = useState(false);
+  // Mounted covers the exit as well as the entrance: a stage unmounted the
+  // instant it closes has nothing left to animate, so it would just vanish.
+  const [stageMounted, setStageMounted] = useState(false);
+  const [stageIn, setStageIn] = useState(false);
   const [narrow, setNarrow] = useState(
     () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
   );
@@ -231,18 +239,39 @@ export default function MusicPage() {
   }, [track?.sourceId, autoplay, track]);
 
   /*
+   * Sliding the stage up and down.
+   *
+   * There has to be a gap between mounting the stage and moving it: applied in
+   * the same commit, the browser has no starting position to animate from and
+   * the stage simply appears. A timer rather than requestAnimationFrame —
+   * measured, the frame callbacks did not always run here and the stage stayed
+   * off-screen, while a timer opens it every time.
+   */
+  useEffect(() => {
+    if (expanded) {
+      setStageMounted(true);
+      const timer = setTimeout(() => setStageIn(true), 20);
+      return () => clearTimeout(timer);
+    }
+
+    setStageIn(false);
+    const timer = setTimeout(() => setStageMounted(false), STAGE_MS);
+    return () => clearTimeout(timer);
+  }, [expanded]);
+
+  /*
    * The stage covers the page, but the page behind it keeps its own scrollbar —
    * two bars side by side, and the outer one scrolling something nobody can
    * see. Locked while the stage is open, restored when it closes.
    */
   useEffect(() => {
-    if (!expanded) return;
+    if (!stageMounted) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previous;
     };
-  }, [expanded]);
+  }, [stageMounted]);
 
   // The player has no progress event, so it has to be asked.
   useEffect(() => {
@@ -553,10 +582,17 @@ export default function MusicPage() {
       </div>
 
       {/* The now-playing stage, opened from the bar. Artwork only — no video. */}
-      {expanded && (
+      {stageMounted && (
         <div
           className="fixed inset-0 flex flex-col"
-          style={{ background: colors.bg, zIndex: 55, paddingBottom: narrow ? BAR_HEIGHT + NAV_HEIGHT : BAR_HEIGHT }}
+          style={{
+            background: colors.bg,
+            zIndex: 55,
+            paddingBottom: narrow ? BAR_HEIGHT + NAV_HEIGHT : BAR_HEIGHT,
+            transform: stageIn ? "translateY(0)" : "translateY(100%)",
+            transition: `transform ${STAGE_MS}ms cubic-bezier(.32,.72,0,1)`,
+            willChange: "transform",
+          }}
         >
           {track?.artworkUrl && (
             <div
