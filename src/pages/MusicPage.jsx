@@ -136,9 +136,6 @@ export default function MusicPage() {
   // instant it closes has nothing left to animate, so it would just vanish.
   const [stageMounted, setStageMounted] = useState(false);
   const [stageIn, setStageIn] = useState(false);
-  const [panel, setPanel] = useState("queue");
-  const [lyrics, setLyrics] = useState(null);
-  const [lyricsError, setLyricsError] = useState(null);
   // The stage has its own controls, so the bar is not shown with it — it comes
   // back on a scroll up, the gesture people already use for a hidden toolbar,
   // and is always there when the stage is closed.
@@ -344,27 +341,6 @@ export default function MusicPage() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  /* Lyrics, fetched when the panel is opened rather than on every track. */
-  useEffect(() => {
-    if (panel !== "lyrics" || !track?.title) return;
-
-    let cancelled = false;
-    setLyrics(null);
-    setLyricsError(null);
-    api
-      .get(`/music/lyrics?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist || "")}`)
-      .then((data) => {
-        if (!cancelled) setLyrics(data);
-      })
-      .catch((err) => {
-        if (!cancelled) setLyricsError(err.message);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [panel, track?.title, track?.artist]);
-
   /*
    * Sliding the stage up and down.
    *
@@ -424,39 +400,10 @@ export default function MusicPage() {
     setBarVisible(y < previous || y <= 4);
   };
 
-  const panelTabs = (
-    <div className="flex items-center gap-5" style={{ marginBottom: 10 }}>
-      {["queue", "lyrics"].map((key) => (
-        <button
-          key={key}
-          onClick={() => setPanel(key)}
-          style={{
-            fontFamily: bodyFont, fontSize: 12, fontWeight: 700, letterSpacing: "0.12em",
-            textTransform: "uppercase", background: "none", border: "none", cursor: "pointer",
-            padding: 0, color: panel === key ? colors.text : colors.textMuted,
-            borderBottom: panel === key ? `2px solid ${colors.accent}` : "2px solid transparent",
-            paddingBottom: 4,
-          }}
-        >
-          {key === "queue" ? "Up next" : "Lyrics"}
-        </button>
-      ))}
+  const upNextHeading = (
+    <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: colors.textMuted, textTransform: "uppercase", marginBottom: 10 }}>
+      Up next
     </div>
-  );
-
-  const lyricsPanel = lyricsError ? (
-    <div style={{ fontSize: 13, color: colors.textMuted, lineHeight: 1.7, maxWidth: 460 }}>{lyricsError}</div>
-  ) : lyrics ? (
-    <div>
-      <div style={{ fontSize: 14, color: colors.text, lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{lyrics.text}</div>
-      {lyrics.partial && (
-        <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 14, lineHeight: 1.6 }}>
-          {lyrics.attribution}
-        </div>
-      )}
-    </div>
-  ) : (
-    <div style={{ fontSize: 13, color: colors.textMuted }}>Looking for the words…</div>
   );
 
   const play = async (t) => {
@@ -868,8 +815,8 @@ export default function MusicPage() {
                 </button>
               </div>
 
-              <div style={{ marginTop: 20 }}>{panelTabs}</div>
-              {panel === "lyrics" ? lyricsPanel : (queue.length ? queue : tracks || []).map(trackRow)}
+              <div style={{ marginTop: 20 }}>{upNextHeading}</div>
+              {(queue.length ? queue : tracks || []).map(trackRow)}
             </div>
           ) : (
             <div onScroll={onStageScroll} className="relative flex-1 min-h-0 overflow-y-auto flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
@@ -896,8 +843,8 @@ export default function MusicPage() {
               </div>
 
               <div className="w-full lg:w-[340px] flex-shrink-0">
-                {panelTabs}
-                {panel === "lyrics" ? lyricsPanel : (queue.length ? queue : tracks || []).map(trackRow)}
+                {upNextHeading}
+                {(queue.length ? queue : tracks || []).map(trackRow)}
               </div>
             </div>
           )}

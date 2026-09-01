@@ -132,7 +132,8 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
-| 2026-09-01 | — | Music player gains a Lyrics tab, keyboard control (space, arrows for volume and for the next song), artwork that plays and pauses on a click, and a bar that steps out of the stage's way and returns on a scroll up |
+| 2026-09-01 | — | Lyrics pulled back out. There is no free legal source — every service that returns the words licenses them from the publishers — so it needed a Musixmatch key to be anything but an empty panel, and it was not worth a tab until someone wants to add one |
+| 2026-09-01 | — | Music player gains keyboard control (space, arrows for volume and for the next song), artwork that plays and pauses on a click, and a bar that steps out of the stage's way and returns on a scroll up |
 | 2026-09-01 | — | Music recommends: picking a song fills the queue with songs like it rather than five more copies of it, the home page gains a "Because you listened to…" row, and reopening the page resumes the last track instead of handing back the day's top chart entry. Built without a recommendations API — YouTube withdrew `relatedToVideoId` in 2023 |
 | 2026-09-01 | — | Music given a phone layout of its own: the rail becomes a bottom nav, the search box becomes a magnifier in an app bar, and the now-playing stage goes full screen with thumb-sized controls. Sized against the viewport, not by eye — the artwork is small enough that artwork, player and controls all clear the bar on a 812px screen |
 | 2026-09-01 | — | Music laid out as a music app: a left rail, mood chips, card rows, a bar along the bottom that survives every view, and a now-playing stage with a Song/Video switch. The switch changes what the eye goes to, not whether the video exists — YouTube's terms forbid obscuring the player and floor it at 200×200, so the dock is the smallest 16:9 box that clears that |

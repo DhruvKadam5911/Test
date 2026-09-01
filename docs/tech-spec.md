@@ -151,7 +151,6 @@ and leaves them all reading `undefined`.
 | `JWPLAYER_API_KEY` / `JWPLAYER_API_SECRET` | no | For `VIDEO_PROVIDER=jwplayer` |
 | `CRON_SECRET` | no | Guards `/admin/refresh` and `/admin/dedupe`. **Unset means both routes refuse everything** |
 | `YOUTUBE_API_KEY` | no | The music page. Unset means the charts fall back to stored tracks and search returns 503 |
-| `MUSIXMATCH_API_KEY` | no | Lyrics. Unset means the Lyrics tab says so |
 
 ---
 
