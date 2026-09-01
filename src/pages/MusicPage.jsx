@@ -288,14 +288,24 @@ export default function MusicPage() {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(measure);
     };
-    window.addEventListener("scroll", onChange, { passive: true });
+    // Capture, not bubble: the stage scrolls inside its own container, and a
+    // listener on `window` never hears that — which left the slot moving up the
+    // page while the player stayed where it was.
+    document.addEventListener("scroll", onChange, { passive: true, capture: true });
     window.addEventListener("resize", onChange);
+
+    // The slot also changes size without anything scrolling — the Song/Video
+    // switch, a rotation, the rail appearing at a wider window.
+    const observer = new ResizeObserver(onChange);
+    if (slotRef.current) observer.observe(slotRef.current);
+
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", onChange);
+      document.removeEventListener("scroll", onChange, { capture: true });
       window.removeEventListener("resize", onChange);
+      observer.disconnect();
     };
-  }, [measure, stage, tracks, view]);
+  }, [measure, stage, tracks, view, expanded]);
 
   const play = (t) => {
     setAutoplay(true);
