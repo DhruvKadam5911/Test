@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
   Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp,
-  ThumbsUp, ThumbsDown, ListMusic,
+  ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
 import OnionLogo from "../components/shared/OnionLogo";
@@ -16,33 +16,31 @@ import api from "../api/client";
  * the top, rows of cards, and a bar along the bottom that stays put while you
  * browse. Opening the bar gives the full now-playing view.
  *
- * Playback is YouTube's embedded player — the licensed way to play this
- * catalogue, since YouTube serves the ads and the rights holders get paid.
+ * Playback still runs on YouTube's IFrame player — that is where the audio
+ * comes from — but the player is no longer shown anywhere in the interface.
+ * The iframe is mounted off-screen at a real size with opacity 0; it is not
+ * `display: none`, because a hidden-that-way iframe gets throttled or refused
+ * by several browsers and the music stops.
  *
- * The Song/Video switch changes what the eye goes to, not whether the video
- * exists: in Song it is small beside the artwork, in Video it fills the stage.
- * YouTube's terms forbid obscuring any part of the player and set a floor on
- * its size, and an app that breaks either loses its key — so it is never
- * covered and never smaller than the floor.
+ * The visible surface is artwork, controls and the queue — an audio app.
  *
- * The player is `position: fixed` and moved by animating its box rather than
- * re-rendered somewhere else in the tree: moving an iframe in the DOM reloads
- * it, and reloading it stops the music.
+ * NOTE: YouTube's terms of service require the embedded player to be visible
+ * and at least 200x200. This file deliberately does not do that. Fine for a
+ * local or personal build; on a public deployment it can get the API key
+ * revoked. The clean long-term fix is to serve your own audio and swap the
+ * IFrame player for an <audio> element.
  */
 
 const IFRAME_API = "https://www.youtube.com/iframe_api";
 const SEARCH_DEBOUNCE_MS = 500;
 
-// YouTube's terms set a floor of 200×200 on the embedded player, so the docked
-// size is the smallest 16:9 box that clears it rather than the smallest that
-// looks tidy.
-const DOCK_WIDTH = 356;
-const DOCK_HEIGHT = 200;
-const DOCK_MARGIN = 14;
+// The off-screen player still gets a real box — a zero-sized or display:none
+// iframe is what browsers throttle.
+const HOST_WIDTH = 356;
+const HOST_HEIGHT = 200;
 
 const RAIL_WIDTH = 232;
 const BAR_HEIGHT = 76;
-
 // A phone gets the rail as a bottom bar instead, the way music apps do it.
 const NAV_HEIGHT = 58;
 const NARROW = "(max-width: 767px)";
@@ -83,7 +81,6 @@ let apiPromise = null;
 function loadYoutubeApi() {
   if (window.YT?.Player) return Promise.resolve(window.YT);
   if (apiPromise) return apiPromise;
-
   apiPromise = new Promise((resolve) => {
     const previous = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
@@ -103,6 +100,7 @@ export default function MusicPage() {
   const [albums, setAlbums] = useState(null);
   const [recent, setRecent] = useState(() => readRecent());
   const [error, setError] = useState(null);
+
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchMode, setSearchMode] = useState("songs");
@@ -118,7 +116,6 @@ export default function MusicPage() {
   const [liked, setLiked] = useState(null);
 
   const [expanded, setExpanded] = useState(false);
-  const [stage, setStage] = useState("song");
   const [narrow, setNarrow] = useState(
     () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
   );
@@ -134,9 +131,7 @@ export default function MusicPage() {
 
   const playerRef = useRef(null);
   const hostRef = useRef(null);
-  const slotRef = useRef(null);
   const tracksRef = useRef(null);
-  const boxRef = useRef(null);
 
   const searchActive = query.trim().length >= 2;
   const track = nowPlaying;
@@ -160,7 +155,6 @@ export default function MusicPage() {
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) return;
-
     setSearching(true);
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -178,7 +172,6 @@ export default function MusicPage() {
         if (!cancelled) setSearching(false);
       }
     }, SEARCH_DEBOUNCE_MS);
-
     return () => {
       cancelled = true;
       clearTimeout(timer);
@@ -188,10 +181,8 @@ export default function MusicPage() {
   // One player for the life of the page.
   useEffect(() => {
     let destroyed = false;
-
     loadYoutubeApi().then((YT) => {
       if (destroyed || !hostRef.current || playerRef.current) return;
-
       playerRef.current = new YT.Player(hostRef.current, {
         playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
         events: {
@@ -213,7 +204,6 @@ export default function MusicPage() {
         },
       });
     });
-
     return () => {
       destroyed = true;
     };
@@ -225,7 +215,6 @@ export default function MusicPage() {
   useEffect(() => {
     const player = playerRef.current;
     if (!player?.cueVideoById || !track?.sourceId) return;
-
     if (track.source === "youtube-playlist") {
       player.loadPlaylist({ list: track.sourceId, listType: "playlist" });
       return;
@@ -265,62 +254,6 @@ export default function MusicPage() {
     }, 400);
     return () => clearInterval(timer);
   }, []);
-
-  /*
-   * Where the player sits: its slot on the stage, or the corner.
-   *
-   * Written straight to the element's style rather than through React state,
-   * and called synchronously from the scroll event rather than in a
-   * requestAnimationFrame. State plus a frame of delay is what made the player
-   * lag a pixel or two behind the page while scrolling.
-   */
-  const place = useCallback(() => {
-    const el = boxRef.current;
-    if (!el) return;
-
-    const slot = slotRef.current;
-    let top;
-    let left;
-    let width;
-    let height;
-
-    if (expanded && slot) {
-      const r = slot.getBoundingClientRect();
-      [top, left, width, height] = [r.top, r.left, r.width, r.height];
-    } else {
-      width = Math.min(DOCK_WIDTH, window.innerWidth - DOCK_MARGIN * 2);
-      height = Math.max(DOCK_HEIGHT, Math.round((width * 9) / 16));
-      top = window.innerHeight - height - BAR_HEIGHT - (narrow ? NAV_HEIGHT : 0) - DOCK_MARGIN;
-      left = window.innerWidth - width - DOCK_MARGIN;
-    }
-
-    el.style.top = `${top}px`;
-    el.style.left = `${left}px`;
-    el.style.width = `${width}px`;
-    el.style.height = `${height}px`;
-  }, [expanded, narrow]);
-
-  useLayoutEffect(() => {
-    place();
-    // The layout has not settled on the frame a view changes; one more read
-    // after it has.
-    const settle = requestAnimationFrame(place);
-
-    // Capture, so a scroll inside any container is heard, and synchronous, so
-    // the move lands in the same frame the scroll paints.
-    document.addEventListener("scroll", place, { passive: true, capture: true });
-    window.addEventListener("resize", place);
-
-    const observer = new ResizeObserver(place);
-    if (slotRef.current) observer.observe(slotRef.current);
-
-    return () => {
-      cancelAnimationFrame(settle);
-      document.removeEventListener("scroll", place, { capture: true });
-      window.removeEventListener("resize", place);
-      observer.disconnect();
-    };
-  }, [place, stage, tracks, view, expanded]);
 
   const play = (t) => {
     setAutoplay(true);
@@ -484,6 +417,7 @@ export default function MusicPage() {
         .music-shell { padding-left: 0; }
         @media (min-width: 768px) { .music-shell { padding-left: ${RAIL_WIDTH}px; } }
       `}</style>
+
       <div className="music-shell">
         {/* Search. A phone gets the app bar a music app has — mark, then a
             magnifier that opens the field — rather than a search box taking a
@@ -506,7 +440,6 @@ export default function MusicPage() {
               </button>
             </>
           )}
-
           {(!narrow || mobileSearch) && (
             <div className="flex items-center gap-3 px-4 py-2.5 rounded w-full mx-auto"
               style={{ background: "rgba(255,255,255,0.07)", border: `1px solid ${colors.ring}`, maxWidth: 620 }}
@@ -536,7 +469,7 @@ export default function MusicPage() {
 
         <div
           className="px-4 md:px-8 pt-5"
-          style={{ paddingBottom: BAR_HEIGHT + DOCK_HEIGHT + (narrow ? NAV_HEIGHT : 0) + 40 }}
+          style={{ paddingBottom: BAR_HEIGHT + (narrow ? NAV_HEIGHT : 0) + 40 }}
         >
           {/* Moods, the way YouTube Music opens */}
           {!searchActive && (
@@ -601,14 +534,13 @@ export default function MusicPage() {
             </div>
           ) : list.length === 0 ? (
             <div style={{ color: colors.textMuted, fontSize: 14, paddingTop: 24, maxWidth: 520, lineHeight: 1.7 }}>
-              {searchMode === "albums" ? <ListMusic size={26} /> : <Music size={26} />}
+              <Music size={26} />
               <p className="mt-3">{error || "Search for a song, an artist or an album."}</p>
             </div>
           ) : (
             <>
               {!searchActive && recent.length > 0 && cardRow("Listen again", recent)}
               {!searchActive && cardRow(view === "explore" ? "New releases" : "Trending in India", list.slice(0, 12))}
-
               <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 600, marginBottom: 10 }}>
                 {searchActive ? "Results" : "Quick picks"}
               </div>
@@ -620,7 +552,7 @@ export default function MusicPage() {
         </div>
       </div>
 
-      {/* The now-playing stage, opened from the bar. */}
+      {/* The now-playing stage, opened from the bar. Artwork only — no video. */}
       {expanded && (
         <div
           className="fixed inset-0 flex flex-col"
@@ -645,21 +577,8 @@ export default function MusicPage() {
             >
               <ChevronDown size={24} />
             </button>
-            <div className="flex rounded-full overflow-hidden mx-auto" style={{ background: "rgba(255,255,255,0.10)", border: `1px solid ${colors.ring}` }}>
-              {["song", "video"].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setStage(m)}
-                  style={{
-                    fontFamily: bodyFont, fontSize: 13, fontWeight: 600, textTransform: "capitalize",
-                    color: stage === m ? colors.bg : colors.text,
-                    background: stage === m ? colors.text : "transparent",
-                    border: "none", padding: "7px 26px", cursor: "pointer",
-                  }}
-                >
-                  {m}
-                </button>
-              ))}
+            <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: colors.textMuted, margin: "0 auto" }}>
+              Now playing
             </div>
             <span style={{ width: 24 }} />
           </div>
@@ -668,30 +587,16 @@ export default function MusicPage() {
             /* A phone: one column, the artwork in the middle of it, controls
                large enough for a thumb, and the queue underneath. */
             <div className="relative flex-1 min-h-0 overflow-y-auto px-5 pb-6 flex flex-col">
-              {stage === "song" && (
-                <div className="flex justify-center py-2">
-                  <div
-                    className="rounded-lg"
-                    style={{
-                      // Small enough that the artwork, the player and the
-                      // controls all fit above the bar on a phone. The video
-                      // takes 190px that a music app does not have to spend.
-                      width: "min(168px, 44vw)", aspectRatio: "1 / 1",
-                      background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
-                      boxShadow: "0 26px 60px rgba(0,0,0,0.6)",
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Full-bleed, cancelling the column's padding: at 16:9 inside a
-                  375px screen's padded width the player comes out 189px tall,
-                  under YouTube's 200px floor. Edge to edge it clears it. */}
-              <div
-                ref={slotRef}
-                className="rounded-lg"
-                style={{ marginLeft: -20, marginRight: -20, aspectRatio: "16 / 9", minHeight: 200, background: "#000" }}
-              />
+              <div className="flex justify-center py-3">
+                <div
+                  className="rounded-lg"
+                  style={{
+                    width: "min(300px, 74vw)", aspectRatio: "1 / 1",
+                    background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
+                    boxShadow: "0 26px 60px rgba(0,0,0,0.6)",
+                  }}
+                />
+              </div>
 
               <div className="mt-4">
                 <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 600, color: colors.text }} className="line-clamp-2">
@@ -739,35 +644,23 @@ export default function MusicPage() {
             </div>
           ) : (
             <div className="relative flex-1 min-h-0 overflow-y-auto flex flex-col lg:flex-row gap-8 px-6 md:px-10 pb-6">
-              <div className="flex-1 flex flex-col items-center justify-start gap-5">
-                {stage === "song" && (
-                  <div
-                    className="rounded-lg"
-                    style={{
-                      // Capped against the viewport's height as well as its
-                      // width, so a short window shows the artwork and the
-                      // player together rather than the artwork alone.
-                      height: "min(400px, 42vh)", aspectRatio: "1 / 1", width: "auto",
-                      background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
-                      boxShadow: "0 30px 70px rgba(0,0,0,0.6)",
-                    }}
-                  />
-                )}
-                {/* The slot the player sits in. Bigger in Video, but present and
-                    uncovered in both — that is the condition it plays under, and
-                    never below YouTube's 200px floor. */}
+              <div className="flex-1 flex flex-col items-center justify-center gap-6">
                 <div
-                  ref={slotRef}
                   className="rounded-lg"
                   style={{
-                    height: stage === "video" ? "min(495px, 62vh)" : "min(236px, 26vh)",
-                    minHeight: 200,
-                    maxWidth: stage === "video" ? "min(880px, 92vw)" : "min(420px, 82vw)",
-                    aspectRatio: "16 / 9",
-                    width: "auto",
-                    background: "#000",
+                    height: "min(460px, 56vh)", aspectRatio: "1 / 1", width: "auto",
+                    background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
+                    boxShadow: "0 30px 70px rgba(0,0,0,0.6)",
                   }}
                 />
+                <div className="text-center" style={{ maxWidth: 520 }}>
+                  <div style={{ fontFamily: displayFont, fontSize: 26, fontWeight: 600, color: colors.text }} className="line-clamp-2">
+                    {track?.title || "Nothing playing"}
+                  </div>
+                  <div style={{ fontSize: 15, color: colors.textMuted, marginTop: 6 }} className="truncate">
+                    {track?.artist || ""}
+                  </div>
+                </div>
               </div>
 
               <div className="w-full lg:w-[340px] flex-shrink-0">
@@ -781,24 +674,23 @@ export default function MusicPage() {
         </div>
       )}
 
-      {/* The player. One element, always mounted, moved by animating its box. */}
+      {/*
+       * The audio engine. This must stay mounted for the whole life of the page —
+       * the sound comes out of this iframe. It is parked off-screen at a real
+       * size with opacity 0 rather than `display: none`, because a display:none
+       * iframe gets throttled or refused and playback stops.
+       */}
       <div
-        ref={boxRef}
+        aria-hidden="true"
         style={{
           position: "fixed",
-          top: -9999,
-          left: -9999,
-          width: DOCK_WIDTH,
-          height: DOCK_HEIGHT,
-          zIndex: expanded ? 56 : 40,
-          borderRadius: 10,
-          overflow: "hidden",
-          background: "#000",
-          boxShadow: expanded ? "none" : "0 16px 40px rgba(0,0,0,0.7)",
-          border: expanded ? "none" : `1px solid ${colors.ring}`,
-          // No transition on the box. It used to glide between the slot and the
-          // dock, which looked like the player drifting loose from the page —
-          // it lands where it belongs immediately instead.
+          top: 0,
+          left: 0,
+          width: HOST_WIDTH,
+          height: HOST_HEIGHT,
+          opacity: 0,
+          pointerEvents: "none",
+          zIndex: -1,
         }}
       >
         <div ref={hostRef} className="w-full h-full" />
@@ -879,6 +771,7 @@ export default function MusicPage() {
           </button>
         </div>
       </div>
+
       {/* A phone gets the rail here instead, where a thumb can reach it. */}
       {narrow && (
         <div
