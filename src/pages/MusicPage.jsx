@@ -1021,7 +1021,7 @@ export default function MusicPage() {
             already says it, and saying it twice made the lockup a mouthful. */}
         <Link to="/music" className="flex items-center gap-1" style={{ textDecoration: "none", marginBottom: 10, paddingLeft: 2 }}>
           <OnionMark height={86} />
-          <BrandWord word="music" height={30} />
+          <BrandWord word="music" height={19} />
         </Link>
         {railItem("home", "Home", Home)}
         {railItem("explore", "Explore", Compass)}
@@ -1053,7 +1053,7 @@ export default function MusicPage() {
             <>
               <Link to="/music" className="flex items-center gap-0.5" style={{ textDecoration: "none" }}>
                 <OnionMark height={62} />
-                <BrandWord word="music" height={21} />
+                <BrandWord word="music" height={14} />
               </Link>
               <button
                 onClick={() => setMobileSearch(true)}
