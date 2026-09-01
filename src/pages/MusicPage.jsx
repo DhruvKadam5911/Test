@@ -20,58 +20,35 @@ import api from "../api/client";
  * browse. Opening the bar gives the full now-playing view.
  *
  *
- * Playback: two engines behind one media-element interface.
+ * Playback: one <audio> element, owned by this page.
+ *
+ * Tracks come from PeerTube, which hands out the media file itself, and the
+ * file is fetched through our own /music/stream proxy. That is what makes the
+ * rest of this page possible: the element keeps playing when a phone's screen
+ * locks, it takes Media Session metadata to the lock screen, and the page can
+ * change how it sounds.
+ *
+ * It replaced YouTube's embedded player, which could do none of those. A
+ * cross-origin iframe is suspended when the page is hidden, takes only the
+ * playback rates it advertises, pitch-corrects with no way to stop it, and
+ * cannot be routed through Web Audio at all — and a good share of the
+ * catalogue refused to play, because rights holders turn embedding off.
  *
  *
- * `mediaEngine` wraps a real <audio> element and is the one this app wants: the
- * page owns it, it keeps playing when a phone's screen locks, it takes Media
- * Session metadata to the lock screen, and — the reason it exists here — the
- * page can actually change how it sounds. It is used for any track that carries
- * a `streamUrl`.
+ * Tempo and pitch.
  *
- * `youtubeEngine` wraps YouTube's IFrame player and is the fallback, because
- * every track in the catalog today comes from YouTube, which supplies metadata
- * and no audio file. Both answer the same handful of properties — paused,
- * currentTime, duration, muted, play(), pause(), setRates() — so nothing above
- * this line knows which one is playing.
+ * `playbackRate` moves tempo, and `preservesPitch` decides whether pitch rides
+ * along with it. Hooked is `preservesPitch = false`, so 1.2x is faster AND
+ * higher, the way a record spun faster is. Unhooked with pitch at 100% is
+ * `preservesPitch = true`: faster, same key. Those two are exact.
  *
- * The iframe is not shown anywhere in the interface. It is mounted once, at a
- * real size, off to the side of the viewport with opacity 0, and left there for
- * the life of the page. It is deliberately NOT `display: none`, not `width: 0`
- * and not inside a hidden parent: a zero-sized or display-none iframe gets
- * throttled or refused by several browsers and the audio stops. Off-screen at
- * full size is the shape that keeps playing.
- *
- *
- * Tempo and pitch — what each engine can actually do.
- *
- *
- * The panel offers tempo, pitch, and an Unhook switch that decides whether the
- * two move together. What is behind them is not the same on both engines, and
- * the panel says so rather than pretending:
- *
- *   <audio> (`streamUrl` tracks) — `playbackRate` moves tempo, and
- *   `preservesPitch` decides whether pitch rides along with it. Hooked is
- *   `preservesPitch = false`, so 1.2x is faster AND higher, the way a record
- *   spun faster is. Unhooked with pitch at 100% is `preservesPitch = true`:
- *   faster, same key. Those two are exact. A pitch that is neither 100% nor
- *   equal to the tempo needs real time-stretching (a phase vocoder — SoundTouch,
- *   Rubber Band); the panel applies what it can and says the rest did not land,
- *   rather than moving a knob that does nothing.
- *
- *   YouTube — tempo only, and only at the rates the player advertises (0.25 to
- *   2 in quarters), so the slider snaps. YouTube pitch-corrects internally and
- *   exposes no way to turn that off, and the audio lives in a cross-origin
- *   iframe that Web Audio cannot reach, so there is nothing to hang a pitch
- *   shifter on. Pitch and Unhook are disabled, not hidden, with the reason
- *   under them.
- *
- * The whole gap closes the day tracks carry `streamUrl`: same panel, same
- * state, and the <audio> engine picks itself.
+ * A pitch that is neither 100% nor equal to the tempo needs real
+ * time-stretching — a phase vocoder such as SoundTouch or Rubber Band. The
+ * panel applies what it can and says the rest did not land, rather than moving
+ * a knob that does nothing.
  */
 
 const SEARCH_DEBOUNCE_MS = 500;
-const IFRAME_API = "https://www.youtube.com/iframe_api";
 
 // The range the tempo and pitch sliders cover, and what Reset goes back to.
 const RATE_MIN = 0.1;
@@ -84,34 +61,11 @@ const RATE_STEPS = [
   ["100%", 1],
 ];
 
-// What YouTube offers when it has not been asked yet.
-const YT_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-
 const clampRate = (v) =>
   Math.min(RATE_MAX, Math.max(RATE_MIN, Math.round(Number(v) * 100) / 100));
 
-const nearestRate = (list, value) =>
-  list.reduce((best, r) => (Math.abs(r - value) < Math.abs(best - value) ? r : best), list[0]);
-
 const sameRate = (a, b) => Math.abs(a - b) < 0.005;
 
-/* Loads YouTube's IFrame API once, however many callers ask for it. */
-let apiPromise = null;
-function loadYoutubeApi() {
-  if (window.YT?.Player) return Promise.resolve(window.YT);
-  if (apiPromise) return apiPromise;
-  apiPromise = new Promise((resolve) => {
-    const previous = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      previous?.();
-      resolve(window.YT);
-    };
-    const script = document.createElement("script");
-    script.src = IFRAME_API;
-    document.head.appendChild(script);
-  });
-  return apiPromise;
-}
 
 /*
  * A real <audio> element behind the same interface.
@@ -184,71 +138,6 @@ function mediaEngine(el) {
   };
 }
 
-/*
- * A YouTube player wearing a media element's clothes.
- *
- * Only the surface the rest of this file already uses: the properties it reads,
- * the two methods it calls, and `dataset` so the load effect can tell whether
- * the source actually changed. Anything else a real element offers is not here,
- * because nothing asks for it.
- */
-function youtubeEngine(player) {
-  return {
-    // No Web Audio reaches into a cross-origin iframe, and YouTube corrects
-    // pitch itself with no way to ask it not to. Tempo is the whole surface.
-    canPitch: false,
-    snapsTempo: true,
-    dataset: {},
-    loop: false,
-    get playbackRate() {
-      return player.getPlaybackRate?.() || 1;
-    },
-    get rateList() {
-      const list = player.getAvailablePlaybackRates?.();
-      return list?.length ? list : YT_RATES;
-    },
-    play: () => Promise.resolve(player.playVideo?.()),
-    pause: () => player.pauseVideo?.(),
-    load: () => {},
-    setSource(videoId, { autoplay }) {
-      if (autoplay) player.loadVideoById?.(videoId);
-      else player.cueVideoById?.(videoId);
-    },
-    get paused() {
-      return player.getPlayerState?.() !== window.YT?.PlayerState?.PLAYING;
-    },
-    get currentTime() {
-      return player.getCurrentTime?.() || 0;
-    },
-    set currentTime(to) {
-      player.seekTo?.(to, true);
-    },
-    get duration() {
-      return player.getDuration?.() || 0;
-    },
-    get muted() {
-      return Boolean(player.isMuted?.());
-    },
-    set muted(value) {
-      if (value) player.mute?.();
-      else player.unMute?.();
-    },
-    get volume() {
-      return (player.getVolume?.() ?? 100) / 100;
-    },
-    set volume(value) {
-      player.setVolume?.(Math.round(value * 100));
-    },
-    setRates(tempo) {
-      // Only the rates the player advertises are accepted; anything else is
-      // silently ignored by YouTube, which looks like a broken control. Snap to
-      // the nearest and report what actually took.
-      const applied = nearestRate(this.rateList, tempo);
-      player.setPlaybackRate?.(applied);
-      return { tempo: applied, pitch: 1, exact: sameRate(applied, tempo) };
-    },
-  };
-}
 
 function applyRates(engine, tempo, pitch) {
   if (!engine?.setRates) return null;
@@ -263,8 +152,20 @@ function applyRates(engine, tempo, pitch) {
 // What the engine is asked to load. A track that carries its own audio gives a
 // URL here, and that is also what picks the engine; a YouTube one gives the
 // video id, which is what its player wants.
+// The API is its own deployment, so a relative path would ask the frontend's
+// own host for the bytes and be handed the SPA's index.html.
+const STREAM_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/music/stream`;
+
+/*
+ * Where the bytes come from. A track may carry its own `streamUrl`; otherwise
+ * it is fetched through our proxy by id, which is what a PeerTube track needs —
+ * the file lives on whichever instance published it and the proxy resolves it.
+ */
 function sourceOf(track) {
-  return track?.streamUrl || track?.sourceId || "";
+  if (!track) return "";
+  if (track.streamUrl) return track.streamUrl;
+  if (!track.sourceId) return "";
+  return `${STREAM_BASE}/${encodeURIComponent(track.sourceId)}`;
 }
 
 // How long the stage takes to slide, and how long it stays mounted after being
@@ -276,12 +177,6 @@ const BAR_REVEAL_AT = 120;
 // How much of the queue sheet stays on screen when it is down — enough to show
 // the handle and the label, so it reads as something to pull.
 const SHEET_PEEK = 66;
-
-// The off-screen player still gets a real box: a zero-sized or display:none
-// iframe is what browsers throttle, and 356x200 is a 16:9 box above YouTube's
-// own 200px floor.
-const HOST_WIDTH = 356;
-const HOST_HEIGHT = 200;
 
 const RAIL_WIDTH = 232;
 const BAR_HEIGHT = 76;
@@ -438,10 +333,7 @@ export default function MusicPage() {
   // the engines themselves, each built once.
   const audioRef = useRef(null);
   const mediaEngineRef = useRef(null);
-  const ytEngineRef = useRef(null);
   const mediaElRef = useRef(null);
-  const playerRef = useRef(null);
-  const playerHostRef = useRef(null);
   const tracksRef = useRef(null);
   const queueRef = useRef([]);
   // The keyboard and lock-screen handlers are bound once but have to call the
@@ -461,15 +353,14 @@ export default function MusicPage() {
   // Which engine this track belongs to, and therefore what the panel can offer.
   // Derived from the track rather than read off the ref, so the UI re-renders
   // when it changes.
-  const onMedia = Boolean(track?.streamUrl);
+  // Every track is a file served through our own proxy now, so the media
+  // element is always the engine — which is what makes pitch possible at all.
+  const onMedia = true;
   const canPitch = onMedia;
 
-  /* Hands the track to its engine and stands the other one down. */
-  const selectEngine = (t) => {
-    const next = t?.streamUrl ? mediaEngineRef.current : ytEngineRef.current;
-    const previous = audioRef.current;
-    if (previous && next && previous !== next) previous.pause();
-    if (next) audioRef.current = next;
+  /* One engine now; kept as a function so callers read the same as before. */
+  const selectEngine = () => {
+    if (mediaEngineRef.current) audioRef.current = mediaEngineRef.current;
     return audioRef.current;
   };
 
@@ -655,60 +546,7 @@ export default function MusicPage() {
     };
   }, []);
 
-  /*
-   * The YouTube player, built once and then left alone.
-   *
-   * Its events are what drive `playing`, `duration` and the queue advancing —
-   * the same job the <audio> element's own events do above, so the state around
-   * them never learns which engine it is talking to.
-   */
-  useEffect(() => {
-    let destroyed = false;
-    loadYoutubeApi().then((YT) => {
-      if (destroyed || !playerHostRef.current || playerRef.current) return;
-      playerRef.current = new YT.Player(playerHostRef.current, {
-        playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
-        events: {
-          onReady: () => {
-            ytEngineRef.current = youtubeEngine(playerRef.current);
-            setEngineReady((n) => n + 1);
-          },
-          onStateChange: (e) => {
-            // Only while YouTube is the engine in charge: a stale event from a
-            // paused player should not overwrite the <audio> element's state.
-            if (audioRef.current !== ytEngineRef.current) return;
-            const state = YT.PlayerState;
-            setPlaying(e.data === state.PLAYING);
-            setBuffering(e.data === state.BUFFERING);
-            if (e.data === state.PLAYING || e.data === state.PAUSED) {
-              setDuration(playerRef.current?.getDuration?.() || 0);
-            }
-            if (e.data === state.ENDED) actionsRef.current.ended?.();
-          },
-          onError: (e) => {
-            if (audioRef.current !== ytEngineRef.current) return;
-            setBuffering(false);
-            /*
-             * 101 and 150 both mean the same thing: the owner has turned off
-             * embedding. Nothing to retry and nothing to fix — the only useful
-             * response is to move on, which is what a listener would do anyway.
-             * 2 is a malformed id and 5 an HTML5 failure; those stop.
-             */
-            const blocked = e?.data === 101 || e?.data === 150;
-            setError(
-              blocked
-                ? "That one cannot be played outside YouTube — skipping it."
-                : "That one would not play."
-            );
-            if (blocked) actionsRef.current.skip?.(1);
-          },
-        },
-      });
-    });
-    return () => {
-      destroyed = true;
-    };
-  }, []);
+
 
   // Neither engine reports progress often enough to drive a scrubber, so the
   // one in charge is asked.
@@ -1307,32 +1145,7 @@ export default function MusicPage() {
        */}
       <audio ref={mediaElRef} preload="metadata" playsInline style={{ display: "none" }} />
 
-      {/*
-       * The YouTube engine.
-       *
-       * One player, mounted for the life of the page, never unmounted and never
-       * moved — moving an iframe in the DOM reloads it and the music stops. It
-       * lives off to the side of the viewport at a real size with opacity 0
-       * rather than `display: none`, `visibility: hidden` or a zero-sized box,
-       * any of which gets the iframe throttled or refused and takes the audio
-       * with it. Nothing in the interface refers to it.
-       */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: HOST_WIDTH,
-          height: HOST_HEIGHT,
-          transform: `translateX(-${HOST_WIDTH + 40}px)`,
-          opacity: 0,
-          pointerEvents: "none",
-          zIndex: -1,
-        }}
-      >
-        <div ref={playerHostRef} className="w-full h-full" />
-      </div>
+
 
       <style>{`
         /*

@@ -1,4 +1,5 @@
 import prisma from "../config/db.js";
+import { resolveFileUrl } from "../services/peertube.js";
 
 /*
  * Streaming a track's audio.
@@ -29,7 +30,7 @@ const TIMEOUT_MS = 20_000;
 
 async function findTrack(id) {
   const [row] = await prisma.$queryRaw`
-    SELECT id, title, "audioUrl", source
+    SELECT id, title, "audioUrl", source, "sourceId"
     FROM "Track"
     WHERE id = ${id} OR "sourceId" = ${id}
     LIMIT 1`;
@@ -51,14 +52,27 @@ export async function streamTrack(req, res) {
 
   if (!track) return res.status(404).json({ error: "Track not found." });
 
+  /*
+   * A PeerTube row is stored without a file URL: finding it costs a request per
+   * video, and a page of results would spend thirty of them on files nobody has
+   * asked to hear. It is resolved on the first play and written back, so the
+   * second play is a lookup.
+   */
+  if (!track.audioUrl && track.source === "peertube") {
+    try {
+      const resolved = await resolveFileUrl(track.sourceId);
+      if (resolved) {
+        await prisma.$executeRaw`UPDATE "Track" SET "audioUrl" = ${resolved} WHERE id = ${track.id}`;
+        track = { ...track, audioUrl: resolved };
+      }
+    } catch (error) {
+      console.error("streamTrack resolve error:", error.message);
+    }
+  }
+
   if (!track.audioUrl) {
-    // The honest failure, and the common one: everything imported from YouTube
-    // is metadata. The player shows this rather than sitting on a dead element.
     return res.status(409).json({
-      error:
-        track.source === "youtube"
-          ? "This track came from YouTube, which supplies metadata but no audio file."
-          : "This track has no audio file.",
+      error: "That track's instance did not offer a playable file.",
     });
   }
 
@@ -80,7 +94,13 @@ export async function streamTrack(req, res) {
     }
 
     // Passed through rather than invented: the element believes these.
-    const headers = { "Cache-Control": "public, max-age=3600", "Accept-Ranges": "bytes" };
+    /*
+     * Not cached at the edge. A full response cached once was then served back
+     * for Range requests as a 200, which is exactly the status iOS refuses to
+     * play — the bytes were right and the status was not. Proxying is cheap
+     * enough that a cache is not worth that failure mode.
+     */
+    const headers = { "Cache-Control": "no-store", "Accept-Ranges": "bytes" };
     for (const header of ["content-type", "content-length", "content-range", "accept-ranges"]) {
       const value = upstream.headers.get(header);
       if (value) headers[header] = value;

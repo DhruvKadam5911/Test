@@ -1,20 +1,19 @@
 import prisma from "../config/db.js";
-import { fetchChart, searchMusic, searchAlbums, searchRelated, titleCore, rankByOriginality, isYoutubeConfigured } from "../services/youtube.js";
+import { searchVideos, fetchTrending, searchRelated } from "../services/peertube.js";
 
 /*
  * Music.
  *
- * Tracks are YouTube videos: the catalogue people actually want is there, and
- * the embedded player is the licensed way to reach it. Nothing here handles
- * audio — `sourceId` is a video id and the browser plays it through YouTube.
+ * Tracks come from PeerTube, which hands out the media file itself — see
+ * services/peertube.js for why that mattered enough to move off YouTube.
  *
- * The Track table doubles as a quota cache. A search costs 100 of the 10,000
- * units a day, so a query the catalog can already answer is never sent.
+ * The Track table is still a cache, but for latency rather than quota: nothing
+ * here is metered, so a miss costs a slow request instead of a slice of a daily
+ * allowance. Rows are written on the way out so the stream endpoint can find a
+ * track by id later without searching for it again.
  */
 
 const MAX_LIMIT = 50;
-// Below this a stored answer is too thin to be worth serving instead of asking.
-const CACHE_HIT_MIN = 8;
 
 const emptyIfNoTable = (error, res) => {
   if (/does not exist/i.test(error.message)) return res.status(200).json([]);
@@ -40,22 +39,21 @@ async function storeTracks(tracks) {
   );
 }
 
-// GET /music/tracks — the charts, and what has been searched for before.
+// GET /music/tracks — what the network is publishing and watching right now.
 export async function getTracks(req, res) {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, MAX_LIMIT);
 
-    if (isYoutubeConfigured()) {
-      try {
-        // One quota unit, so this can run on every visit.
-        const chart = await fetchChart({ region: req.query.region || "IN", limit });
-        await storeTracks(chart);
-        return res.status(200).json(chart);
-      } catch (error) {
-        // Quota gone or YouTube unreachable: fall back to what is stored rather
-        // than showing an empty page.
-        console.error("getTracks chart error:", error.message);
+    try {
+      const trending = await fetchTrending({ limit });
+      if (trending.length) {
+        await storeTracks(trending);
+        return res.status(200).json(trending);
       }
+    } catch (error) {
+      // The network being slow or unreachable should show the last thing that
+      // worked rather than an empty page.
+      console.error("getTracks trending error:", error.message);
     }
 
     const tracks = await prisma.$queryRaw`
@@ -78,32 +76,55 @@ export async function searchTracks(req, res) {
   const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
 
   try {
-    // The catalog first. Every search that has run before is in it, and asking
-    // YouTube again would cost a hundredth of the day's quota for the same rows.
+    const found = await searchVideos({ query, limit });
+    if (found.length) {
+      await storeTracks(found);
+      return res.status(200).json(found);
+    }
+
+    // Nothing from the network: answer from what has been seen before rather
+    // than with an empty list.
     const cached = await prisma.$queryRaw`
       SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
       FROM "Track"
-      WHERE source = 'youtube' AND (title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`})
+      WHERE title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`}
       ORDER BY "createdAt" DESC LIMIT ${limit}`;
-
-    // Ranked again on the way out: the rows come back in whatever order the
-    // table holds them, which throws away the ordering the search paid for.
-    if (cached.length >= CACHE_HIT_MIN) return res.status(200).json(rankByOriginality(cached));
-
-    if (!isYoutubeConfigured()) {
-      return res.status(503).json({ error: "YOUTUBE_API_KEY is not configured on this deployment." });
-    }
-
-    const found = await searchMusic({ query, region: req.query.region || "IN", limit });
-    await storeTracks(found);
-    return res.status(200).json(found);
+    return res.status(200).json(cached);
   } catch (error) {
     console.error("searchTracks error:", error);
     return res.status(500).json({ error: error.message || "Failed to search music." });
   }
 }
 
-// GET /music/genres — kept so the client has one shape to read.
+// GET /music/related?title=&exclude=
+export async function relatedTracks(req, res) {
+  const title = String(req.query.title || "").trim();
+  const exclude = String(req.query.exclude || "").trim();
+  if (!title) return res.status(200).json([]);
+
+  const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
+
+  try {
+    const found = await searchRelated({ title, exclude, limit });
+    await storeTracks(found);
+    return res.status(200).json(found);
+  } catch (error) {
+    console.error("relatedTracks error:", error);
+    return res.status(500).json({ error: error.message || "Failed to fetch related tracks." });
+  }
+}
+
+/*
+ * GET /music/albums?q=
+ *
+ * PeerTube models playlists and channels, but neither is wired up here yet, so
+ * this answers with videos rather than an empty tab that looks broken.
+ */
+export async function searchMusicAlbums(req, res) {
+  return searchTracks(req, res);
+}
+
+// GET /music/genres
 export async function getMusicGenres(req, res) {
   try {
     const genres = await prisma.$queryRawUnsafe(
@@ -116,85 +137,5 @@ export async function getMusicGenres(req, res) {
     if (empty) return empty;
     console.error("getMusicGenres error:", error);
     return res.status(500).json({ error: "Failed to fetch music genres." });
-  }
-}
-
-// GET /music/albums?q=
-export async function searchMusicAlbums(req, res) {
-  const query = String(req.query.q || "").trim();
-  if (query.length < 2) return res.status(200).json([]);
-
-  const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
-
-  try {
-    const cached = await prisma.$queryRaw`
-      SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
-      FROM "Track"
-      WHERE source = 'youtube-playlist' AND (title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`})
-      ORDER BY "createdAt" DESC LIMIT ${limit}`;
-
-    if (cached.length >= CACHE_HIT_MIN) return res.status(200).json(cached);
-
-    if (!isYoutubeConfigured()) {
-      return res.status(503).json({ error: "YOUTUBE_API_KEY is not configured on this deployment." });
-    }
-
-    // Its own call, and therefore its own hundred units: playlists do not come
-    // back from a video search however wide it is asked to be.
-    const found = await searchAlbums({ query, region: req.query.region || "IN", limit });
-    await storeTracks(found);
-    return res.status(200).json(found);
-  } catch (error) {
-    console.error("searchMusicAlbums error:", error);
-    return res.status(500).json({ error: error.message || "Failed to search albums." });
-  }
-}
-
-// GET /music/related?title=&artist=&exclude=
-export async function relatedTracks(req, res) {
-  const title = String(req.query.title || "").trim();
-  const artist = String(req.query.artist || "").trim();
-  const exclude = String(req.query.exclude || "").trim();
-
-  if (!artist && !title) return res.status(200).json([]);
-
-  const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
-  const seed = titleCore(title);
-
-  try {
-    // The catalog first, as everywhere else — a search costs a hundredth of the
-    // day's quota and this runs every time a track is picked.
-    const cached = await prisma.$queryRaw`
-      SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
-      FROM "Track"
-      WHERE source = 'youtube' AND artist ILIKE ${`%${artist}%`} AND "sourceId" <> ${exclude}
-      ORDER BY "createdAt" DESC LIMIT ${limit * 2}`;
-
-    // Other copies of the same song are the one thing this must not return.
-    const usable = rankByOriginality(cached).filter((t) => !seed || titleCore(t.title) !== seed);
-
-    /*
-     * The cache is keyed on the artist, which is fine for "more by them" and
-     * wrong for "more like this": every song on a label would answer from the
-     * same rows. So a cached answer only counts when enough of it shares a word
-     * with the song asked about — otherwise it is worth the hundred units to
-     * ask for a set that belongs to this song.
-     */
-    const words = seed.split(" ").filter((w) => w.length > 3);
-    const nearby = words.length
-      ? usable.filter((t) => words.some((w) => titleCore(t.title).includes(w)))
-      : usable;
-
-    if (nearby.length >= CACHE_HIT_MIN) return res.status(200).json(nearby.slice(0, limit));
-    if (!seed && usable.length >= CACHE_HIT_MIN) return res.status(200).json(usable.slice(0, limit));
-
-    if (!isYoutubeConfigured()) return res.status(200).json(usable);
-
-    const found = await searchRelated({ title, artist, exclude, region: req.query.region || "IN", limit });
-    await storeTracks(found);
-    return res.status(200).json(found);
-  } catch (error) {
-    console.error("relatedTracks error:", error);
-    return res.status(500).json({ error: error.message || "Failed to fetch related tracks." });
   }
 }
