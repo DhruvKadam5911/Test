@@ -241,6 +241,20 @@ export default function MusicPage() {
     setLiked(null);
   }, [track?.sourceId, autoplay, track]);
 
+  /*
+   * The stage covers the page, but the page behind it keeps its own scrollbar —
+   * two bars side by side, and the outer one scrolling something nobody can
+   * see. Locked while the stage is open, restored when it closes.
+   */
+  useEffect(() => {
+    if (!expanded) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [expanded]);
+
   // The player has no progress event, so it has to be asked.
   useEffect(() => {
     const timer = setInterval(() => {
