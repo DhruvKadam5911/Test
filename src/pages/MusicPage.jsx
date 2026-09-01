@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
-  Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp, Film, History,
-  ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
+  Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp,
+  Film, History, ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
   ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
@@ -19,42 +19,118 @@ import api from "../api/client";
  * the top, rows of cards, and a bar along the bottom that stays put while you
  * browse. Opening the bar gives the full now-playing view.
  *
- * ---------------------------------------------------------------------------
- * Playback: one <audio> element, owned by this page.
- * ---------------------------------------------------------------------------
  *
- * This is the shape that survives a locked screen. An element the page owns
- * keeps decoding when the tab is hidden, and it takes Media Session metadata
- * straight to the lock screen, so the controls there are real controls. A
- * cross-origin iframe does neither — the browser suspends it the moment the
- * screen goes off — which is why there is no embedded player here any more.
+ * Playback: YouTube's player behind a media-element interface.
  *
- * The bytes come from `sourceOf()` below: a track's own `streamUrl` if it has
- * one, otherwise /music/stream/:id. That endpoint has to
  *
- *   - answer with real audio and a correct Content-Type,
- *   - honour Range requests, or the scrubber cannot seek,
- *   - send CORS headers if it is served from another origin.
+ * This was written for a plain <audio> element, which is the right shape: an
+ * element the page owns is the only thing that keeps playing when a phone's
+ * screen locks, and it takes Media Session metadata straight to the lock
+ * screen. All of that is still here.
  *
- * Nothing above that line cares where the audio came from.
+ * What it does not have is bytes. Every track in the catalog comes from YouTube,
+ * which supplies metadata and no audio file, so `<audio>` had nothing to load
+ * and nothing played at all. The engine underneath is YouTube's IFrame player
+ * again, wrapped in `youtubeEngine()` so it answers the same handful of
+ * properties a media element does — paused, currentTime, duration, muted,
+ * play(), pause(). Everything above that line is unchanged.
+ *
+ * The iframe is not shown anywhere in the interface. It is mounted once, at a
+ * real size, off to the side of the viewport with opacity 0, and left there for
+ * the life of the page. It is deliberately NOT `display: none`, not `width: 0`
+ * and not inside a hidden parent: a zero-sized or display-none iframe gets
+ * throttled or refused by several browsers and the audio stops. Off-screen at
+ * full size is the shape that keeps playing.
+ *
+ * Two things follow from the engine being YouTube's, and neither is a choice
+ * made here:
+ *
+ *   - It stops when a phone's screen goes off. A cross-origin iframe is
+ *     suspended by the browser when the page is hidden, and YouTube gates
+ *     background audio behind Premium.
+ *
+ *   - Hiding the player is against YouTube's API terms, which require it to be
+ *     visible and at least 200x200. That is fine for a local or personal build;
+ *     on a public deployment it is what gets an API key revoked.
+ *
+ * Both go away the day tracks carry a real `audioUrl`: swap `youtubeEngine`
+ * for an <audio> element against /music/stream/:id and nothing else changes.
  */
 
 const SEARCH_DEBOUNCE_MS = 500;
+const IFRAME_API = "https://www.youtube.com/iframe_api";
 
-// Where the audio actually comes from. A track that carries its own file gives
-// a URL; anything else falls back to the server's stream endpoint.
-const API_ROOT = import.meta.env?.VITE_API_URL ?? "";
-
-function sourceOf(track) {
-  if (!track) return "";
-  if (track.streamUrl) return track.streamUrl;
-  return track.sourceId ? `${API_ROOT}/music/stream/${track.sourceId}` : "";
+/* Loads YouTube's IFrame API once, however many callers ask for it. */
+let apiPromise = null;
+function loadYoutubeApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (apiPromise) return apiPromise;
+  apiPromise = new Promise((resolve) => {
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.();
+      resolve(window.YT);
+    };
+    const script = document.createElement("script");
+    script.src = IFRAME_API;
+    document.head.appendChild(script);
+  });
+  return apiPromise;
 }
 
-// What the element records as loaded. The id rather than the URL, so a signed
-// or expiring stream URL does not read as a different song and restart it.
-function keyOf(track) {
-  return String(track?.sourceId || track?.streamUrl || "");
+/*
+ * A YouTube player wearing a media element's clothes.
+ *
+ * Only the surface the rest of this file already uses: the properties it reads,
+ * the two methods it calls, and `dataset` so the load effect can tell whether
+ * the source actually changed. Anything else a real element offers is not here,
+ * because nothing asks for it.
+ */
+function youtubeEngine(player) {
+  return {
+    dataset: {},
+    loop: false,
+    playbackRate: 1,
+    play: () => Promise.resolve(player.playVideo?.()),
+    pause: () => player.pauseVideo?.(),
+    load: () => {},
+    setSource(videoId, { autoplay }) {
+      if (autoplay) player.loadVideoById?.(videoId);
+      else player.cueVideoById?.(videoId);
+    },
+    get paused() {
+      return player.getPlayerState?.() !== window.YT?.PlayerState?.PLAYING;
+    },
+    get currentTime() {
+      return player.getCurrentTime?.() || 0;
+    },
+    set currentTime(to) {
+      player.seekTo?.(to, true);
+    },
+    get duration() {
+      return player.getDuration?.() || 0;
+    },
+    get muted() {
+      return Boolean(player.isMuted?.());
+    },
+    set muted(value) {
+      if (value) player.mute?.();
+      else player.unMute?.();
+    },
+    get volume() {
+      return (player.getVolume?.() ?? 100) / 100;
+    },
+    set volume(value) {
+      player.setVolume?.(Math.round(value * 100));
+    },
+  };
+}
+
+// What the engine is asked to load. A track that carries its own audio would
+// give a URL here; a YouTube one gives the video id, which is what its player
+// wants. Either way the load effect below only cares whether it changed.
+function sourceOf(track) {
+  return track?.streamUrl || track?.sourceId || "";
 }
 
 // How long the stage takes to slide, and how long it stays mounted after being
@@ -66,6 +142,12 @@ const BAR_REVEAL_AT = 120;
 // How much of the queue sheet stays on screen when it is down — enough to show
 // the handle and the label, so it reads as something to pull.
 const SHEET_PEEK = 66;
+
+// The off-screen player still gets a real box: a zero-sized or display:none
+// iframe is what browsers throttle, and 356x200 is a 16:9 box above YouTube's
+// own 200px floor.
+const HOST_WIDTH = 356;
+const HOST_HEIGHT = 200;
 
 const RAIL_WIDTH = 232;
 const BAR_HEIGHT = 76;
@@ -114,7 +196,7 @@ function formatTime(seconds) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/** "SonyMusicIndiaVEVO" is a channel name, not something to read in a heading. */
+/* "SonyMusicIndiaVEVO" is a channel name, not something to read in a heading. */
 function channelLabel(name) {
   return String(name || "")
     .replace(/vevo$/i, "")
@@ -149,9 +231,11 @@ export default function MusicPage() {
   // every visit to the page.
   const [explore, setExplore] = useState({ albums: [], top: [] });
   const [error, setError] = useState(null);
+
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchMode, setSearchMode] = useState("songs");
+
   const [nowPlaying, setNowPlaying] = useState(null);
   // What plays next, which is not the same thing as what is on screen. Picking
   // a song fills this with songs like it; browsing away does not disturb it.
@@ -159,12 +243,14 @@ export default function MusicPage() {
   const [autoplay, setAutoplay] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
+  const [engineReady, setEngineReady] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
   const [liked, setLiked] = useState(null);
+
   const [expanded, setExpanded] = useState(false);
   // Mounted covers the exit as well as the entrance: a stage unmounted the
   // instant it closes has nothing left to animate, so it would just vanish.
@@ -175,6 +261,7 @@ export default function MusicPage() {
   // closed.
   const [barVisible, setBarVisible] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
+
   const [narrow, setNarrow] = useState(
     () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
   );
@@ -193,6 +280,8 @@ export default function MusicPage() {
   }, []);
 
   const audioRef = useRef(null);
+  const playerRef = useRef(null);
+  const playerHostRef = useRef(null);
   const tracksRef = useRef(null);
   const queueRef = useRef([]);
   // The keyboard and lock-screen handlers are bound once but have to call the
@@ -206,7 +295,6 @@ export default function MusicPage() {
   // page down rather than just this line.
   const searchScreen = (narrow ? mobileSearch : searchFocused) && !searchActive;
   const track = nowPlaying;
-
   tracksRef.current = tracks;
   queueRef.current = queue;
 
@@ -256,7 +344,6 @@ export default function MusicPage() {
    */
   const seedTrack = recent[0];
   const seedId = seedTrack?.sourceId;
-
   useEffect(() => {
     const seed = seedTrack;
     if (!seed?.artist) return;
@@ -330,13 +417,9 @@ export default function MusicPage() {
       setError("No audio for that one yet.");
       return;
     }
-    const key = keyOf(track);
-    if (audio.dataset.sourceId !== key) {
-      audio.dataset.sourceId = key;
-      audio.src = source;
-      audio.load();
-      setPosition(0);
-      setDuration(0);
+    if (audio.dataset.sourceId !== String(source)) {
+      audio.dataset.sourceId = String(source);
+      audio.setSource(source, { autoplay });
     }
     if (autoplay && audio.paused) {
       audio.play().catch((err) => {
@@ -346,7 +429,7 @@ export default function MusicPage() {
         console.warn("play() rejected:", err?.name || err);
       });
     }
-  }, [track?.sourceId, track?.streamUrl, autoplay]);
+  }, [track?.sourceId, track?.streamUrl, autoplay, engineReady]);
 
   useEffect(() => {
     if (!track || !autoplay) return;
@@ -362,10 +445,62 @@ export default function MusicPage() {
   }, [repeat]);
 
   /*
+   * The player itself, built once and then left alone.
+   *
+   * Its events are what drive `playing`, `duration` and the queue advancing —
+   * the same job the <audio> element's own events used to do, so the state
+   * above it never learns which engine it is talking to.
+   */
+  useEffect(() => {
+    let destroyed = false;
+    loadYoutubeApi().then((YT) => {
+      if (destroyed || !playerHostRef.current || playerRef.current) return;
+      playerRef.current = new YT.Player(playerHostRef.current, {
+        playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+        events: {
+          onReady: () => {
+            // From here the rest of the file has something to talk to. The load
+            // effect runs again on the next render and cues whatever is current.
+            audioRef.current = youtubeEngine(playerRef.current);
+            setEngineReady(true);
+          },
+          onStateChange: (e) => {
+            const state = YT.PlayerState;
+            setPlaying(e.data === state.PLAYING);
+            setBuffering(e.data === state.BUFFERING);
+            if (e.data === state.PLAYING || e.data === state.PAUSED) {
+              setDuration(playerRef.current?.getDuration?.() || 0);
+            }
+            if (e.data === state.ENDED) actionsRef.current.ended?.();
+          },
+          onError: () => {
+            setBuffering(false);
+            setError("That one would not play here — the owner may have blocked embedding.");
+          },
+        },
+      });
+    });
+    return () => {
+      destroyed = true;
+    };
+  }, []);
+
+  // The player has no timeupdate event, so it has to be asked.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.hidden || !playerRef.current?.getCurrentTime) return;
+      setPosition(playerRef.current.getCurrentTime() || 0);
+      const d = playerRef.current.getDuration?.() || 0;
+      if (d) setDuration(d);
+    }, 400);
+    return () => clearInterval(timer);
+  }, []);
+
+  /*
    * Lock-screen and notification controls.
    *
-   * The metadata is what the phone shows on the lock screen while the screen is
-   * off, and these handlers are the buttons on it.
+   * The metadata is what the phone shows on the lock screen, and these handlers
+   * are the buttons on it.
    */
   useEffect(() => {
     const session = navigator.mediaSession;
@@ -464,7 +599,10 @@ export default function MusicPage() {
         case "ArrowUp":
           e.preventDefault();
           audio.volume = Math.min(1, audio.volume + 0.1);
-          if (audio.muted) { audio.muted = false; setMuted(false); }
+          if (audio.muted) {
+            audio.muted = false;
+            setMuted(false);
+          }
           break;
         case "ArrowDown":
           e.preventDefault();
@@ -556,15 +694,14 @@ export default function MusicPage() {
     const audio = audioRef.current;
     const source = sourceOf(t);
     if (audio && source) {
-      const key = keyOf(t);
-      if (audio.dataset.sourceId !== key) {
-        audio.dataset.sourceId = key;
-        audio.src = source;
-        audio.load();
-        setPosition(0);
-        setDuration(0);
+      // Loaded and started inside the tap, not from an effect a tick later:
+      // that first gesture is what unlocks audio for every later start.
+      if (audio.dataset.sourceId !== String(source)) {
+        audio.dataset.sourceId = String(source);
+        audio.setSource(source, { autoplay: true });
+      } else {
+        audio.play();
       }
-      audio.play().catch((err) => console.warn("play() rejected:", err?.name || err));
     }
     setAutoplay(true);
     setNowPlaying(t);
@@ -679,7 +816,7 @@ export default function MusicPage() {
   };
 
   // Bound handlers read the current versions from here.
-  actionsRef.current = { toggle, skip, resume };
+  actionsRef.current = { toggle, skip, resume, ended: onEnded };
 
   // While a finger is down the bar follows the finger, not the audio.
   const shownPosition = scrubbing ?? position;
@@ -785,37 +922,29 @@ export default function MusicPage() {
       {/*
        * The audio engine.
        *
-       * One element, mounted for the life of the page, never unmounted and never
-       * recreated — a media element that gets torn down and rebuilt loses the
-       * iOS gesture unlock along with it, and the next background start goes
-       * silent. `preload="metadata"` so a cued song knows its own length without
-       * pulling the whole file down.
-       *
-       * Its events are what drive `playing`, `duration`, `position` and the
-       * queue advancing. Nothing polls; the element says when things change.
+       * One player, mounted for the life of the page, never unmounted and never
+       * moved — moving an iframe in the DOM reloads it and the music stops. It
+       * lives off to the side of the viewport at a real size with opacity 0
+       * rather than `display: none`, `visibility: hidden` or a zero-sized box,
+       * any of which gets the iframe throttled or refused and takes the audio
+       * with it. Nothing in the interface refers to it.
        */}
-      <audio
-        ref={audioRef}
-        preload="metadata"
-        playsInline
-        crossOrigin="anonymous"
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onWaiting={() => setBuffering(true)}
-        onStalled={() => setBuffering(true)}
-        onPlaying={() => setBuffering(false)}
-        onCanPlay={() => setBuffering(false)}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
-        onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
-        onTimeUpdate={(e) => setPosition(e.currentTarget.currentTime || 0)}
-        onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
-        onEnded={onEnded}
-        onError={() => {
-          setBuffering(false);
-          setPlaying(false);
-          setError("That one would not play. Try another track.");
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: HOST_WIDTH,
+          height: HOST_HEIGHT,
+          transform: `translateX(-${HOST_WIDTH + 40}px)`,
+          opacity: 0,
+          pointerEvents: "none",
+          zIndex: -1,
         }}
-      />
+      >
+        <div ref={playerHostRef} className="w-full h-full" />
+      </div>
 
       <style>{`
         @keyframes onion-search-in {
@@ -833,8 +962,8 @@ export default function MusicPage() {
         className="hidden md:flex flex-col gap-1 fixed left-0 top-0 bottom-0 px-3 pt-4"
         style={{ width: RAIL_WIDTH, borderRight: `1px solid ${colors.ring}`, zIndex: 30, background: colors.bg }}
       >
-        {/* The mark, and "music" drawn in the same letterforms as the logo —
-            not set in a typeface next to it. The word "onion" is gone: the mark
+        {/* The mark, and "music" drawn in the same letterforms as the logo — not
+            set in a typeface next to it. The word "onion" is gone: the mark
             already says it, and saying it twice made the lockup a mouthful. */}
         <Link to="/music" className="flex items-center gap-1" style={{ textDecoration: "none", marginBottom: 10, paddingLeft: 2 }}>
           <OnionMark height={86} />
@@ -846,7 +975,7 @@ export default function MusicPage() {
         {railItem("library", "Library", Library)}
         <div style={{ borderTop: `1px solid ${colors.ring}`, margin: "14px 8px" }} />
         <Link to="/" style={{ fontSize: 13, color: colors.textMuted, textDecoration: "none", padding: "8px 14px" }}>
-          ← Movies & series
+          ← Movies &amp; series
         </Link>
       </div>
 
@@ -884,7 +1013,9 @@ export default function MusicPage() {
           {(!narrow || mobileSearch) && (
             <div className="flex items-center gap-3 px-4 py-2.5 rounded w-full mx-auto"
               style={{
-                background: "rgba(255,255,255,0.07)", border: `1px solid ${colors.ring}`, maxWidth: 620,
+                background: "rgba(255,255,255,0.07)",
+                border: `1px solid ${colors.ring}`,
+                maxWidth: 620,
                 // Grows into place when the magnifier is tapped, rather than
                 // appearing fully formed.
                 animation: mobileSearch ? "onion-search-in 220ms cubic-bezier(.32,.72,0,1)" : "none",
@@ -921,10 +1052,13 @@ export default function MusicPage() {
                 }}
                 className="bg-transparent flex-1"
                 style={{
-                  color: colors.text, fontSize: 14.5,
+                  color: colors.text,
+                  fontSize: 14.5,
                   // Both, and inline: the browser draws its own ring on a
                   // focused field, and Tailwind's outline-none was losing to it.
-                  outline: "none", boxShadow: "none", border: "none",
+                  outline: "none",
+                  boxShadow: "none",
+                  border: "none",
                 }}
               />
               {(query || mobileSearch) && (
@@ -973,7 +1107,8 @@ export default function MusicPage() {
                     onClick={() => setQuery(term)}
                     className="flex flex-col items-start gap-3 rounded-lg"
                     style={{
-                      background: "rgba(255,255,255,0.06)", border: `1px solid ${colors.ring}`,
+                      background: "rgba(255,255,255,0.06)",
+                      border: `1px solid ${colors.ring}`,
                       padding: "16px 14px", cursor: "pointer", textAlign: "left",
                     }}
                   >
@@ -1071,8 +1206,7 @@ export default function MusicPage() {
           ) : (
             <>
               {!searchActive && recent.length > 0 && cardRow("Listen again", recent)}
-              {!searchActive && forYou.length > 0 &&
-                cardRow(`Because you listened to ${channelLabel(recent[0]?.artist)}`, forYou)}
+              {!searchActive && forYou.length > 0 && cardRow(`Because you listened to ${channelLabel(recent[0]?.artist)}`, forYou)}
               {!searchActive && cardRow(view === "explore" ? "New releases" : "Trending in India", list.slice(0, 12))}
               <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 600, marginBottom: 10 }}>
                 {searchActive ? "Results" : "Quick picks"}
@@ -1085,7 +1219,8 @@ export default function MusicPage() {
         </div>
       </div>
 
-      {/* The now-playing stage, opened from the bar. */}
+      {/* The now-playing stage, opened from the bar. Artwork, controls and the
+          queue — the player itself is not part of it. */}
       {stageMounted && (
         <div
           className="fixed inset-0 flex flex-col"
@@ -1129,8 +1264,7 @@ export default function MusicPage() {
 
           {narrow ? (
             /* A phone: one column, the artwork in the middle of it, controls
-               large enough for a thumb, and the queue underneath. With the video
-               box gone the artwork gets the room it used to share. */
+               large enough for a thumb, and the queue underneath. */
             <div onScroll={onStageScroll} className="relative flex-1 min-h-0 overflow-y-auto px-5 pb-6 flex flex-col">
               <div className="flex justify-center py-4">
                 <div
@@ -1139,12 +1273,15 @@ export default function MusicPage() {
                   aria-label={playing ? "Pause" : "Play"}
                   className="rounded-lg cursor-pointer"
                   style={{
-                    width: "min(268px, 68vw)", aspectRatio: "1 / 1",
+                    // The video used to take the 200px under this. With it gone
+                    // the artwork gets the room it wants.
+                    width: "min(300px, 74vw)", aspectRatio: "1 / 1",
                     background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
                     boxShadow: "0 26px 60px rgba(0,0,0,0.6)",
                   }}
                 />
               </div>
+
               <div className="mt-4">
                 <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 600, color: colors.text }} className="line-clamp-2">
                   {track?.title || "Nothing playing"}
@@ -1153,6 +1290,7 @@ export default function MusicPage() {
                   {track?.artist || ""}
                 </div>
               </div>
+
               {/* The padding is the hit area: a 4px line is not something a
                   thumb can catch, so the bar is drawn thin inside a 20px band
                   that takes the touch. */}
@@ -1179,6 +1317,7 @@ export default function MusicPage() {
                 <span>{formatTime(shownPosition)}</span>
                 <span>{formatTime(duration)}</span>
               </div>
+
               <div className="flex items-center justify-between mt-5 px-2">
                 <button onClick={() => setShuffle((v) => !v)} aria-label="Shuffle" style={{ background: "none", border: "none", cursor: "pointer", color: shuffle ? colors.accentLight : colors.textMuted }}>
                   <Shuffle size={22} />
@@ -1210,7 +1349,8 @@ export default function MusicPage() {
                   aria-label={playing ? "Pause" : "Play"}
                   className="rounded-lg cursor-pointer"
                   style={{
-                    height: "min(360px, 46vh)", aspectRatio: "1 / 1", width: "auto",
+                    // Was capped at 34vh to leave room for the video underneath.
+                    height: "min(430px, 52vh)", aspectRatio: "1 / 1", width: "auto",
                     background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
                     boxShadow: "0 30px 70px rgba(0,0,0,0.6)",
                   }}
@@ -1224,6 +1364,7 @@ export default function MusicPage() {
                   </div>
                 </div>
               </div>
+
               <div className="w-full lg:w-[340px] flex-shrink-0">
                 {upNextHeading}
                 {(queue.length ? queue : tracks || []).map(trackRow)}
@@ -1233,10 +1374,10 @@ export default function MusicPage() {
         </div>
       )}
 
-      {/* The queue, as a sheet that comes up over the player.
-          Pulled up by the handle or the label, pushed back down the same way.
-          It leaves the artwork and the controls where they are instead of
-          scrolling them off the top, which is what a music app does. */}
+      {/* The queue, as a sheet that comes up over the stage. Pulled up by the
+          handle or the label, pushed back down the same way. It leaves the
+          artwork and the controls where they are instead of scrolling them off
+          the top, which is what a music app does. */}
       {stageMounted && narrow && (
         <>
           {sheetOpen && (
@@ -1387,8 +1528,8 @@ export default function MusicPage() {
               {label}
             </button>
           ))}
-          {/* The way back to the films. The rail has this on a wide screen and
-              a phone had no way out of the music app at all. */}
+          {/* The way back to the films. The rail has this on a wide screen and a
+              phone had no way out of the music app at all. */}
           <Link
             to="/"
             className="flex-1 flex flex-col items-center justify-center gap-1"
