@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
-  Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp,
+  Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp, Film,
   ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
@@ -16,42 +16,61 @@ import api from "../api/client";
  * the top, rows of cards, and a bar along the bottom that stays put while you
  * browse. Opening the bar gives the full now-playing view.
  *
- * Playback still runs on YouTube's IFrame player — that is where the audio
- * comes from — but the player is no longer shown anywhere in the interface.
- * The iframe is mounted off-screen at a real size with opacity 0; it is not
- * `display: none`, because a hidden-that-way iframe gets throttled or refused
- * by several browsers and the music stops.
+ * ---------------------------------------------------------------------------
+ * Playback: a plain <audio> element, and why.
+ * ---------------------------------------------------------------------------
  *
- * The visible surface is artwork, controls and the queue — an audio app.
+ * This used to run on YouTube's IFrame player with the iframe parked off-screen.
+ * That works on a desktop and stops dead on a phone the moment the screen locks,
+ * and no amount of JavaScript fixes it:
  *
- * NOTE: YouTube's terms of service require the embedded player to be visible
- * and at least 200x200. This file deliberately does not do that. Fine for a
- * local or personal build; on a public deployment it can get the API key
- * revoked. The clean long-term fix is to serve your own audio and swap the
- * IFrame player for an <audio> element.
+ *   - Android Chrome suspends media inside a cross-origin iframe when the page
+ *     is hidden. The tab keeps living; the iframe does not get to keep playing.
+ *   - iOS Safari (and every iOS browser, since they are all WebKit) pauses an
+ *     embedded video on screen lock. Only a media element the page itself owns
+ *     is allowed to continue.
+ *   - YouTube deliberately gates audio-only background playback behind Premium,
+ *     and its embedded player pauses itself on `visibilitychange`.
+ *
+ * A media element the page owns is a different animal. An <audio> tag that is
+ * already playing keeps playing when the screen goes off on both platforms, and
+ * with Media Session metadata attached the OS puts real controls on the lock
+ * screen. That is what this file does now.
+ *
+ * The tradeoff is that the bytes have to come from somewhere we control:
+ * `streamUrl()` below points at our own endpoint (see server/routes/musicStream.js).
+ * Two things that endpoint MUST do or none of this works:
+ *
+ *   1. Answer HTTP Range requests with 206 and a correct Content-Range. iOS
+ *      opens with `Range: bytes=0-1` and refuses to play if it gets a 200 back.
+ *   2. Send a real audio Content-Type (audio/mpeg, audio/mp4, audio/ogg).
  */
 
-const IFRAME_API = "https://www.youtube.com/iframe_api";
 const SEARCH_DEBOUNCE_MS = 500;
 
-// The off-screen player still gets a real box — a zero-sized or display:none
-// iframe is what browsers throttle.
-const HOST_WIDTH = 356;
-const HOST_HEIGHT = 200;
+// Where the bytes come from. A track may carry its own `streamUrl` from the
+// API — preferred, because it lets the backend hand out signed or CDN URLs
+// without this file knowing about it. Otherwise we fall back to the id route.
+const STREAM_BASE = "/api/music/stream";
+function streamUrl(track) {
+  if (!track) return "";
+  if (track.streamUrl) return track.streamUrl;
+  if (!track.sourceId) return "";
+  return `${STREAM_BASE}/${encodeURIComponent(track.sourceId)}`;
+}
 
 // How long the stage takes to slide, and how long it stays mounted after being
 // asked to close.
 const STAGE_MS = 340;
-
 // How far down the stage the bar waits before appearing — roughly the point
 // where the stage's own controls have scrolled out of sight.
 const BAR_REVEAL_AT = 120;
-
 const RAIL_WIDTH = 232;
 const BAR_HEIGHT = 76;
 // A phone gets the rail as a bottom bar instead, the way music apps do it.
 const NAV_HEIGHT = 58;
 const NARROW = "(max-width: 767px)";
+const SEEK_STEP = 10;
 
 const MOODS = [
   "Podcasts", "Work out", "Energise", "Romance", "Feel good",
@@ -92,24 +111,6 @@ function rememberRecent(track) {
   }
 }
 
-/** Loads the IFrame API once, however many components ask for it. */
-let apiPromise = null;
-function loadYoutubeApi() {
-  if (window.YT?.Player) return Promise.resolve(window.YT);
-  if (apiPromise) return apiPromise;
-  apiPromise = new Promise((resolve) => {
-    const previous = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      previous?.();
-      resolve(window.YT);
-    };
-    const script = document.createElement("script");
-    script.src = IFRAME_API;
-    document.head.appendChild(script);
-  });
-  return apiPromise;
-}
-
 export default function MusicPage() {
   const [view, setView] = useState("home");
   const [tracks, setTracks] = useState(null);
@@ -117,24 +118,22 @@ export default function MusicPage() {
   const [recent, setRecent] = useState(() => readRecent());
   const [forYou, setForYou] = useState([]);
   const [error, setError] = useState(null);
-
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchMode, setSearchMode] = useState("songs");
-
   const [nowPlaying, setNowPlaying] = useState(null);
   // What plays next, which is not the same thing as what is on screen. Picking
   // a song fills this with songs like it; browsing away does not disturb it.
   const [queue, setQueue] = useState([]);
   const [autoplay, setAutoplay] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [buffering, setBuffering] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
   const [liked, setLiked] = useState(null);
-
   const [expanded, setExpanded] = useState(false);
   // Mounted covers the exit as well as the entrance: a stage unmounted the
   // instant it closes has nothing left to animate, so it would just vanish.
@@ -157,10 +156,13 @@ export default function MusicPage() {
     return () => q.removeEventListener("change", onChange);
   }, []);
 
-  const playerRef = useRef(null);
-  const hostRef = useRef(null);
+  const audioRef = useRef(null);
   const tracksRef = useRef(null);
   const queueRef = useRef([]);
+  // The keyboard and lock-screen handlers are bound once but have to call the
+  // current version of these, so they go through a ref rather than closing over
+  // whatever render happened to install them.
+  const actionsRef = useRef({});
 
   const searchActive = query.trim().length >= 2;
   const track = nowPlaying;
@@ -194,11 +196,9 @@ export default function MusicPage() {
    */
   const seedTrack = recent[0];
   const seedId = seedTrack?.sourceId;
-
   useEffect(() => {
     const seed = seedTrack;
     if (!seed?.artist) return;
-
     let cancelled = false;
     api
       .get(
@@ -209,7 +209,6 @@ export default function MusicPage() {
         if (!cancelled) setForYou(data);
       })
       .catch((err) => console.error("forYou error:", err));
-
     return () => {
       cancelled = true;
     };
@@ -218,7 +217,7 @@ export default function MusicPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seedId]);
 
-  // Debounced: a search costs a hundredth of the day's YouTube quota.
+  // Debounced: a search is not free at the other end either.
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) return;
@@ -245,50 +244,41 @@ export default function MusicPage() {
     };
   }, [query, searchMode]);
 
-  // One player for the life of the page.
+  /*
+   * Point the element at a song.
+   *
+   * `dataset.sourceId` is the record of what is loaded, and it is checked before
+   * touching `src`: assigning the same URL again restarts the song from zero.
+   * The tap handler in `play()` gets there first for anything a person clicked,
+   * so in practice this effect is what loads the resumed track on a cold open
+   * and what advances the queue.
+   *
+   * A load without `autoplay` deliberately does not call play() — opening the
+   * page should be silent, and a search should not start something nobody asked
+   * for.
+   */
   useEffect(() => {
-    let destroyed = false;
-    loadYoutubeApi().then((YT) => {
-      if (destroyed || !hostRef.current || playerRef.current) return;
-      playerRef.current = new YT.Player(hostRef.current, {
-        playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
-        events: {
-          onStateChange: (e) => {
-            setPlaying(e.data === YT.PlayerState.PLAYING);
-            if (e.data === YT.PlayerState.ENDED) {
-              const list = queueRef.current?.length ? queueRef.current : tracksRef.current;
-              if (!list?.length) return;
-              setAutoplay(true);
-              setNowPlaying((playingNow) => {
-                if (repeat) return playingNow;
-                if (shuffle) return list[Math.floor(Math.random() * list.length)];
-                const i = list.findIndex((t) => t.sourceId === playingNow?.sourceId);
-                return i >= 0 && i + 1 < list.length ? list[i + 1] : playingNow;
-              });
-            }
-          },
-          onError: () => setError("That one would not play here — the owner may have blocked embedding."),
-        },
-      });
-    });
-    return () => {
-      destroyed = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repeat, shuffle]);
-
-  // Cue rather than load unless a person asked for this one, so opening the page
-  // is silent and a search does not start something nobody clicked.
-  useEffect(() => {
-    const player = playerRef.current;
-    if (!player?.cueVideoById || !track?.sourceId) return;
-    if (track.source === "youtube-playlist") {
-      player.loadPlaylist({ list: track.sourceId, listType: "playlist" });
+    const audio = audioRef.current;
+    if (!audio || !track) return;
+    const url = streamUrl(track);
+    if (!url) {
+      setError("No audio for that one yet.");
       return;
     }
-    if (autoplay) player.loadVideoById(track.sourceId);
-    else player.cueVideoById(track.sourceId);
-  }, [track?.sourceId, track?.source, autoplay]);
+    if (audio.dataset.sourceId !== String(track.sourceId)) {
+      audio.dataset.sourceId = String(track.sourceId);
+      audio.src = url;
+      audio.load();
+    }
+    if (autoplay && audio.paused) {
+      audio.play().catch((err) => {
+        // A rejected play() here is almost always the autoplay policy: the
+        // browser wants the next start to come from a tap. Not an error worth
+        // shouting about.
+        console.warn("play() rejected:", err?.name || err);
+      });
+    }
+  }, [track?.sourceId, track?.streamUrl, autoplay]);
 
   useEffect(() => {
     if (!track || !autoplay) return;
@@ -297,39 +287,55 @@ export default function MusicPage() {
     setLiked(null);
   }, [track?.sourceId, autoplay, track]);
 
+  // Repeat is the element's own loop flag rather than something reimplemented
+  // on `ended` — looping this way has no gap and no second network trip.
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.loop = repeat;
+  }, [repeat]);
+
   /*
    * Lock-screen and notification controls.
    *
-   * The Media Session API is what puts the track, its artwork and a set of
-   * buttons on a phone's lock screen and in the notification shade.
-   *
-   * Worth being straight about what it does not do: it does not keep the audio
-   * going once the screen is off. An embedded YouTube player is suspended by
-   * the browser when the page is backgrounded, and YouTube itself keeps
-   * background playback behind Premium — no web page can override either.
-   * Playing our own audio through an <audio> element is what survives a locked
-   * screen, and this metadata is already in the right place for that day.
+   * With a real <audio> element behind it this is no longer decorative: the
+   * metadata is what the phone shows on the lock screen while the screen is off,
+   * and these handlers are the buttons on it.
    */
   useEffect(() => {
     const session = navigator.mediaSession;
-    if (!session || !track) return;
+    if (!session || !track || typeof window.MediaMetadata !== "function") return;
 
     session.metadata = new window.MediaMetadata({
       title: track.title || "",
       artist: channelLabel(track.artist) || "",
       album: "Onion Music",
       artwork: track.artworkUrl
-        ? [{ src: track.artworkUrl, sizes: "512x512", type: "image/jpeg" }]
+        ? [
+            { src: track.artworkUrl, sizes: "96x96", type: "image/jpeg" },
+            { src: track.artworkUrl, sizes: "256x256", type: "image/jpeg" },
+            { src: track.artworkUrl, sizes: "512x512", type: "image/jpeg" },
+          ]
         : [],
     });
 
-    session.playbackState = playing ? "playing" : "paused";
+    const nudge = (delta) => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      const end = Number.isFinite(audio.duration) ? audio.duration : audio.currentTime;
+      audio.currentTime = Math.min(end, Math.max(0, audio.currentTime + delta));
+    };
 
     const handlers = [
-      ["play", () => playerRef.current?.playVideo?.()],
-      ["pause", () => playerRef.current?.pauseVideo?.()],
-      ["previoustrack", () => skip(-1)],
-      ["nexttrack", () => skip(1)],
+      ["play", () => actionsRef.current.resume?.()],
+      ["pause", () => audioRef.current?.pause()],
+      ["stop", () => audioRef.current?.pause()],
+      ["previoustrack", () => actionsRef.current.skip?.(-1)],
+      ["nexttrack", () => actionsRef.current.skip?.(1)],
+      ["seekbackward", (d) => nudge(-(d?.seekOffset || SEEK_STEP))],
+      ["seekforward", (d) => nudge(d?.seekOffset || SEEK_STEP)],
+      ["seekto", (d) => {
+        const audio = audioRef.current;
+        if (audio && typeof d?.seekTime === "number") audio.currentTime = d.seekTime;
+      }],
     ];
     for (const [action, handler] of handlers) {
       try {
@@ -338,7 +344,6 @@ export default function MusicPage() {
         // Not every browser offers every action; the ones it does still work.
       }
     }
-
     return () => {
       for (const [action] of handlers) {
         try {
@@ -348,54 +353,73 @@ export default function MusicPage() {
         }
       }
     };
-  });
+  }, [track?.sourceId, track?.title, track?.artist, track?.artworkUrl]);
+
+  // The scrubber on the lock screen, and whether the OS draws a play or a pause
+  // button. Kept out of the effect above so that changing state does not tear
+  // down and rebuild every handler.
+  useEffect(() => {
+    const session = navigator.mediaSession;
+    if (!session) return;
+    session.playbackState = playing ? "playing" : "paused";
+    if (typeof session.setPositionState !== "function") return;
+    try {
+      if (Number.isFinite(duration) && duration > 0) {
+        session.setPositionState({
+          duration,
+          position: Math.min(position, duration),
+          playbackRate: audioRef.current?.playbackRate || 1,
+        });
+      }
+    } catch {
+      // Safari throws on some state combinations rather than ignoring them.
+    }
+  }, [playing, position, duration]);
 
   /*
    * Keyboard, on anything with one. Space for play, up and down for volume,
    * left and right for the previous and next song.
    *
-   * Ignored while typing, or the search box would pause the music on its first
-   * space. `preventDefault` on the arrows and space, since both scroll the page
-   * otherwise.
+   * Bound once and routed through `actionsRef`, so the listener is not removed
+   * and re-added on every render. Ignored while typing, or the search box would
+   * pause the music on its first space. `preventDefault` on the arrows and
+   * space, since both scroll the page otherwise.
    */
   useEffect(() => {
     const onKey = (e) => {
       const el = document.activeElement;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
-
-      const player = playerRef.current;
-      if (!player) return;
-
+      const audio = audioRef.current;
+      if (!audio) return;
       switch (e.key) {
         case " ":
         case "k":
           e.preventDefault();
-          toggle();
+          actionsRef.current.toggle?.();
           break;
         case "ArrowUp":
           e.preventDefault();
-          player.setVolume?.(Math.min(100, (player.getVolume?.() ?? 100) + 10));
-          if (player.isMuted?.()) { player.unMute(); setMuted(false); }
+          audio.volume = Math.min(1, audio.volume + 0.1);
+          if (audio.muted) { audio.muted = false; setMuted(false); }
           break;
         case "ArrowDown":
           e.preventDefault();
-          player.setVolume?.(Math.max(0, (player.getVolume?.() ?? 100) - 10));
+          audio.volume = Math.max(0, audio.volume - 0.1);
           break;
         case "ArrowRight":
           e.preventDefault();
-          skip(1);
+          actionsRef.current.skip?.(1);
           break;
         case "ArrowLeft":
           e.preventDefault();
-          skip(-1);
+          actionsRef.current.skip?.(-1);
           break;
         default:
       }
     };
-
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, []);
 
   /*
    * Sliding the stage up and down.
@@ -413,11 +437,11 @@ export default function MusicPage() {
       const timer = setTimeout(() => setStageIn(true), 20);
       return () => clearTimeout(timer);
     }
-
     setStageIn(false);
     setBarVisible(true);
     const timer = setTimeout(() => setStageMounted(false), STAGE_MS);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded]);
 
   /*
@@ -433,17 +457,6 @@ export default function MusicPage() {
       document.body.style.overflow = previous;
     };
   }, [stageMounted]);
-
-  // The player has no progress event, so it has to be asked.
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const player = playerRef.current;
-      if (!player?.getCurrentTime) return;
-      setPosition(player.getCurrentTime() || 0);
-      setDuration(player.getDuration() || 0);
-    }, 400);
-    return () => clearInterval(timer);
-  }, []);
 
   /*
    * The bar follows the stage's own controls.
@@ -463,35 +476,62 @@ export default function MusicPage() {
     </div>
   );
 
-  const play = async (t) => {
+  /*
+   * Starting a song from a tap.
+   *
+   * The src is assigned and play() is called right here, inside the handler for
+   * the gesture that asked for it. That is not a stylistic choice: iOS only
+   * counts a play() as user-initiated if it happens synchronously in the
+   * gesture, and the first one in the page's life is the one that unlocks audio
+   * for every later start — including the ones the queue makes on its own with
+   * the screen off. Setting state and letting an effect play a tick later is
+   * exactly the shape that leaves iOS silent.
+   */
+  const play = (t) => {
+    const audio = audioRef.current;
+    const url = streamUrl(t);
+    if (audio && url) {
+      if (audio.dataset.sourceId !== String(t.sourceId)) {
+        audio.dataset.sourceId = String(t.sourceId);
+        audio.src = url;
+      }
+      audio.play().catch((err) => console.warn("play() rejected:", err?.name || err));
+    }
     setAutoplay(true);
     setNowPlaying(t);
     // Start the queue with what is on, so Up next is never briefly empty.
     setQueue([t]);
 
-    try {
-      const related = await api.get(
+    api
+      .get(
         `/music/related?title=${encodeURIComponent(t.title || "")}` +
           `&artist=${encodeURIComponent(t.artist || "")}&exclude=${encodeURIComponent(t.sourceId || "")}`
-      );
-      setQueue([t, ...related]);
-    } catch (err) {
-      // A failed recommendation should not stop the music: fall back to
-      // whatever list the song was picked from.
-      console.error("related error:", err);
-      setQueue([t, ...(tracksRef.current || []).filter((x) => x.sourceId !== t.sourceId)]);
-    }
+      )
+      .then((related) => setQueue([t, ...related]))
+      .catch((err) => {
+        // A failed recommendation should not stop the music: fall back to
+        // whatever list the song was picked from.
+        console.error("related error:", err);
+        setQueue([t, ...(tracksRef.current || []).filter((x) => x.sourceId !== t.sourceId)]);
+      });
+  };
+
+  const resume = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    setAutoplay(true);
+    audio.play().catch((err) => console.warn("play() rejected:", err?.name || err));
   };
 
   const toggle = () => {
-    const player = playerRef.current;
-    if (!player?.playVideo) return;
-    if (playing) player.pauseVideo();
-    else player.playVideo();
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) resume();
+    else audio.pause();
   };
 
   const skip = (delta) => {
-    const list = queue.length ? queue : tracks;
+    const list = queueRef.current?.length ? queueRef.current : tracksRef.current;
     if (!list?.length) return;
     setAutoplay(true);
     if (shuffle && delta > 0) {
@@ -502,20 +542,39 @@ export default function MusicPage() {
     setNowPlaying(list[Math.min(list.length - 1, Math.max(0, i + delta))]);
   };
 
+  // What the queue does when a song runs out. `repeat` never reaches here — the
+  // element loops itself and never fires `ended`.
+  const onEnded = () => {
+    const list = queueRef.current?.length ? queueRef.current : tracksRef.current;
+    if (!list?.length) return;
+    setAutoplay(true);
+    if (shuffle) {
+      setNowPlaying(list[Math.floor(Math.random() * list.length)]);
+      return;
+    }
+    const i = list.findIndex((t) => t.sourceId === nowPlaying?.sourceId);
+    if (i >= 0 && i + 1 < list.length) setNowPlaying(list[i + 1]);
+    else setPlaying(false);
+  };
+
   const seek = (event) => {
-    const player = playerRef.current;
-    if (!player?.seekTo || !duration) return;
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
     const r = event.currentTarget.getBoundingClientRect();
-    player.seekTo(((event.clientX - r.left) / r.width) * duration, true);
+    const ratio = Math.min(1, Math.max(0, (event.clientX - r.left) / r.width));
+    audio.currentTime = ratio * duration;
+    setPosition(ratio * duration);
   };
 
   const toggleMute = () => {
-    const player = playerRef.current;
-    if (!player?.mute) return;
-    if (muted) player.unMute();
-    else player.mute();
-    setMuted((m) => !m);
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.muted = !audio.muted;
+    setMuted(audio.muted);
   };
+
+  // Bound handlers read the current versions from here.
+  actionsRef.current = { toggle, skip, resume };
 
   const progress = duration ? (position / duration) * 100 : 0;
   const list = searchActive && searchMode === "albums" ? albums : tracks;
@@ -616,20 +675,66 @@ export default function MusicPage() {
 
   return (
     <div style={{ background: colors.bg, minHeight: "100vh", fontFamily: bodyFont, color: colors.text }}>
+      {/*
+       * The audio engine.
+       *
+       * One element, mounted for the life of the page, never unmounted and never
+       * recreated — a media element that gets torn down and rebuilt loses the
+       * iOS gesture unlock along with it, and the next background start goes
+       * silent. `preload="metadata"` so a cued song knows its own length without
+       * pulling the whole file down.
+       */}
+      <audio
+        ref={audioRef}
+        preload="metadata"
+        playsInline
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onWaiting={() => setBuffering(true)}
+        onPlaying={() => { setBuffering(false); setPlaying(true); }}
+        onCanPlay={() => setBuffering(false)}
+        onTimeUpdate={(e) => {
+          // With the screen off this still fires. Nothing is on screen to update,
+          // so skip the render and save the battery.
+          if (document.hidden) return;
+          setPosition(e.currentTarget.currentTime || 0);
+        }}
+        onLoadedMetadata={(e) => {
+          const d = e.currentTarget.duration;
+          setDuration(Number.isFinite(d) ? d : 0);
+          setPosition(0);
+        }}
+        onDurationChange={(e) => {
+          const d = e.currentTarget.duration;
+          setDuration(Number.isFinite(d) ? d : 0);
+        }}
+        onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
+        onEnded={onEnded}
+        onError={() => {
+          setBuffering(false);
+          setError("That one would not play — the stream is missing or the server refused a range request.");
+        }}
+      />
+
       {/* Rail */}
       <div
         className="hidden md:flex flex-col gap-1 fixed left-0 top-0 bottom-0 px-3 pt-4"
         style={{ width: RAIL_WIDTH, borderRight: `1px solid ${colors.ring}`, zIndex: 30, background: colors.bg }}
       >
-        <Link to="/" style={{ textDecoration: "none", marginBottom: 8, paddingLeft: 6 }}>
+        {/* The mark alone says Onion, which is the film app. This is a
+            different room in the same house, so it says which one. */}
+        <Link to="/music" className="flex items-baseline gap-2" style={{ textDecoration: "none", marginBottom: 8, paddingLeft: 6 }}>
           <OnionLogo height={62} />
+          <span style={{ fontFamily: displayFont, fontSize: 21, fontWeight: 600, color: colors.text, letterSpacing: "-0.01em" }}>
+            Music
+          </span>
         </Link>
         {railItem("home", "Home", Home)}
         {railItem("explore", "Explore", Compass)}
         {railItem("library", "Library", Library)}
         <div style={{ borderTop: `1px solid ${colors.ring}`, margin: "14px 8px" }} />
         <Link to="/" style={{ fontSize: 13, color: colors.textMuted, textDecoration: "none", padding: "8px 14px" }}>
-          ← Back to Onion
+          ← Movies & series
         </Link>
       </div>
 
@@ -651,8 +756,11 @@ export default function MusicPage() {
         >
           {narrow && !mobileSearch && (
             <>
-              <Link to="/" style={{ textDecoration: "none", display: "flex" }}>
+              <Link to="/music" className="flex items-baseline gap-1.5" style={{ textDecoration: "none" }}>
                 <OnionLogo height={44} />
+                <span style={{ fontFamily: displayFont, fontSize: 16, fontWeight: 600, color: colors.text }}>
+                  Music
+                </span>
               </Link>
               <button
                 onClick={() => setMobileSearch(true)}
@@ -671,7 +779,6 @@ export default function MusicPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Backspace" && !query && e.preventDefault()}
                 placeholder="Search songs, albums, artists"
                 autoFocus={mobileSearch}
                 className="outline-none bg-transparent flex-1"
@@ -777,7 +884,7 @@ export default function MusicPage() {
         </div>
       </div>
 
-      {/* The now-playing stage, opened from the bar. Artwork only — no video. */}
+      {/* The now-playing stage, opened from the bar. */}
       {stageMounted && (
         <div
           className="fixed inset-0 flex flex-col"
@@ -814,7 +921,7 @@ export default function MusicPage() {
               <ChevronDown size={24} />
             </button>
             <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: colors.textMuted, margin: "0 auto" }}>
-              Now playing
+              {buffering ? "Buffering" : "Now playing"}
             </div>
             <span style={{ width: 24 }} />
           </div>
@@ -836,7 +943,6 @@ export default function MusicPage() {
                   }}
                 />
               </div>
-
               <div className="mt-4">
                 <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 600, color: colors.text }} className="line-clamp-2">
                   {track?.title || "Nothing playing"}
@@ -845,7 +951,6 @@ export default function MusicPage() {
                   {track?.artist || ""}
                 </div>
               </div>
-
               <div onClick={seek} className="mt-4" style={{ height: 4, background: "rgba(255,255,255,0.16)", borderRadius: 2, cursor: "pointer" }}>
                 <div style={{ height: "100%", width: `${progress}%`, background: colors.text, borderRadius: 2 }} />
               </div>
@@ -853,7 +958,6 @@ export default function MusicPage() {
                 <span>{formatTime(position)}</span>
                 <span>{formatTime(duration)}</span>
               </div>
-
               <div className="flex items-center justify-between mt-5 px-2">
                 <button onClick={() => setShuffle((v) => !v)} aria-label="Shuffle" style={{ background: "none", border: "none", cursor: "pointer", color: shuffle ? colors.accentLight : colors.textMuted }}>
                   <Shuffle size={22} />
@@ -875,7 +979,6 @@ export default function MusicPage() {
                   <Repeat size={22} />
                 </button>
               </div>
-
               <div style={{ marginTop: 20 }}>{upNextHeading}</div>
               {(queue.length ? queue : tracks || []).map(trackRow)}
             </div>
@@ -902,7 +1005,6 @@ export default function MusicPage() {
                   </div>
                 </div>
               </div>
-
               <div className="w-full lg:w-[340px] flex-shrink-0">
                 {upNextHeading}
                 {(queue.length ? queue : tracks || []).map(trackRow)}
@@ -911,28 +1013,6 @@ export default function MusicPage() {
           )}
         </div>
       )}
-
-      {/*
-       * The audio engine. This must stay mounted for the whole life of the page —
-       * the sound comes out of this iframe. It is parked off-screen at a real
-       * size with opacity 0 rather than `display: none`, because a display:none
-       * iframe gets throttled or refused and playback stops.
-       */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: HOST_WIDTH,
-          height: HOST_HEIGHT,
-          opacity: 0,
-          pointerEvents: "none",
-          zIndex: -1,
-        }}
-      >
-        <div ref={hostRef} className="w-full h-full" />
-      </div>
 
       {/* The bar. Stays across every view, the way a music app's does. */}
       <div
@@ -988,7 +1068,7 @@ export default function MusicPage() {
               {track?.title || "Nothing playing"}
             </span>
             <span style={{ display: "block", fontSize: 11.5, color: colors.textMuted, marginTop: 2 }} className="truncate">
-              {track?.artist || ""}
+              {buffering ? "Buffering…" : track?.artist || ""}
             </span>
           </span>
         </button>
@@ -1040,6 +1120,17 @@ export default function MusicPage() {
               {label}
             </button>
           ))}
+
+          {/* The way back to the films. The rail has this on a wide screen and
+              a phone had no way out of the music app at all. */}
+          <Link
+            to="/"
+            className="flex-1 flex flex-col items-center justify-center gap-1"
+            style={{ textDecoration: "none", color: colors.textMuted, fontFamily: bodyFont, fontSize: 10.5, fontWeight: 500 }}
+          >
+            <Film size={19} />
+            Movies
+          </Link>
         </div>
       )}
     </div>
