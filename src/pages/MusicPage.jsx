@@ -768,7 +768,9 @@ export default function MusicPage() {
           background: "#000",
           boxShadow: expanded ? "none" : "0 16px 40px rgba(0,0,0,0.7)",
           border: expanded ? "none" : `1px solid ${colors.ring}`,
-          transition: "top 460ms cubic-bezier(.25,.46,.45,.94), left 460ms cubic-bezier(.25,.46,.45,.94), width 460ms cubic-bezier(.25,.46,.45,.94), height 460ms cubic-bezier(.25,.46,.45,.94)",
+          // No transition on the box. It used to glide between the slot and the
+          // dock, which looked like the player drifting loose from the page —
+          // it lands where it belongs immediately instead.
         }}
       >
         <div ref={hostRef} className="w-full h-full" />
