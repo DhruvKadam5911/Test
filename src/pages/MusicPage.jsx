@@ -507,6 +507,102 @@ function channelLabel(name) {
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .trim();
 }
+/* Scrollable card row with YouTube Music-style left/right arrow navigation */
+function CardRow({ title, items, onPlay, colors, displayFont }) {
+  const rowRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  const updateScrollState = () => {
+    const el = rowRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 8);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+  };
+
+  const doScroll = (dir) => {
+    const el = rowRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * 540, behavior: "smooth" });
+  };
+
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="mb-10" style={{ position: "relative" }}>
+      <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 600, color: colors.text, marginBottom: 14 }}>
+        {title}
+      </div>
+      <div style={{ position: "relative" }}>
+        {canScrollLeft && (
+          <button
+            onClick={() => doScroll(-1)}
+            aria-label="Scroll left"
+            style={{
+              position: "absolute", left: -16, top: 80, transform: "translateY(-50%)",
+              zIndex: 5, width: 40, height: 40, borderRadius: "50%",
+              background: "rgba(18,12,28,0.92)", border: "1px solid rgba(255,255,255,0.15)",
+              color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+            }}
+          >
+            <ChevronLeft size={20} />
+          </button>
+        )}
+        {canScrollRight && (
+          <button
+            onClick={() => doScroll(1)}
+            aria-label="Scroll right"
+            style={{
+              position: "absolute", right: -16, top: 80, transform: "translateY(-50%)",
+              zIndex: 5, width: 40, height: 40, borderRadius: "50%",
+              background: "rgba(18,12,28,0.92)", border: "1px solid rgba(255,255,255,0.15)",
+              color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+            }}
+          >
+            <ChevronRight size={20} />
+          </button>
+        )}
+        <div
+          ref={rowRef}
+          onScroll={updateScrollState}
+          className="flex gap-4 pb-3"
+          style={{ overflowX: "auto", scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
+          {items.map((t) => (
+            <button
+              key={t.sourceId || t.id}
+              onClick={() => onPlay(t)}
+              className="flex-shrink-0 text-left group"
+              style={{ width: 170, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            >
+              <div
+                className="relative rounded-lg overflow-hidden shadow-lg"
+                style={{
+                  width: 170, height: 170,
+                  background: t.artworkUrl ? `url(${t.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
+                  border: `1px solid ${colors.ring}`,
+                }}
+              >
+                <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                  <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition-transform">
+                    <Play size={22} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
+                  </div>
+                </span>
+              </div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: colors.text, marginTop: 10 }} className="line-clamp-2">
+                {t.title}
+              </div>
+              <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 3 }} className="truncate">
+                {t.artist}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function MusicPage() {
   const [view, setView] = useState("home");
@@ -1384,105 +1480,16 @@ export default function MusicPage() {
     }
   }, [activeLyricIndex, displayMode]);
 
-  const cardRow = (title, items) => {
-    if (!items || items.length === 0) return null;
-    const rowRef = React.useRef(null);
-    const [canScrollLeft, setCanScrollLeft] = React.useState(false);
-    const [canScrollRight, setCanScrollRight] = React.useState(true);
-
-    const updateScrollState = () => {
-      const el = rowRef.current;
-      if (!el) return;
-      setCanScrollLeft(el.scrollLeft > 8);
-      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
-    };
-
-    const scrollBy = (dir) => {
-      const el = rowRef.current;
-      if (!el) return;
-      el.scrollBy({ left: dir * 180 * 3, behavior: "smooth" });
-    };
-
-    return (
-      <div className="mb-10" style={{ position: "relative" }}>
-        <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 600, color: colors.text, marginBottom: 14 }}>
-          {title}
-        </div>
-        <div style={{ position: "relative" }}>
-          {/* Left Arrow */}
-          {canScrollLeft && (
-            <button
-              onClick={() => scrollBy(-1)}
-              aria-label="Scroll left"
-              style={{
-                position: "absolute", left: -16, top: "50%", transform: "translateY(-50%)",
-                zIndex: 5, width: 40, height: 40, borderRadius: "50%",
-                background: "rgba(18,12,28,0.92)", border: "1px solid rgba(255,255,255,0.15)",
-                color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-                transition: "opacity 0.2s",
-              }}
-            >
-              <ChevronLeft size={20} />
-            </button>
-          )}
-          {/* Right Arrow */}
-          {canScrollRight && (
-            <button
-              onClick={() => scrollBy(1)}
-              aria-label="Scroll right"
-              style={{
-                position: "absolute", right: -16, top: "50%", transform: "translateY(-50%)",
-                zIndex: 5, width: 40, height: 40, borderRadius: "50%",
-                background: "rgba(18,12,28,0.92)", border: "1px solid rgba(255,255,255,0.15)",
-                color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-                transition: "opacity 0.2s",
-              }}
-            >
-              <ChevronRight size={20} />
-            </button>
-          )}
-          <div
-            ref={rowRef}
-            onScroll={updateScrollState}
-            className="flex gap-4 pb-3"
-            style={{ overflowX: "auto", scrollbarWidth: "none", msOverflowStyle: "none" }}
-          >
-            {items.map((t) => (
-              <button
-                key={t.sourceId || t.id}
-                onClick={() => openTrack(t)}
-                className="flex-shrink-0 text-left group"
-                style={{ width: 170, background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              >
-                <div
-                  className="relative rounded-lg overflow-hidden shadow-lg"
-                  style={{
-                    width: 170, height: 170,
-                    background: t.artworkUrl ? `url(${t.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
-                    border: `1px solid ${colors.ring}`,
-                  }}
-                >
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition-transform">
-                      <Play size={22} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
-                    </div>
-                  </span>
-                </div>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: colors.text, marginTop: 10 }} className="line-clamp-2">
-                  {t.title}
-                </div>
-                <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 3 }} className="truncate">
-                  {t.artist}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const cardRow = (title, items) => (
+    <CardRow
+      key={title}
+      title={title}
+      items={items}
+      onPlay={openTrack}
+      colors={colors}
+      displayFont={displayFont}
+    />
+  );
 
   const trackRow = (t, i) => {
     const active = (t.sourceId || t.id) === (nowPlaying?.sourceId || nowPlaying?.id);
