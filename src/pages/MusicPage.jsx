@@ -397,10 +397,8 @@ export default function MusicPage() {
 
   const audioRef = useRef(null);
   const mediaEngineRef = useRef(null);
-  const youtubeEngineRef = useRef(null);
   const mediaElRef = useRef(null);
-  const ytPlayerRef = useRef(null);
-  const pendingTrackRef = useRef(null);
+  const iframeRef = useRef(null);
   const tracksRef = useRef(null);
   const queueRef = useRef([]);
   const actionsRef = useRef({});
@@ -414,15 +412,49 @@ export default function MusicPage() {
   const isYouTubeTrack = !track?.streamUrl;
   const canPitch = true;
 
-  const selectEngine = (currentTrack = track) => {
-    if (currentTrack?.streamUrl) {
-      if (mediaEngineRef.current) audioRef.current = mediaEngineRef.current;
-    } else {
-      if (youtubeEngineRef.current) audioRef.current = youtubeEngineRef.current;
-      else if (mediaEngineRef.current) audioRef.current = mediaEngineRef.current;
+  const postIframeCommand = (func, args = []) => {
+    try {
+      const iframe = iframeRef.current;
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage(
+          JSON.stringify({ event: "command", func, args }),
+          "*"
+        );
+      }
+    } catch (e) {
+      console.warn("postIframeCommand error:", e);
     }
-    return audioRef.current;
   };
+
+  /* Listen to YouTube iframe events */
+  useEffect(() => {
+    const onMessage = (event) => {
+      try {
+        if (typeof event.data !== "string") return;
+        const data = JSON.parse(event.data);
+        if (data.event === "infoDelivery" && data.info) {
+          if (typeof data.info.currentTime === "number") {
+            setPosition(data.info.currentTime);
+          }
+          if (typeof data.info.duration === "number" && data.info.duration > 0) {
+            setDuration(data.info.duration);
+          }
+          if (data.info.playerState === 1) {
+            setPlaying(true);
+            setBuffering(false);
+          } else if (data.info.playerState === 2) {
+            setPlaying(false);
+          } else if (data.info.playerState === 3) {
+            setBuffering(true);
+          } else if (data.info.playerState === 0) {
+            actionsRef.current.ended?.();
+          }
+        }
+      } catch {}
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   const switchDisplayMode = (newMode) => {
     setDisplayMode(newMode);
@@ -443,78 +475,11 @@ export default function MusicPage() {
       ["ended", () => actionsRef.current.ended?.()],
       ["error", () => {
         setBuffering(false);
-        setError("Playback failed for this stream.");
       }],
     ];
     for (const [event, handler] of handlers) el.addEventListener(event, handler);
     return () => {
       for (const [event, handler] of handlers) el.removeEventListener(event, handler);
-    };
-  }, []);
-
-  /* Initialize YouTube IFrame Player Engine */
-  useEffect(() => {
-    let unmounted = false;
-    loadYoutubeApi().then((YT) => {
-      if (unmounted || ytPlayerRef.current || !document.getElementById("onion-yt-host")) return;
-      try {
-        const player = new YT.Player("onion-yt-host", {
-          height: "100%",
-          width: "100%",
-          playerVars: {
-            autoplay: 1,
-            controls: 1,
-            enablejsapi: 1,
-            origin: typeof window !== "undefined" ? window.location.origin : undefined,
-            modestbranding: 1,
-            rel: 0,
-            playsinline: 1,
-            iv_load_policy: 3,
-            fs: 1,
-          },
-          events: {
-            onReady: (event) => {
-              ytPlayerRef.current = event.target;
-              const engine = youtubeEngine(event.target);
-              youtubeEngineRef.current = engine;
-              audioRef.current = engine;
-
-              if (pendingTrackRef.current) {
-                const pending = pendingTrackRef.current;
-                pendingTrackRef.current = null;
-                const src = sourceOf(pending);
-                engine.dataset.sourceId = String(src);
-                engine.setSource(src, { autoplay: true });
-              }
-            },
-            onStateChange: (event) => {
-              const state = event.data;
-              if (state === 1 || state === window.YT?.PlayerState?.PLAYING) {
-                setPlaying(true);
-                setBuffering(false);
-                const d = ytPlayerRef.current?.getDuration?.();
-                if (d) setDuration(d);
-              } else if (state === 2 || state === window.YT?.PlayerState?.PAUSED) {
-                setPlaying(false);
-              } else if (state === 3 || state === window.YT?.PlayerState?.BUFFERING) {
-                setBuffering(true);
-              } else if (state === 0 || state === window.YT?.PlayerState?.ENDED) {
-                actionsRef.current.ended?.();
-              }
-            },
-            onError: (event) => {
-              console.warn("YouTube player error:", event.data);
-              setBuffering(false);
-            },
-          },
-        });
-      } catch (err) {
-        console.error("Failed to init YouTube player:", err);
-      }
-    });
-
-    return () => {
-      unmounted = true;
     };
   }, []);
 
@@ -793,19 +758,29 @@ export default function MusicPage() {
     if (!t) return;
     setAutoplay(true);
     setNowPlaying(t);
+    setPlaying(true);
+    setBuffering(false);
     setQueue([t]);
 
-    const audio = selectEngine(t);
     const source = sourceOf(t);
-    if (audio && source) {
-      audio.dataset.sourceId = String(source);
-      audio.setSource(source, { autoplay: true });
-      audio.play?.();
-      if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
-        applyRates(audio, tempo, audio.canPitch ? pitch : 1);
+
+    if (t.streamUrl) {
+      const audio = mediaEngineRef.current;
+      if (audio) {
+        audioRef.current = audio;
+        audio.setSource(t.streamUrl, { autoplay: true });
+        if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
+          applyRates(audio, tempo, audio.canPitch ? pitch : 1);
+        }
       }
     } else {
-      pendingTrackRef.current = t;
+      const id = extractVideoId(source || t.sourceId || t.id);
+      if (iframeRef.current && id) {
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const url = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&enablejsapi=1&origin=${encodeURIComponent(origin)}&playsinline=1&controls=1&rel=0`;
+        iframeRef.current.src = url;
+        postIframeCommand("playVideo");
+      }
     }
 
     // Dynamic queue recommendations
@@ -823,17 +798,26 @@ export default function MusicPage() {
   };
 
   const resume = () => {
-    const audio = selectEngine();
-    if (!audio) return;
     setAutoplay(true);
-    audio.play?.();
+    setPlaying(true);
+    if (nowPlaying?.streamUrl) {
+      mediaEngineRef.current?.play?.();
+    } else {
+      postIframeCommand("playVideo");
+    }
   };
 
   const toggle = () => {
-    const audio = selectEngine();
-    if (!audio) return;
-    if (audio.paused) resume();
-    else audio.pause?.();
+    if (playing) {
+      setPlaying(false);
+      if (nowPlaying?.streamUrl) {
+        mediaEngineRef.current?.pause?.();
+      } else {
+        postIframeCommand("pauseVideo");
+      }
+    } else {
+      resume();
+    }
   };
 
   const skip = (delta) => {
@@ -889,11 +873,12 @@ export default function MusicPage() {
 
   const scrubEnd = (event) => {
     if (scrubbing === null) return;
-    const audio = audioRef.current;
     const to = duration ? ratioFrom(event, event.currentTarget) * duration : 0;
-    if (audio && duration) {
-      audio.currentTime = to;
-      setPosition(to);
+    setPosition(to);
+    if (nowPlaying?.streamUrl) {
+      if (mediaEngineRef.current) mediaEngineRef.current.currentTime = to;
+    } else {
+      postIframeCommand("seekTo", [to, true]);
     }
     setScrubbing(null);
   };
@@ -907,19 +892,17 @@ export default function MusicPage() {
 
   /* Tempo / Pitch */
   const commitRates = (nextTempo, nextPitch) => {
-    const audio = audioRef.current;
     const wantTempo = clampRate(nextTempo);
     const wantPitch = clampRate(nextPitch);
 
     setTempo(wantTempo);
     setPitch(wantPitch);
 
-    if (audio?.setRates) {
-      try {
-        audio.setRates(wantTempo, wantPitch);
-      } catch (e) {
-        console.warn("setRates error:", e);
-      }
+    if (nowPlaying?.streamUrl) {
+      mediaEngineRef.current?.setRates?.(wantTempo, wantPitch);
+    } else {
+      const applied = nearestRate(YT_RATES, wantTempo);
+      postIframeCommand("setPlaybackRate", [applied]);
     }
   };
 
@@ -971,21 +954,28 @@ export default function MusicPage() {
   };
 
   const setVolumeLevel = (level) => {
-    const audio = audioRef.current;
-    setVolume(level);
-    if (!audio) return;
-    audio.volume = level;
-    if (level > 0 && audio.muted) {
-      audio.muted = false;
-      setMuted(false);
+    const val = Math.max(0, Math.min(1, level));
+    setVolume(val);
+    if (muted) setMuted(false);
+
+    if (nowPlaying?.streamUrl) {
+      if (mediaEngineRef.current) mediaEngineRef.current.volume = val;
+    } else {
+      postIframeCommand("setVolume", [Math.round(val * 100)]);
+      if (muted) postIframeCommand("unMute");
     }
   };
 
   const toggleMute = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.muted = !audio.muted;
-    setMuted(audio.muted);
+    const nextMuted = !muted;
+    setMuted(nextMuted);
+
+    if (nowPlaying?.streamUrl) {
+      if (mediaEngineRef.current) mediaEngineRef.current.muted = nextMuted;
+    } else {
+      if (nextMuted) postIframeCommand("mute");
+      else postIframeCommand("unMute");
+    }
   };
 
   const toggleLike = (t) => {
@@ -2068,21 +2058,51 @@ export default function MusicPage() {
         id="onion-yt-global-wrapper"
         style={{
           position: "fixed",
-          bottom: displayMode === "video" && expanded ? "auto" : 0,
-          top: displayMode === "video" && expanded ? 64 : "auto",
-          left: displayMode === "video" && expanded ? "50%" : 0,
-          transform: displayMode === "video" && expanded ? "translateX(-50%)" : "none",
-          width: displayMode === "video" && expanded ? (narrow ? "min(92vw, 480px)" : "min(800px, 60vw)") : "200px",
-          height: displayMode === "video" && expanded ? (narrow ? "260px" : "min(460px, 50vh)") : "200px",
-          zIndex: displayMode === "video" && expanded ? 65 : -10,
-          opacity: displayMode === "video" && expanded ? 1 : 0.01,
-          pointerEvents: displayMode === "video" && expanded ? "auto" : "none",
+          ...(displayMode === "video" && expanded
+            ? {
+                top: 64,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: narrow ? "min(92vw, 480px)" : "min(800px, 60vw)",
+                height: narrow ? "260px" : "min(460px, 50vh)",
+                zIndex: 65,
+                opacity: 1,
+                pointerEvents: "auto",
+                borderRadius: "16px",
+                overflow: "hidden",
+                boxShadow: "0 25px 60px rgba(0,0,0,0.9)",
+              }
+            : {
+                bottom: 12,
+                right: 12,
+                width: "160px",
+                height: "90px",
+                opacity: 0.01,
+                pointerEvents: "none",
+                zIndex: -10,
+                borderRadius: "8px",
+                overflow: "hidden",
+              }),
           background: "#000",
-          borderRadius: displayMode === "video" && expanded ? "16px" : "0",
-          overflow: "hidden",
         }}
       >
-        <div id="onion-yt-host" style={{ width: "100%", height: "100%" }} />
+        <iframe
+          ref={iframeRef}
+          id="onion-yt-player-iframe"
+          title="Onion Player"
+          src={
+            nowPlaying?.sourceId
+              ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(
+                  extractVideoId(nowPlaying.sourceId)
+                )}?autoplay=1&enablejsapi=1&origin=${encodeURIComponent(
+                  typeof window !== "undefined" ? window.location.origin : ""
+                )}&playsinline=1&controls=1&rel=0`
+              : ""
+          }
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          style={{ width: "100%", height: "100%", border: "none" }}
+        />
       </div>
     </div>
   );
