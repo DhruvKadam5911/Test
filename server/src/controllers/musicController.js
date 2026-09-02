@@ -5,12 +5,6 @@ import {
   searchAlbums as saavnSearchAlbums,
   fetchRelated as saavnFetchRelated,
 } from "../services/saavn.js";
-import {
-  searchVideos as ytSearchVideos,
-  fetchTrending as ytFetchTrending,
-  searchRelated as ytSearchRelated,
-  searchAlbums as ytSearchAlbums,
-} from "../services/youtube.js";
 import { fetchLyrics } from "../services/lyrics.js";
 
 const MAX_LIMIT = 50;
@@ -34,7 +28,7 @@ async function storeTracks(tracks) {
         t.artworkUrl,
         t.durationSec || t.durationSeconds || null,
         t.genre || null,
-        t.source || "saavn",
+        "saavn",
         t.sourceId || t.id
       );
       const p = (n) => `$${start + n}`;
@@ -52,12 +46,12 @@ async function storeTracks(tracks) {
   }
 }
 
-// GET /music/tracks — what the network is publishing and streaming right now.
+// GET /music/tracks — pure 320kbps trending music streams.
 export async function getTracks(req, res) {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, MAX_LIMIT);
 
-    // 1. Try Direct 320kbps Saavn stream source
+    // 1. Fetch direct 320kbps Saavn stream source
     try {
       const trending = await saavnFetchTrending({ limit });
       if (trending && trending.length) {
@@ -65,25 +59,14 @@ export async function getTracks(req, res) {
         return res.status(200).json(trending);
       }
     } catch (err) {
-      console.warn("Saavn trending notice, falling back to YouTube:", err.message);
+      console.warn("Saavn trending notice, falling back to cached db tracks:", err.message);
     }
 
-    // 2. Fallback to YouTube
-    try {
-      const ytTrending = await ytFetchTrending({ limit });
-      if (ytTrending && ytTrending.length) {
-        await storeTracks(ytTrending);
-        return res.status(200).json(ytTrending);
-      }
-    } catch (err) {
-      console.warn("YouTube trending notice:", err.message);
-    }
-
-    // 3. Fallback to cached tracks
+    // 2. Fallback to cached Saavn tracks in database
     const tracks = await prisma.$queryRaw`
       SELECT id, title, artist, "audioUrl" as "streamUrl", "artworkUrl", "durationSeconds" as "durationSec", genre, source, "sourceId"
       FROM "Track"
-      WHERE source != 'peertube' AND (source = 'saavn' OR source = 'youtube')
+      WHERE source = 'saavn' AND "audioUrl" IS NOT NULL
       ORDER BY "createdAt" DESC LIMIT ${limit}`;
     return res.status(200).json(tracks);
   } catch (error) {
@@ -94,12 +77,12 @@ export async function getTracks(req, res) {
   }
 }
 
-// GET /music/search?q=
+// GET /music/search?q= — pure 320kbps search songs.
 export async function searchTracks(req, res) {
   const query = String(req.query.q || "").trim();
   if (query.length < 2) return res.status(200).json([]);
 
-  const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
+  const limit = Math.min(Number(req.query.limit) || 30, MAX_LIMIT);
 
   try {
     // 1. Search direct 320kbps streams via Saavn
@@ -110,25 +93,14 @@ export async function searchTracks(req, res) {
         return res.status(200).json(saavnResults);
       }
     } catch (err) {
-      console.warn("Saavn search error:", err.message);
+      console.warn("Saavn search notice:", err.message);
     }
 
-    // 2. Fallback to YouTube
-    try {
-      const ytResults = await ytSearchVideos({ query, limit });
-      if (ytResults && ytResults.length) {
-        await storeTracks(ytResults);
-        return res.status(200).json(ytResults);
-      }
-    } catch (err) {
-      console.warn("YouTube search error:", err.message);
-    }
-
-    // 3. Fallback to database
+    // 2. Fallback to database cached Saavn tracks
     const tracks = await prisma.$queryRaw`
       SELECT id, title, artist, "audioUrl" as "streamUrl", "artworkUrl", "durationSeconds" as "durationSec", genre, source, "sourceId"
       FROM "Track"
-      WHERE source != 'peertube' AND (source = 'saavn' OR source = 'youtube') AND (lower(title) LIKE ${`%${query.toLowerCase()}%`} OR lower(artist) LIKE ${`%${query.toLowerCase()}%`})
+      WHERE source = 'saavn' AND "audioUrl" IS NOT NULL AND (lower(title) LIKE ${`%${query.toLowerCase()}%`} OR lower(artist) LIKE ${`%${query.toLowerCase()}%`})
       ORDER BY "createdAt" DESC LIMIT ${limit}`;
     return res.status(200).json(tracks);
   } catch (error) {
@@ -137,7 +109,7 @@ export async function searchTracks(req, res) {
   }
 }
 
-// GET /music/related?title=&artist=&exclude=
+// GET /music/related?title=&artist=&exclude= — pure 320kbps related songs.
 export async function relatedTracks(req, res) {
   const title = String(req.query.title || "").trim();
   const artist = String(req.query.artist || "").trim();
@@ -162,17 +134,20 @@ export async function relatedTracks(req, res) {
       console.warn("Saavn related notice:", err.message);
     }
 
-    // 2. Fallback to YouTube related
-    const found = await ytSearchRelated({ title, artist, exclude, limit });
-    await storeTracks(found);
-    return res.status(200).json(found);
+    // 2. Fallback to database cached Saavn tracks
+    const tracks = await prisma.$queryRaw`
+      SELECT id, title, artist, "audioUrl" as "streamUrl", "artworkUrl", "durationSeconds" as "durationSec", genre, source, "sourceId"
+      FROM "Track"
+      WHERE source = 'saavn' AND "audioUrl" IS NOT NULL
+      ORDER BY "createdAt" DESC LIMIT ${limit}`;
+    return res.status(200).json(tracks);
   } catch (error) {
     console.error("relatedTracks error:", error);
     return res.status(500).json({ error: error.message || "Failed to fetch related tracks." });
   }
 }
 
-// GET /music/albums?q=
+// GET /music/albums?q= — pure Saavn albums.
 export async function searchMusicAlbums(req, res) {
   const query = String(req.query.q || "").trim();
   if (query.length < 2) return res.status(200).json([]);
@@ -180,19 +155,8 @@ export async function searchMusicAlbums(req, res) {
   const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
 
   try {
-    // 1. Try Saavn albums
-    try {
-      const saavnAlbums = await saavnSearchAlbums(query, { limit });
-      if (saavnAlbums && saavnAlbums.length) {
-        return res.status(200).json(saavnAlbums);
-      }
-    } catch (err) {
-      console.warn("Saavn album search error:", err.message);
-    }
-
-    // 2. Fallback to YouTube albums
-    const albums = await ytSearchAlbums({ query, limit });
-    return res.status(200).json(albums);
+    const saavnAlbums = await saavnSearchAlbums(query, { limit });
+    return res.status(200).json(saavnAlbums || []);
   } catch (error) {
     console.error("searchMusicAlbums error:", error);
     return res.status(500).json({ error: error.message || "Failed to search albums." });
