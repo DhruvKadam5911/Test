@@ -653,7 +653,10 @@ export default function MusicPage() {
   useEffect(() => {
     const el = mediaElRef.current;
     if (!el) return;
-    getPitchShifter(el);
+    // NOTE: Do NOT call getPitchShifter(el) eagerly here.
+    // Creating AudioContext before a user gesture causes it to stay
+    // in 'suspended' state, which silently blocks all audio playback.
+    // The PitchShifter is created lazily on first play/setSource instead.
     const engine = mediaEngine(el);
     mediaEngineRef.current = engine;
     if (nowPlaying?.streamUrl) {
