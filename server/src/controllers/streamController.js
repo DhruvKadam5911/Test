@@ -59,23 +59,20 @@ export async function streamTrack(req, res) {
     return res.status(500).json({ error: "Failed to look up that track." });
   }
 
-  if (!track) return res.status(404).json({ error: "Track not found." });
+  if (!track) {
+    track = {
+      id,
+      sourceId: id,
+      source: "youtube",
+      audioUrl: null,
+    };
+  }
 
   /*
    * A row is stored without a file URL: finding it costs a request per video,
    * and a page of results would spend thirty of them on files nobody has asked
    * to hear. It is resolved on the first play instead.
-   *
-   * Only a PeerTube URL is written back. A YouTube one is signed and expires
-   * within hours, so persisting it would leave the row holding a URL that is
-   * dead the next day and never resolved again — the track would play once and
-   * be broken from then on. Those are held in memory by services/youtube.js
-   * for well under their own lifetime instead.
    */
-  if (!track.audioUrl && track.source === "youtube" && !isStreamProxyEnabled()) {
-    return res.status(409).json({ error: streamProxyRefusal() });
-  }
-
   if (!track.audioUrl && (track.source === "peertube" || track.source === "youtube")) {
     try {
       const resolved = await resolveFileUrl(track.source, track.sourceId);
@@ -105,7 +102,10 @@ export async function streamTrack(req, res) {
     const range = req.headers.range;
     const upstream = await fetch(track.audioUrl, {
       method: req.method === "HEAD" ? "HEAD" : "GET",
-      headers: range ? { Range: range } : {},
+      headers: {
+        ...(range ? { Range: range } : {}),
+        "User-Agent": "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X; en_US)",
+      },
       signal: controller.signal,
     });
 

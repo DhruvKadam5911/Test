@@ -219,9 +219,21 @@ function applyRates(engine, tempo, pitch) {
   }
 }
 
-function sourceOf(track) {
+function getStreamUrl(track) {
   if (!track) return "";
-  return track.streamUrl || track.sourceId || "";
+  if (track.streamUrl) return track.streamUrl;
+  const id = track.sourceId || track.id;
+  if (!id) return "";
+  const base = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  return `${base}/music/stream/${encodeURIComponent(id)}`;
+}
+
+function sourceOf(track, mode = "song") {
+  if (!track) return "";
+  if (mode === "video") {
+    return track.sourceId || track.id || "";
+  }
+  return getStreamUrl(track);
 }
 
 const STAGE_MS = 340;
@@ -355,15 +367,37 @@ export default function MusicPage() {
   queueRef.current = queue;
 
   const isYouTubeTrack = !track?.streamUrl;
-  const canPitch = !isYouTubeTrack;
+  const canPitch = true;
 
-  const selectEngine = (currentTrack = track) => {
-    if (currentTrack?.streamUrl) {
-      if (mediaEngineRef.current) audioRef.current = mediaEngineRef.current;
-    } else {
+  const selectEngine = (currentTrack = track, mode = displayMode) => {
+    if (mode === "video") {
       if (youtubeEngineRef.current) audioRef.current = youtubeEngineRef.current;
+    } else {
+      if (mediaEngineRef.current) audioRef.current = mediaEngineRef.current;
     }
     return audioRef.current;
+  };
+
+  const switchDisplayMode = (newMode) => {
+    if (newMode === displayMode) return;
+    const oldEngine = audioRef.current;
+    const curTime = oldEngine?.currentTime || 0;
+    const wasPlaying = playing;
+    oldEngine?.pause();
+
+    setDisplayMode(newMode);
+    setTimeout(() => {
+      const nextEngine = selectEngine(track, newMode);
+      if (nextEngine && track) {
+        const src = sourceOf(track, newMode);
+        nextEngine.dataset.sourceId = String(src);
+        nextEngine.setSource(src, { autoplay: wasPlaying });
+        if (curTime > 0) nextEngine.currentTime = curTime;
+        if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
+          applyRates(nextEngine, tempo, pitch);
+        }
+      }
+    }, 40);
   };
 
   /* Initialize HTML5 Media Engine */
@@ -1451,7 +1485,7 @@ export default function MusicPage() {
             {/* Song vs Video Mode Toggle */}
             <div className="flex items-center rounded-full p-1 bg-white/10 border border-white/10">
               <button
-                onClick={() => setDisplayMode("song")}
+                onClick={() => switchDisplayMode("song")}
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
                 style={{
                   background: displayMode === "song" ? colors.accent : "transparent",
@@ -1461,7 +1495,7 @@ export default function MusicPage() {
                 <Disc3 size={15} /> Song
               </button>
               <button
-                onClick={() => setDisplayMode("video")}
+                onClick={() => switchDisplayMode("video")}
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
                 style={{
                   background: displayMode === "video" ? colors.accent : "transparent",

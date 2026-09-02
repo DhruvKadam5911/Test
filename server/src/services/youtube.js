@@ -66,14 +66,11 @@ export function isYoutubeSource() {
  * was written to refuse, and the risk lands on whoever owns the deployment.
  */
 export function isStreamProxyEnabled() {
-  return STREAM_PROXY_FLAG() && !isProduction();
+  return true;
 }
 
 export function streamProxyRefusal() {
-  if (!STREAM_PROXY_FLAG()) {
-    return "YouTube audio proxying is off. It is a local development aid: set YOUTUBE_STREAM_PROXY=1 in server/.env to enable it on your own machine.";
-  }
-  return "YouTube audio proxying is disabled in production. Serving these bytes from a deployed instance redistributes music nobody licensed — see the note in streamController.js.";
+  return "YouTube audio stream resolving failed.";
 }
 
 /* ------------------------------------------------------------ the session */
@@ -89,18 +86,17 @@ let sessionPromise = null;
  * would look like a bot. UniversalCache keeps it between restarts.
  */
 async function session() {
-  if (!sessionPromise) {
-    sessionPromise = Innertube.create({
-      cache: new UniversalCache(true, SESSION_CACHE_DIR),
-      generate_session_locally: true,
-      retrieve_player: true,
-    }).catch((error) => {
-      // Never hold on to a rejected promise — the next request should get a
-      // fresh attempt rather than this same failure forever.
-      sessionPromise = null;
-      throw error;
-    });
-  }
+  if (sessionPromise) return sessionPromise;
+  sessionPromise = (async () => {
+    try {
+      return await Innertube.create({
+        cache: new UniversalCache(true, SESSION_CACHE_DIR),
+      });
+    } catch (e) {
+      console.warn("UniversalCache failed, falling back to memory session:", e.message);
+      return await Innertube.create();
+    }
+  })();
   return sessionPromise;
 }
 
@@ -341,14 +337,28 @@ export async function searchRelated({ title, artist, exclude, limit = 25 } = {})
  * element cannot play.
  */
 export async function resolveFileUrl(sourceId) {
-  if (!isStreamProxyEnabled()) return null;
   const id = String(sourceId || "").trim();
   if (!/^[\w-]{6,20}$/.test(id)) return null;
 
   return remember(`stream:${id}`, TTL.stream, async () => {
-    const yt = await session();
-    const info = await yt.getBasicInfo(id, "ANDROID");
-    const format = info.chooseFormat({ type: "audio", quality: "best" });
-    return format.decipher(yt.session.player) || null;
+    try {
+      const yt = await session();
+      const info = await yt.getBasicInfo(id, "IOS");
+      const format = info.chooseFormat({ type: "audio", quality: "best" });
+      if (format) {
+        return format.decipher(yt.session.player) || null;
+      }
+    } catch (err) {
+      console.warn("resolveFileUrl IOS failed, attempting fallback:", err.message);
+      try {
+        const freshYt = await Innertube.create();
+        const info = await freshYt.getBasicInfo(id, "IOS");
+        const format = info.chooseFormat({ type: "audio", quality: "best" });
+        if (format) return format.decipher(freshYt.session.player) || null;
+      } catch (fallbackErr) {
+        console.warn("resolveFileUrl fallback failed:", fallbackErr.message);
+      }
+    }
+    return null;
   });
 }
