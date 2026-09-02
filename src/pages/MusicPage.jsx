@@ -503,6 +503,8 @@ export default function MusicPage() {
   const [tempo, setTempo] = useState(1);
   const [pitch, setPitch] = useState(1);
   const [unhook, setUnhook] = useState(false);
+  const [soundEffect, setSoundEffect] = useState("clean");
+  const [reverb, setReverb] = useState(0);
   const [rateStep, setRateStep] = useState(0.05);
   const [ratesOpen, setRatesOpen] = useState(false);
   const [ratesBefore, setRatesBefore] = useState(null);
@@ -1145,8 +1147,8 @@ export default function MusicPage() {
     onPointerCancel: scrubEnd,
   };
 
-  /* Tempo / Pitch */
-  const commitRates = (nextTempo, nextPitch) => {
+  /* Tempo / Pitch / Listener FX */
+  const commitRates = (nextTempo, nextPitch, effectName, reverbVal) => {
     const wantTempo = clampRate(nextTempo);
     const wantPitch = clampRate(nextPitch);
 
@@ -1155,8 +1157,15 @@ export default function MusicPage() {
     tempoRef.current = wantTempo;
     pitchRef.current = wantPitch;
 
+    if (effectName !== undefined) setSoundEffect(effectName);
+    if (reverbVal !== undefined) setReverb(reverbVal);
+
     if (audioRef.current) {
       applyRates(audioRef.current, wantTempo, wantPitch);
+      if (globalPitchShifter) {
+        if (effectName !== undefined) globalPitchShifter.setEffectPreset(effectName);
+        if (reverbVal !== undefined) globalPitchShifter.setReverb(reverbVal);
+      }
     }
     if (ytPlayerRef.current?.setPlaybackRate) {
       try {
@@ -2279,12 +2288,14 @@ export default function MusicPage() {
         <>
           <div onClick={cancelRates} className="fixed inset-0 bg-black/60 z-[70] backdrop-blur-sm" />
           <div
-            className="fixed rounded-2xl p-6"
+            className="fixed rounded-2xl p-6 no-scrollbar"
             style={{
               left: "50%",
               bottom: narrow ? NAV_HEIGHT + 14 : BAR_HEIGHT + 16,
               transform: "translateX(-50%)",
-              width: "min(540px, 94vw)",
+              width: "min(560px, 94vw)",
+              maxHeight: "min(660px, 86vh)",
+              overflowY: "auto",
               background: colors.bgElevated,
               border: `1px solid ${colors.ring}`,
               boxShadow: "0 25px 60px rgba(0,0,0,0.85)",
@@ -2294,6 +2305,122 @@ export default function MusicPage() {
             <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 700, marginBottom: 16 }}>
               Playback Speed &amp; Pitch
             </div>
+
+            {/* Music Listener FX Presets */}
+            <div className="py-2">
+              <div className="text-xs font-bold text-neutral-400 uppercase mb-2">Listener Sound FX Modes</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  {
+                    id: "clean",
+                    label: "Original (Studio)",
+                    desc: "Pure lossless audio",
+                    tempo: 1.0,
+                    pitch: 1.0,
+                    effect: "clean",
+                    reverb: 0.0,
+                    unhook: false,
+                  },
+                  {
+                    id: "slowed_reverb",
+                    label: "🌙 Slowed + Reverb",
+                    desc: "Deep bass + Ambience",
+                    tempo: 0.88,
+                    pitch: pitchFromSemitones(-2.5),
+                    effect: "slowed_reverb",
+                    reverb: 0.45,
+                    unhook: true,
+                  },
+                  {
+                    id: "nightcore",
+                    label: "⚡ Nightcore",
+                    desc: "High key + Fast beat",
+                    tempo: 1.15,
+                    pitch: pitchFromSemitones(3.5),
+                    effect: "nightcore",
+                    reverb: 0.12,
+                    unhook: true,
+                  },
+                  {
+                    id: "concert",
+                    label: "🏟️ Concert / 8D",
+                    desc: "Lush stadium acoustics",
+                    tempo: 1.0,
+                    pitch: 1.0,
+                    effect: "concert",
+                    reverb: 0.55,
+                    unhook: false,
+                  },
+                  {
+                    id: "bass_boost",
+                    label: "🔊 Bass Boost",
+                    desc: "Punchy sub-lows",
+                    tempo: 1.0,
+                    pitch: 1.0,
+                    effect: "bass_boost",
+                    reverb: 0.0,
+                    unhook: false,
+                  },
+                  {
+                    id: "vocal",
+                    label: "🎤 Vocal Boost",
+                    desc: "Crisp forward vocals",
+                    tempo: 1.0,
+                    pitch: 1.0,
+                    effect: "vocal",
+                    reverb: 0.15,
+                    unhook: false,
+                  },
+                ].map((preset) => {
+                  const isSelected = soundEffect === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      onClick={() => {
+                        setUnhook(preset.unhook);
+                        commitRates(preset.tempo, preset.pitch, preset.id, preset.reverb);
+                      }}
+                      className="p-2.5 rounded-xl text-left border-none cursor-pointer transition-all hover:scale-[1.02]"
+                      style={{
+                        background: isSelected
+                          ? `linear-gradient(135deg, ${colors.accent}, #ec4899)`
+                          : "rgba(255,255,255,0.06)",
+                        color: "#fff",
+                        border: isSelected ? "1px solid rgba(255,255,255,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                        boxShadow: isSelected ? "0 4px 15px rgba(168,85,247,0.35)" : "none",
+                      }}
+                    >
+                      <div className="text-xs font-bold truncate">{preset.label}</div>
+                      <div className="text-[10.5px] opacity-75 truncate mt-0.5">{preset.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 my-3" />
+
+            {/* Spatial Ambience Reverb Slider */}
+            <div className="py-2">
+              <div className="flex items-center justify-between text-xs font-bold text-neutral-400 uppercase mb-2">
+                <span>Spatial Ambience / Reverb</span>
+                <span className="text-white text-base font-mono">{Math.round(reverb * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={Math.round(reverb * 100)}
+                onChange={(e) => {
+                  const val = Number(e.target.value) / 100;
+                  setReverb(val);
+                  if (globalPitchShifter) globalPitchShifter.setReverb(val);
+                }}
+                className="onion-rate"
+              />
+            </div>
+
+            <div className="border-t border-white/10 my-3" />
 
             {/* Preset Speeds */}
             <div className="py-2">
