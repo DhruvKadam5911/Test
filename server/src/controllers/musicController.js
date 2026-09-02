@@ -11,6 +11,7 @@ import {
   searchRelated as ytSearchRelated,
   searchAlbums as ytSearchAlbums,
 } from "../services/youtube.js";
+import { fetchLyrics } from "../services/lyrics.js";
 
 const MAX_LIMIT = 50;
 
@@ -211,5 +212,24 @@ export async function getMusicGenres(req, res) {
     if (empty) return empty;
     console.error("getMusicGenres error:", error);
     return res.status(500).json({ error: "Failed to fetch music genres." });
+  }
+}
+
+// GET /music/lyrics?track=&artist=&duration=
+export async function getLyrics(req, res) {
+  const track = String(req.query.track || "").trim();
+  const artist = String(req.query.artist || "").trim();
+  const duration = req.query.duration;
+
+  if (!track) {
+    return res.status(200).json({ synced: [], plain: "", hasSynced: false });
+  }
+
+  try {
+    const data = await fetchLyrics({ track, artist, duration });
+    return res.status(200).json(data);
+  } catch (error) {
+    console.error("getLyrics error:", error);
+    return res.status(500).json({ error: "Failed to fetch lyrics." });
   }
 }

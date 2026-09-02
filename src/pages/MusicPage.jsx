@@ -4,7 +4,7 @@ import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
   Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp,
   Film, History, ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
-  ThumbsUp, Gauge, Link2, Unlink, Minus, Plus, Video, Disc3, Radio,
+  ThumbsUp, Gauge, Link2, Unlink, Minus, Plus, Video, Disc3, Radio, Mic2,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
 import OnionMark from "../components/shared/OnionMark";
@@ -463,6 +463,7 @@ export default function MusicPage() {
   const [mobileSearch, setMobileSearch] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [searches, setSearches] = useState(() => readStorage(SEARCHES_KEY));
+  const [lyricsData, setLyricsData] = useState({ synced: [], plain: "", hasSynced: false, loading: false });
 
   useEffect(() => {
     const q = window.matchMedia?.(NARROW);
@@ -471,6 +472,62 @@ export default function MusicPage() {
     q.addEventListener("change", onChange);
     return () => q.removeEventListener("change", onChange);
   }, []);
+
+  /* Fetch lyrics from backend /music/lyrics */
+  useEffect(() => {
+    if (!nowPlaying?.title) {
+      setLyricsData({ synced: [], plain: "", hasSynced: false, loading: false });
+      return;
+    }
+    let active = true;
+    setLyricsData((prev) => ({ ...prev, loading: true }));
+    api
+      .get(
+        `/music/lyrics?track=${encodeURIComponent(nowPlaying.title)}&artist=${encodeURIComponent(
+          nowPlaying.artist || ""
+        )}&duration=${nowPlaying.durationSec || nowPlaying.durationSeconds || ""}`
+      )
+      .then((data) => {
+        if (!active) return;
+        setLyricsData({
+          synced: data.synced || [],
+          plain: data.plain || "",
+          hasSynced: !!data.hasSynced,
+          loading: false,
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setLyricsData({ synced: [], plain: "", hasSynced: false, loading: false });
+      });
+    return () => {
+      active = false;
+    };
+  }, [nowPlaying?.title, nowPlaying?.artist, nowPlaying?.durationSec, nowPlaying?.durationSeconds]);
+
+  const activeLyricIndex = React.useMemo(() => {
+    if (!lyricsData.synced?.length) return -1;
+    let idx = -1;
+    for (let i = 0; i < lyricsData.synced.length; i++) {
+      if (lyricsData.synced[i].time <= shownPosition) {
+        idx = i;
+      } else {
+        break;
+      }
+    }
+    return idx;
+  }, [lyricsData.synced, shownPosition]);
+
+  const activeLyricRef = useRef(null);
+
+  useEffect(() => {
+    if (displayMode === "lyrics" && activeLyricRef.current) {
+      activeLyricRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [activeLyricIndex, displayMode]);
 
   const audioRef = useRef(null);
   const mediaEngineRef = useRef(null);
@@ -1685,11 +1742,11 @@ export default function MusicPage() {
               <ChevronDown size={28} />
             </button>
 
-            {/* Song vs Video Mode Toggle */}
+            {/* Mode Switcher: Song | Lyrics | Video */}
             <div className="flex items-center rounded-full p-1 bg-white/10 border border-white/10">
               <button
                 onClick={() => switchDisplayMode("song")}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
                 style={{
                   background: displayMode === "song" ? colors.accent : "transparent",
                   color: "#fff",
@@ -1698,8 +1755,18 @@ export default function MusicPage() {
                 <Disc3 size={15} /> Song
               </button>
               <button
+                onClick={() => switchDisplayMode("lyrics")}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
+                style={{
+                  background: displayMode === "lyrics" ? colors.accent : "transparent",
+                  color: "#fff",
+                }}
+              >
+                <Mic2 size={15} /> Lyrics
+              </button>
+              <button
                 onClick={() => switchDisplayMode("video")}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
                 style={{
                   background: displayMode === "video" ? colors.accent : "transparent",
                   color: "#fff",
@@ -1722,7 +1789,7 @@ export default function MusicPage() {
           {/* Main Stage Content */}
           {narrow ? (
             <div onScroll={onStageScroll} className="relative flex-1 min-h-0 overflow-y-auto px-6 pb-6 flex flex-col">
-              {/* Artwork or Video Placeholder */}
+              {/* Artwork or Video or Lyrics Placeholder */}
               <div className="flex justify-center py-4">
                 {displayMode === "song" ? (
                   <div
@@ -1762,6 +1829,56 @@ export default function MusicPage() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                ) : displayMode === "lyrics" ? (
+                  <div className="w-full max-h-[300px] overflow-y-auto px-2 py-4 flex flex-col gap-4 text-center">
+                    {lyricsData.loading ? (
+                      <div className="flex flex-col items-center justify-center py-10 text-neutral-400 gap-2">
+                        <Sparkles size={24} className="animate-spin text-purple-400" />
+                        <span className="text-xs">Loading lyrics...</span>
+                      </div>
+                    ) : lyricsData.synced?.length ? (
+                      lyricsData.synced.map((line, idx) => {
+                        const isActive = idx === activeLyricIndex;
+                        const isPast = idx < activeLyricIndex;
+                        return (
+                          <div
+                            key={idx}
+                            ref={isActive ? activeLyricRef : null}
+                            onClick={() => {
+                              setPosition(line.time);
+                              if (audioRef.current) {
+                                audioRef.current.currentTime = line.time;
+                              }
+                            }}
+                            className={`cursor-pointer transition-all duration-300 py-1.5 px-3 rounded-xl ${
+                              isActive
+                                ? "text-white font-bold scale-105 opacity-100 bg-white/10 shadow-lg shadow-purple-900/30"
+                                : isPast
+                                ? "text-neutral-400 font-medium opacity-60"
+                                : "text-neutral-500 font-medium opacity-40"
+                            }`}
+                            style={{
+                              fontFamily: displayFont,
+                              fontSize: isActive ? 20 : 16,
+                              lineHeight: 1.4,
+                              textShadow: isActive ? "0 0 16px rgba(168,85,247,0.7)" : "none",
+                            }}
+                          >
+                            {line.text}
+                          </div>
+                        );
+                      })
+                    ) : lyricsData.plain ? (
+                      <div className="text-neutral-300 whitespace-pre-line text-sm leading-relaxed font-medium py-4 px-2">
+                        {lyricsData.plain}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-10 text-neutral-400 gap-2">
+                        <Mic2 size={28} className="text-neutral-600 mb-1" />
+                        <span className="text-sm font-semibold text-neutral-300">No lyrics available</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ height: 220, width: "100%" }} />
@@ -1859,6 +1976,57 @@ export default function MusicPage() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                ) : displayMode === "lyrics" ? (
+                  <div className="w-full h-[min(420px,48vh)] overflow-y-auto px-6 py-6 flex flex-col gap-6 text-center bg-white/[0.03] rounded-3xl border border-white/10 shadow-2xl no-scrollbar">
+                    {lyricsData.loading ? (
+                      <div className="flex-1 flex flex-col items-center justify-center py-20 text-neutral-400 gap-3">
+                        <Sparkles size={32} className="animate-spin text-purple-400" />
+                        <span className="text-sm font-medium">Fetching synced lyrics...</span>
+                      </div>
+                    ) : lyricsData.synced?.length ? (
+                      lyricsData.synced.map((line, idx) => {
+                        const isActive = idx === activeLyricIndex;
+                        const isPast = idx < activeLyricIndex;
+                        return (
+                          <div
+                            key={idx}
+                            ref={isActive ? activeLyricRef : null}
+                            onClick={() => {
+                              setPosition(line.time);
+                              if (audioRef.current) {
+                                audioRef.current.currentTime = line.time;
+                              }
+                            }}
+                            className={`cursor-pointer transition-all duration-300 py-2 px-5 rounded-2xl select-none ${
+                              isActive
+                                ? "text-white font-bold scale-105 opacity-100 bg-white/10 shadow-xl shadow-purple-900/40"
+                                : isPast
+                                ? "text-neutral-400 font-medium opacity-60 hover:opacity-100 hover:text-white"
+                                : "text-neutral-500 font-medium opacity-40 hover:opacity-80 hover:text-white"
+                            }`}
+                            style={{
+                              fontFamily: displayFont,
+                              fontSize: isActive ? 26 : 20,
+                              lineHeight: 1.4,
+                              textShadow: isActive ? "0 0 24px rgba(168,85,247,0.85)" : "none",
+                            }}
+                          >
+                            {line.text}
+                          </div>
+                        );
+                      })
+                    ) : lyricsData.plain ? (
+                      <div className="text-neutral-300 whitespace-pre-line text-lg leading-loose font-medium py-6 px-4">
+                        {lyricsData.plain}
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center py-20 text-neutral-400 gap-2">
+                        <Mic2 size={40} className="text-neutral-600 mb-2" />
+                        <span className="text-base font-semibold text-neutral-300">No lyrics available</span>
+                        <span className="text-xs text-neutral-500">Lyrics couldn't be found for this track.</span>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ height: "min(420px, 48vh)", width: "100%" }} />
