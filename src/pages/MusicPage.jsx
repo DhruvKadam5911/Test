@@ -386,7 +386,7 @@ function sourceOf(track) {
   return track.streamUrl || track.sourceId || track.id || "";
 }
 
-const STAGE_MS = 340;
+const STAGE_MS = 460;
 const BAR_REVEAL_AT = 120;
 const SHEET_PEEK = 66;
 
@@ -773,17 +773,30 @@ export default function MusicPage() {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    if (isHoldingRef.current) {
-      isHoldingRef.current = false;
-      setIsFastForward(false);
-      const orig = prevTempoRef.current || 1.0;
-      if (mediaElRef.current) mediaElRef.current.playbackRate = orig;
-      if (audioRef.current) applyRates(audioRef.current, orig, pitchRef.current || 1.0);
-      if (ytPlayerRef.current?.setPlaybackRate) {
-        try { ytPlayerRef.current.setPlaybackRate(orig); } catch {}
-      }
+    isHoldingRef.current = false;
+    setIsFastForward(false);
+    const orig = prevTempoRef.current || 1.0;
+    if (mediaElRef.current) mediaElRef.current.playbackRate = orig;
+    if (audioRef.current) applyRates(audioRef.current, orig, pitchRef.current || 1.0);
+    if (ytPlayerRef.current?.setPlaybackRate) {
+      try { ytPlayerRef.current.setPlaybackRate(orig); } catch {}
     }
   }, []);
+
+  /* Universal pointer/touch release safety to ensure 2X is never stuck on swipe down */
+  useEffect(() => {
+    const onRelease = () => stopFastForward();
+    window.addEventListener("pointerup", onRelease);
+    window.addEventListener("pointercancel", onRelease);
+    window.addEventListener("touchend", onRelease);
+    window.addEventListener("touchcancel", onRelease);
+    return () => {
+      window.removeEventListener("pointerup", onRelease);
+      window.removeEventListener("pointercancel", onRelease);
+      window.removeEventListener("touchend", onRelease);
+      window.removeEventListener("touchcancel", onRelease);
+    };
+  }, [stopFastForward]);
 
   /* Background / Lockscreen playback via MediaSession API */
   useEffect(() => {
@@ -934,6 +947,11 @@ export default function MusicPage() {
     const handlers = [
       ["play", () => { setPlaying(true); setBuffering(false); }],
       ["playing", () => { setPlaying(true); setBuffering(false); }],
+      ["timeupdate", () => {
+        if (el && typeof el.currentTime === "number" && !Number.isNaN(el.currentTime)) {
+          setPosition(el.currentTime);
+        }
+      }],
       ["pause", () => setPlaying(false)],
       ["waiting", () => setBuffering(true)],
       ["loadedmetadata", () => setDuration(el.duration || 0)],
@@ -1189,20 +1207,24 @@ export default function MusicPage() {
     if (mediaEngineRef.current) mediaEngineRef.current.loop = repeat;
   }, [repeat]);
 
-  /* Progress ticker */
+  /* High-precision real-time ticker for lyrics and progress sync */
   useEffect(() => {
-    const timer = setInterval(() => {
+    if (!playing) return;
+    const updatePos = () => {
       const audio = audioRef.current;
-      if (!audio) return;
-      try {
-        const cur = audio.currentTime;
-        const dur = audio.duration;
-        if (typeof cur === "number" && !Number.isNaN(cur)) setPosition(cur);
-        if (typeof dur === "number" && dur > 0 && !Number.isNaN(dur)) setDuration(dur);
-      } catch {}
-    }, 300);
+      const el = mediaElRef.current;
+      const cur = el?.currentTime ?? audio?.currentTime;
+      if (typeof cur === "number" && !Number.isNaN(cur)) {
+        setPosition(cur);
+      }
+      const dur = el?.duration ?? audio?.duration;
+      if (typeof dur === "number" && dur > 0 && !Number.isNaN(dur)) {
+        setDuration(dur);
+      }
+    };
+    const timer = setInterval(updatePos, 80);
     return () => clearInterval(timer);
-  }, []);
+  }, [playing]);
 
   /* Lock-screen MediaSession */
   useEffect(() => {
@@ -1605,7 +1627,7 @@ export default function MusicPage() {
     if (!lyricsData.synced?.length) return -1;
     let idx = -1;
     for (let i = 0; i < lyricsData.synced.length; i++) {
-      if (lyricsData.synced[i].time <= shownPosition) {
+      if (lyricsData.synced[i].time <= shownPosition + 0.12) {
         idx = i;
       } else {
         break;
@@ -1615,15 +1637,22 @@ export default function MusicPage() {
   }, [lyricsData.synced, shownPosition]);
 
   const activeLyricRef = useRef(null);
+  const mobileLyricsContainerRef = useRef(null);
+  const desktopLyricsContainerRef = useRef(null);
 
   useEffect(() => {
     if (displayMode === "lyrics" && activeLyricRef.current) {
-      activeLyricRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+      const activeEl = activeLyricRef.current;
+      const container = narrow ? mobileLyricsContainerRef.current : desktopLyricsContainerRef.current;
+      if (container) {
+        const targetTop = activeEl.offsetTop - container.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
+        container.scrollTo({
+          top: Math.max(0, targetTop),
+          behavior: "smooth",
+        });
+      }
     }
-  }, [activeLyricIndex, displayMode]);
+  }, [activeLyricIndex, displayMode, narrow]);
 
   const cardRow = (title, items) => (
     <CardRow
@@ -2211,7 +2240,8 @@ export default function MusicPage() {
             zIndex: 55,
             paddingBottom: 0,
             transform: stageIn ? "translateY(0)" : "translateY(100%)",
-            transition: `transform ${STAGE_MS}ms cubic-bezier(.32,.72,0,1)`,
+            transition: `transform ${STAGE_MS}ms cubic-bezier(0.16, 1, 0.3, 1)`,
+            willChange: "transform",
           }}
         >
           {/* Ambient Blurred Backdrop */}
@@ -2232,11 +2262,18 @@ export default function MusicPage() {
 
           {/* Top Stage Bar */}
           <div
-            onTouchStart={(e) => { touchStartYRef.current = e.touches[0].clientY; }}
+            onTouchStart={(e) => {
+              touchStartYRef.current = e.touches[0].clientY;
+              stopFastForward();
+            }}
             onTouchMove={(e) => {
               if (!touchStartYRef.current) return;
               const deltaY = touchStartYRef.current - e.touches[0].clientY;
+              if (deltaY < -20 || deltaY > 20) {
+                stopFastForward();
+              }
               if (deltaY < -20) {
+                stopFastForward();
                 setExpanded(false);
                 touchStartYRef.current = 0;
               }
@@ -2288,16 +2325,23 @@ export default function MusicPage() {
           {/* Main Stage Content */}
           {narrow ? (
             <div
-              onTouchStart={(e) => { touchStartYRef.current = e.touches[0].clientY; }}
+              onTouchStart={(e) => {
+                touchStartYRef.current = e.touches[0].clientY;
+                stopFastForward();
+              }}
               onTouchMove={(e) => {
                 if (!touchStartYRef.current) return;
                 const deltaY = touchStartYRef.current - e.touches[0].clientY;
+                if (deltaY < -15 || deltaY > 15) {
+                  stopFastForward();
+                }
                 if (deltaY > 25) {
                   // Swipe UP -> open Up Next
                   setMobileQueueOpen(true);
                   touchStartYRef.current = 0;
                 } else if (deltaY < -35) {
-                  // Swipe DOWN -> close player stage or Up Next
+                  // Swipe DOWN -> close player stage or Up Next smoothly
+                  stopFastForward();
                   if (mobileQueueOpen) {
                     setMobileQueueOpen(false);
                   } else {
@@ -2364,8 +2408,11 @@ export default function MusicPage() {
                     ) : null}
                   </div>
                 ) : (
-                  /* Lyrics Mode */
-                  <div className="w-full h-full max-h-[44vh] overflow-y-auto px-2 py-2 flex flex-col gap-3 text-center no-scrollbar">
+                  /* Premium Synced Lyrics Mode */
+                  <div
+                    ref={mobileLyricsContainerRef}
+                    className="w-full h-full max-h-[44vh] overflow-y-auto px-2 py-4 flex flex-col gap-4 text-center no-scrollbar select-none"
+                  >
                     {lyricsData.loading ? (
                       <div className="flex flex-col items-center justify-center py-10 text-neutral-400 gap-2">
                         <Sparkles size={24} className="animate-spin text-purple-400" />
@@ -2381,20 +2428,21 @@ export default function MusicPage() {
                             ref={isActive ? activeLyricRef : null}
                             onClick={() => {
                               setPosition(line.time);
+                              if (mediaElRef.current) mediaElRef.current.currentTime = line.time;
                               if (audioRef.current) audioRef.current.currentTime = line.time;
                             }}
-                            className={`cursor-pointer transition-all duration-300 py-1 px-3 rounded-xl ${
+                            className={`cursor-pointer transition-all duration-300 py-2.5 px-4 rounded-2xl ${
                               isActive
-                                ? "text-white font-bold scale-105 opacity-100 bg-white/10 shadow-lg shadow-purple-900/30"
+                                ? "text-white font-black scale-[1.04] opacity-100 bg-gradient-to-r from-purple-600/30 via-pink-600/25 to-purple-600/30 border border-purple-400/40 shadow-xl shadow-purple-950/60"
                                 : isPast
-                                ? "text-neutral-400 font-medium opacity-60"
-                                : "text-neutral-500 font-medium opacity-40"
+                                ? "text-white/60 font-semibold opacity-60 scale-100"
+                                : "text-white/35 font-medium opacity-35 hover:opacity-75"
                             }`}
                             style={{
                               fontFamily: displayFont,
-                              fontSize: isActive ? 18 : 14.5,
-                              lineHeight: 1.35,
-                              textShadow: isActive ? "0 0 16px rgba(168,85,247,0.7)" : "none",
+                              fontSize: isActive ? 19 : 15,
+                              lineHeight: 1.4,
+                              textShadow: isActive ? "0 0 20px rgba(192,132,252,0.85)" : "none",
                             }}
                           >
                             {line.text}
@@ -2638,7 +2686,10 @@ export default function MusicPage() {
                     </div>
                   </div>
                 ) : displayMode === "lyrics" ? (
-                  <div className="w-full h-[min(420px,48vh)] overflow-y-auto px-6 py-6 flex flex-col gap-6 text-center bg-white/[0.03] rounded-3xl border border-white/10 shadow-2xl no-scrollbar">
+                  <div
+                    ref={desktopLyricsContainerRef}
+                    className="w-full h-[min(420px,48vh)] overflow-y-auto px-6 py-6 flex flex-col gap-6 text-center bg-white/[0.03] rounded-3xl border border-white/10 shadow-2xl no-scrollbar select-none"
+                  >
                     {lyricsData.loading ? (
                       <div className="flex-1 flex flex-col items-center justify-center py-20 text-neutral-400 gap-3">
                         <Sparkles size={32} className="animate-spin text-purple-400" />
@@ -2654,22 +2705,21 @@ export default function MusicPage() {
                             ref={isActive ? activeLyricRef : null}
                             onClick={() => {
                               setPosition(line.time);
-                              if (audioRef.current) {
-                                audioRef.current.currentTime = line.time;
-                              }
+                              if (mediaElRef.current) mediaElRef.current.currentTime = line.time;
+                              if (audioRef.current) audioRef.current.currentTime = line.time;
                             }}
-                            className={`cursor-pointer transition-all duration-300 py-2 px-5 rounded-2xl select-none ${
+                            className={`cursor-pointer transition-all duration-300 py-3 px-6 rounded-2xl select-none ${
                               isActive
-                                ? "text-white font-bold scale-105 opacity-100 bg-white/10 shadow-xl shadow-purple-900/40"
+                                ? "text-white font-black scale-[1.04] opacity-100 bg-gradient-to-r from-purple-600/30 via-pink-600/25 to-purple-600/30 border border-purple-400/40 shadow-2xl shadow-purple-950/70"
                                 : isPast
-                                ? "text-neutral-400 font-medium opacity-60 hover:opacity-100 hover:text-white"
-                                : "text-neutral-500 font-medium opacity-40 hover:opacity-80 hover:text-white"
+                                ? "text-white/60 font-semibold opacity-60 hover:opacity-100 hover:text-white"
+                                : "text-white/35 font-medium opacity-35 hover:opacity-80 hover:text-white"
                             }`}
                             style={{
                               fontFamily: displayFont,
-                              fontSize: isActive ? 26 : 20,
+                              fontSize: isActive ? 27 : 21,
                               lineHeight: 1.4,
-                              textShadow: isActive ? "0 0 24px rgba(168,85,247,0.85)" : "none",
+                              textShadow: isActive ? "0 0 28px rgba(192,132,252,0.9)" : "none",
                             }}
                           >
                             {line.text}
