@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
   Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp,
-  ChevronLeft, ChevronRight, Menu,
+  ChevronLeft, ChevronRight, Menu, Zap, ListMusic,
   Film, History, ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
   ThumbsUp, Gauge, Link2, Unlink, Minus, Plus, Video, Disc3, Radio, Mic2,
   SlidersHorizontal, RotateCcw,
@@ -693,6 +693,10 @@ export default function MusicPage() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [searches, setSearches] = useState(() => readStorage(SEARCHES_KEY));
   const [lyricsData, setLyricsData] = useState({ synced: [], plain: "", hasSynced: false, loading: false });
+  const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
+  const [isFastForward, setIsFastForward] = useState(false);
+  const prevTempoRef = useRef(1.0);
+  const isHoldingRef = useRef(false);
 
   useEffect(() => {
     const q = window.matchMedia?.(NARROW);
@@ -749,6 +753,95 @@ export default function MusicPage() {
       } catch {}
     }
   }, [duration, position]);
+
+  /* 2X Fast Forward on Disc Hold */
+  const startFastForward = useCallback((e) => {
+    e.preventDefault();
+    isHoldingRef.current = true;
+    prevTempoRef.current = tempoRef.current || 1.0;
+    setIsFastForward(true);
+    if (mediaElRef.current) mediaElRef.current.playbackRate = 2.0;
+    if (audioRef.current) applyRates(audioRef.current, 2.0, pitchRef.current || 1.0);
+    if (ytPlayerRef.current?.setPlaybackRate) {
+      try { ytPlayerRef.current.setPlaybackRate(2.0); } catch {}
+    }
+  }, []);
+
+  const stopFastForward = useCallback(() => {
+    if (!isHoldingRef.current) return;
+    isHoldingRef.current = false;
+    setIsFastForward(false);
+    const orig = prevTempoRef.current || 1.0;
+    if (mediaElRef.current) mediaElRef.current.playbackRate = orig;
+    if (audioRef.current) applyRates(audioRef.current, orig, pitchRef.current || 1.0);
+    if (ytPlayerRef.current?.setPlaybackRate) {
+      try { ytPlayerRef.current.setPlaybackRate(orig); } catch {}
+    }
+  }, []);
+
+  /* Background / Lockscreen playback via MediaSession API */
+  useEffect(() => {
+    if (!("mediaSession" in navigator) || !nowPlaying) return;
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: nowPlaying.title || "Onion Music",
+        artist: nowPlaying.artist || "Unknown Artist",
+        album: nowPlaying.album || "Onion Music",
+        artwork: nowPlaying.artworkUrl
+          ? [
+              { src: nowPlaying.artworkUrl, sizes: "96x96", type: "image/jpeg" },
+              { src: nowPlaying.artworkUrl, sizes: "128x128", type: "image/jpeg" },
+              { src: nowPlaying.artworkUrl, sizes: "192x192", type: "image/jpeg" },
+              { src: nowPlaying.artworkUrl, sizes: "256x256", type: "image/jpeg" },
+              { src: nowPlaying.artworkUrl, sizes: "384x384", type: "image/jpeg" },
+              { src: nowPlaying.artworkUrl, sizes: "512x512", type: "image/jpeg" },
+            ]
+          : [],
+      });
+
+      navigator.mediaSession.playbackState = playing ? "playing" : "paused";
+
+      navigator.mediaSession.setActionHandler("play", () => {
+        if (nowPlaying?.streamUrl) mediaEngineRef.current?.play?.();
+        else ytEngineRef.current?.play?.();
+        setPlaying(true);
+      });
+      navigator.mediaSession.setActionHandler("pause", () => {
+        if (nowPlaying?.streamUrl) mediaEngineRef.current?.pause?.();
+        else ytEngineRef.current?.pause?.();
+        setPlaying(false);
+      });
+      navigator.mediaSession.setActionHandler("previoustrack", () => seekBy(-5));
+      navigator.mediaSession.setActionHandler("nexttrack", () => seekBy(5));
+      navigator.mediaSession.setActionHandler("seekbackward", (details) => {
+        seekBy(-(details.seekOffset || 5));
+      });
+      navigator.mediaSession.setActionHandler("seekforward", (details) => {
+        seekBy(details.seekOffset || 5);
+      });
+      navigator.mediaSession.setActionHandler("seekto", (details) => {
+        if (details.seekTime !== undefined) {
+          setPosition(details.seekTime);
+          if (mediaElRef.current) mediaElRef.current.currentTime = details.seekTime;
+          if (audioRef.current) audioRef.current.currentTime = details.seekTime;
+        }
+      });
+    } catch (e) {
+      console.warn("MediaSession error:", e);
+    }
+  }, [nowPlaying, playing, seekBy]);
+
+  useEffect(() => {
+    if (!("mediaSession" in navigator) || !("setPositionState" in navigator.mediaSession) || !duration) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: Math.max(0, duration),
+        playbackRate: tempo,
+        position: Math.min(Math.max(0, position), duration),
+      });
+    } catch {}
+  }, [position, duration, tempo]);
 
   /* Keyboard shortcuts: Left/Right arrow keys skip 5 seconds backward/forward */
   useEffect(() => {
@@ -2172,17 +2265,23 @@ export default function MusicPage() {
 
           {/* Main Stage Content */}
           {narrow ? (
-            <div onScroll={onStageScroll} className="relative flex-1 min-h-0 overflow-y-auto px-6 pb-6 flex flex-col">
-              {/* Artwork or Video or Lyrics Placeholder */}
-              <div className="flex justify-center py-4">
+            <div className="relative flex-1 min-h-0 flex flex-col justify-between px-5 pb-3 overflow-hidden select-none">
+              {/* Artwork or Lyrics Container */}
+              <div className="flex-1 min-h-0 flex items-center justify-center py-2 relative">
                 {displayMode === "song" ? (
                   <div
-                    onClick={toggle}
-                    className="rounded-full cursor-pointer overflow-hidden border-[6px] border-neutral-900 shadow-[0_20px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(168,85,247,0.2)] relative flex items-center justify-center select-none"
+                    onPointerDown={startFastForward}
+                    onPointerUp={stopFastForward}
+                    onPointerCancel={stopFastForward}
+                    onPointerLeave={stopFastForward}
+                    onClick={() => {
+                      if (!isHoldingRef.current) toggle();
+                    }}
+                    className="rounded-full cursor-pointer overflow-hidden border-[5px] border-neutral-900 shadow-[0_16px_50px_rgba(0,0,0,0.95),0_0_30px_rgba(168,85,247,0.2)] relative flex items-center justify-center select-none active:scale-95 transition-transform"
                     style={{
-                      width: "min(320px, 76vw)",
+                      width: "min(210px, 45vw)",
                       aspectRatio: "1 / 1",
-                      animation: playing ? `vinyl-spin ${Math.max(1.5, 20 / tempo)}s linear infinite` : "none",
+                      animation: playing ? `vinyl-spin ${Math.max(0.8, (20 / (isFastForward ? 2.0 : tempo)))}s linear infinite` : "none",
                       background: track?.artworkUrl
                         ? `radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.3) 100%), url(${track.artworkUrl}) center/cover no-repeat`
                         : colors.bgElevated,
@@ -2197,25 +2296,28 @@ export default function MusicPage() {
                       }}
                     />
 
-                    {/* Vinyl Light Gloss Reflection */}
-                    <div
-                      className="absolute inset-0 rounded-full pointer-events-none"
-                      style={{
-                        background: `linear-gradient(135deg, rgba(255,255,255,0.14) 0%, transparent 45%, rgba(255,255,255,0.06) 55%, transparent 100%)`,
-                      }}
-                    />
-
-                    {/* Center Vinyl Label & Spindle Ring */}
-                    <div className="relative w-20 h-20 rounded-full bg-neutral-950/90 backdrop-blur-md border-2 border-white/25 flex items-center justify-center shadow-2xl">
-                      <div className="w-14 h-14 rounded-full border border-white/10 flex items-center justify-center bg-black/40">
-                        <div className="w-6 h-6 rounded-full bg-neutral-900 border-2 border-neutral-600 shadow-inner flex items-center justify-center">
-                          <div className="w-2 h-2 rounded-full bg-white/90" />
+                    {/* Center Vinyl Label */}
+                    <div className="relative w-16 h-16 rounded-full bg-neutral-950/90 backdrop-blur-md border-2 border-white/25 flex items-center justify-center shadow-2xl">
+                      <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center bg-black/40">
+                        <div className="w-4 h-4 rounded-full bg-neutral-900 border border-neutral-600 shadow-inner flex items-center justify-center">
+                          <div className="w-1.5 h-1.5 rounded-full bg-white/90" />
                         </div>
                       </div>
                     </div>
+
+                    {/* 2X Speed Overlay when Holding Disc */}
+                    {isFastForward && (
+                      <div className="absolute inset-0 rounded-full bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20">
+                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-600 text-white font-black text-xs tracking-wider shadow-lg shadow-purple-600/60">
+                          <Zap size={14} className="animate-pulse" /> 2X
+                        </div>
+                        <span className="text-[10px] text-white/80 font-medium mt-1">Holding</span>
+                      </div>
+                    )}
                   </div>
-                ) : displayMode === "lyrics" ? (
-                  <div className="w-full max-h-[300px] overflow-y-auto px-2 py-4 flex flex-col gap-4 text-center">
+                ) : (
+                  /* Lyrics Mode */
+                  <div className="w-full h-full max-h-[42vh] overflow-y-auto px-2 py-2 flex flex-col gap-3 text-center no-scrollbar">
                     {lyricsData.loading ? (
                       <div className="flex flex-col items-center justify-center py-10 text-neutral-400 gap-2">
                         <Sparkles size={24} className="animate-spin text-purple-400" />
@@ -2231,11 +2333,9 @@ export default function MusicPage() {
                             ref={isActive ? activeLyricRef : null}
                             onClick={() => {
                               setPosition(line.time);
-                              if (audioRef.current) {
-                                audioRef.current.currentTime = line.time;
-                              }
+                              if (audioRef.current) audioRef.current.currentTime = line.time;
                             }}
-                            className={`cursor-pointer transition-all duration-300 py-1.5 px-3 rounded-xl ${
+                            className={`cursor-pointer transition-all duration-300 py-1 px-3 rounded-xl ${
                               isActive
                                 ? "text-white font-bold scale-105 opacity-100 bg-white/10 shadow-lg shadow-purple-900/30"
                                 : isPast
@@ -2244,8 +2344,8 @@ export default function MusicPage() {
                             }`}
                             style={{
                               fontFamily: displayFont,
-                              fontSize: isActive ? 20 : 16,
-                              lineHeight: 1.4,
+                              fontSize: isActive ? 18 : 14.5,
+                              lineHeight: 1.35,
                               textShadow: isActive ? "0 0 16px rgba(168,85,247,0.7)" : "none",
                             }}
                           >
@@ -2254,78 +2354,122 @@ export default function MusicPage() {
                         );
                       })
                     ) : lyricsData.plain ? (
-                      <div className="text-neutral-300 whitespace-pre-line text-sm leading-relaxed font-medium py-4 px-2">
+                      <div className="text-neutral-300 whitespace-pre-line text-sm leading-relaxed font-medium py-3 px-2">
                         {lyricsData.plain}
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center py-10 text-neutral-400 gap-2">
-                        <Mic2 size={28} className="text-neutral-600 mb-1" />
-                        <span className="text-sm font-semibold text-neutral-300">No lyrics available</span>
+                        <Mic2 size={24} className="text-neutral-600 mb-1" />
+                        <span className="text-xs font-semibold text-neutral-300">No lyrics available</span>
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div style={{ height: 220, width: "100%" }} />
                 )}
               </div>
 
-              <div className="mt-4 text-center">
-                <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 700, color: colors.text }} className="line-clamp-2">
+              {/* Title & Artist */}
+              <div className="text-center mt-1">
+                <div style={{ fontFamily: displayFont, fontSize: 18, fontWeight: 700, color: colors.text }} className="line-clamp-1">
                   {track?.title || "Nothing playing"}
                 </div>
-                <div style={{ fontSize: 14.5, color: colors.textMuted, marginTop: 4 }} className="truncate">
+                <div style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }} className="truncate">
                   {track?.artist || ""}
                 </div>
               </div>
 
               {/* Scrubber */}
-              <div
-                {...scrubHandlers}
-                className="mt-6 py-3 cursor-pointer touch-none"
-              >
-                <div className="relative h-1.5 bg-white/20 rounded-full">
-                  <div className="h-full bg-white rounded-full" style={{ width: `${progress}%` }} />
-                  <div
-                    className="absolute top-1/2 w-4 h-4 -mt-2 -ml-2 rounded-full bg-white shadow-md"
-                    style={{ left: `${progress}%` }}
-                  />
+              <div className="mt-2.5">
+                <div {...scrubHandlers} className="py-2 cursor-pointer touch-none">
+                  <div className="relative h-1.5 bg-white/20 rounded-full">
+                    <div className="h-full bg-white rounded-full" style={{ width: `${progress}%` }} />
+                    <div
+                      className="absolute top-1/2 w-3.5 h-3.5 -mt-1.5 -ml-1.5 rounded-full bg-white shadow-md"
+                      style={{ left: `${progress}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center justify-between text-xs text-neutral-400 font-mono">
-                <span>{formatTime(shownPosition)}</span>
-                <span>{formatTime(duration)}</span>
+                <div className="flex items-center justify-between text-[11px] text-neutral-400 font-mono mt-0.5">
+                  <span>{formatTime(shownPosition)}</span>
+                  <span>{formatTime(duration)}</span>
+                </div>
               </div>
 
               {/* Transport Buttons */}
-              <div className="flex items-center justify-between mt-6 px-4">
-                <button onClick={() => setShuffle((v) => !v)} className="bg-transparent border-none cursor-pointer" style={{ color: shuffle ? colors.accentLight : colors.textMuted }}>
-                  <Shuffle size={22} />
+              <div className="flex items-center justify-between mt-2 px-2">
+                <button onClick={() => setShuffle((v) => !v)} className="p-2 bg-transparent border-none cursor-pointer" style={{ color: shuffle ? colors.accentLight : colors.textMuted }}>
+                  <Shuffle size={20} />
                 </button>
                 <button
                   onClick={() => seekBy(-5)}
-                  title="Rewind 5s (←)"
+                  title="Rewind 5s"
                   aria-label="Rewind 5 seconds"
-                  className="bg-transparent border-none cursor-pointer text-white hover:scale-110 transition-transform"
+                  className="p-2 bg-transparent border-none cursor-pointer text-white active:scale-95 transition-transform"
                 >
-                  <SkipBack size={32} />
+                  <SkipBack size={26} />
                 </button>
                 <button
                   onClick={toggle}
-                  className="w-16 h-16 rounded-full bg-white text-black flex items-center justify-center border-none cursor-pointer shadow-xl hover:scale-105 transition-transform"
+                  className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center border-none cursor-pointer shadow-xl active:scale-95 transition-transform"
                 >
-                  {playing ? <Pause size={30} color="#0c0812" /> : <Play size={30} color="#0c0812" style={{ marginLeft: 3 }} />}
+                  {playing ? <Pause size={26} color="#0c0812" /> : <Play size={26} color="#0c0812" style={{ marginLeft: 3 }} />}
                 </button>
                 <button
                   onClick={() => seekBy(5)}
-                  title="Forward 5s (→)"
+                  title="Forward 5s"
                   aria-label="Forward 5 seconds"
-                  className="bg-transparent border-none cursor-pointer text-white hover:scale-110 transition-transform"
+                  className="p-2 bg-transparent border-none cursor-pointer text-white active:scale-95 transition-transform"
                 >
-                  <SkipForward size={32} />
+                  <SkipForward size={26} />
                 </button>
-                <button onClick={() => setRepeat((v) => !v)} className="bg-transparent border-none cursor-pointer" style={{ color: repeat ? colors.accentLight : colors.textMuted }}>
-                  <Repeat size={22} />
+                <button onClick={() => setRepeat((v) => !v)} className="p-2 bg-transparent border-none cursor-pointer" style={{ color: repeat ? colors.accentLight : colors.textMuted }}>
+                  <Repeat size={20} />
                 </button>
+              </div>
+
+              {/* Mobile Up Next Bottom Section */}
+              <div className="mt-2.5 pt-2 border-t border-white/10">
+                <button
+                  onClick={() => setMobileQueueOpen((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 text-left transition-all"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ListMusic size={16} className="text-purple-400 flex-shrink-0" />
+                    <span className="text-xs font-bold text-neutral-200">Up Next ({queue.length || tracks?.length || 0})</span>
+                    {queue[1]?.title && (
+                      <span className="text-[11px] text-neutral-400 truncate max-w-[140px]">• Next: {queue[1].title}</span>
+                    )}
+                  </div>
+                  <ChevronUp size={16} className={`text-neutral-400 transition-transform ${mobileQueueOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {/* Up Next Expandable List */}
+                {mobileQueueOpen && (
+                  <div className="mt-2 max-h-[30vh] overflow-y-auto pr-1 bg-neutral-950/85 rounded-xl p-2 border border-white/10 no-scrollbar">
+                    {(queue.length ? queue : tracks || []).map((t, idx) => (
+                      <button
+                        key={t.sourceId || t.id || idx}
+                        onClick={() => openTrack(t)}
+                        className={`w-full flex items-center gap-2.5 p-1.5 rounded-lg text-left transition-colors ${
+                          (t.sourceId || t.id) === (nowPlaying?.sourceId || nowPlaying?.id)
+                            ? "bg-purple-600/20 text-purple-300"
+                            : "hover:bg-white/5 text-neutral-300"
+                        }`}
+                      >
+                        {t.artworkUrl ? (
+                          <img src={t.artworkUrl} alt="" width={32} height={32} className="rounded object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded bg-neutral-800 flex items-center justify-center flex-shrink-0">
+                            <Music size={14} color={colors.textMuted} />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-semibold truncate">{t.title}</div>
+                          <div className="text-[10px] text-neutral-400 truncate">{t.artist}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -2633,7 +2777,7 @@ export default function MusicPage() {
         )}
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
+      {/* Mobile Bottom Navigation Bar (Explore centered) */}
       {narrow && (
         <div
           className="fixed left-0 right-0 bottom-0 flex items-stretch"
@@ -2641,8 +2785,8 @@ export default function MusicPage() {
         >
           {[
             ["home", "Home", Home],
-            ["explore", "Explore", Compass],
             ["history", "History", History],
+            ["explore", "Explore", Compass],
             ["library", "Library", Library],
           ].map(([key, label, Icon]) => (
             <button
@@ -2654,16 +2798,20 @@ export default function MusicPage() {
                 fontFamily: bodyFont, fontSize: 10.5, fontWeight: view === key ? 700 : 500,
               }}
             >
-              <Icon size={19} color={view === key ? colors.accentLight : colors.textMuted} />
+              <Icon size={key === "explore" ? 22 : 19} color={view === key ? colors.accentLight : colors.textMuted} />
               {label}
             </button>
           ))}
           <Link
             to="/"
-            className="flex-1 flex flex-col items-center justify-center gap-1 text-neutral-400 no-underline"
-            style={{ fontFamily: bodyFont, fontSize: 10.5, fontWeight: 500 }}
+            onClick={() => setExpanded(false)}
+            className="flex-1 flex flex-col items-center justify-center gap-1 bg-transparent border-none cursor-pointer text-decoration-none"
+            style={{
+              color: colors.textMuted,
+              fontFamily: bodyFont, fontSize: 10.5, fontWeight: 500, textDecoration: "none",
+            }}
           >
-            <Film size={19} />
+            <Film size={19} color={colors.textMuted} />
             Movies
           </Link>
         </div>
