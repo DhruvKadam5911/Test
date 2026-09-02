@@ -1,11 +1,15 @@
 import prisma from "../config/db.js";
-import { searchVideos, fetchTrending, searchRelated } from "../services/peertube.js";
+import { searchVideos, fetchTrending, searchRelated, searchAlbums } from "../services/musicSource.js";
 
 /*
  * Music.
  *
- * Tracks come from PeerTube, which hands out the media file itself — see
- * services/peertube.js for why that mattered enough to move off YouTube.
+ * Which catalogue answers is chosen by MUSIC_SOURCE — see
+ * services/musicSource.js. PeerTube hands out the media file itself, which is
+ * why it is the default and the only one that streams on a deployment;
+ * YouTube answers with far better metadata and, off a developer's own machine,
+ * with no audio. Neither difference reaches this file: both sources return the
+ * same track shape, so everything below is written once.
  *
  * The Track table is still a cache, but for latency rather than quota: nothing
  * here is metered, so a miss costs a slow request instead of a slice of a daily
@@ -96,16 +100,19 @@ export async function searchTracks(req, res) {
   }
 }
 
-// GET /music/related?title=&exclude=
+// GET /music/related?title=&artist=&exclude=
 export async function relatedTracks(req, res) {
   const title = String(req.query.title || "").trim();
+  const artist = String(req.query.artist || "").trim();
   const exclude = String(req.query.exclude || "").trim();
-  if (!title) return res.status(200).json([]);
+  // An id alone is enough for YouTube's radio queue, which is the better
+  // answer when it is available; PeerTube still needs words to search for.
+  if (!title && !exclude) return res.status(200).json([]);
 
   const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
 
   try {
-    const found = await searchRelated({ title, exclude, limit });
+    const found = await searchRelated({ title, artist, exclude, limit });
     await storeTracks(found);
     return res.status(200).json(found);
   } catch (error) {
@@ -117,11 +124,27 @@ export async function relatedTracks(req, res) {
 /*
  * GET /music/albums?q=
  *
- * PeerTube models playlists and channels, but neither is wired up here yet, so
- * this answers with videos rather than an empty tab that looks broken.
+ * A real album search where the source has one. PeerTube does not — it models
+ * playlists and channels, neither wired up here — so it falls back to songs
+ * inside musicSource.js rather than leaving the tab looking broken.
+ *
+ * Albums are not written to the Track table: an album id is not a playable
+ * track, and storing it would put rows in there that the stream endpoint would
+ * later be asked to play.
  */
 export async function searchMusicAlbums(req, res) {
-  return searchTracks(req, res);
+  const query = String(req.query.q || "").trim();
+  if (query.length < 2) return res.status(200).json([]);
+
+  const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
+
+  try {
+    const albums = await searchAlbums({ query, limit });
+    return res.status(200).json(albums);
+  } catch (error) {
+    console.error("searchMusicAlbums error:", error);
+    return res.status(500).json({ error: error.message || "Failed to search albums." });
+  }
 }
 
 // GET /music/genres

@@ -151,6 +151,10 @@ and leaves them all reading `undefined`.
 | `JWPLAYER_API_KEY` / `JWPLAYER_API_SECRET` | no | For `VIDEO_PROVIDER=jwplayer` |
 | `CRON_SECRET` | no | Guards `/admin/refresh` and `/admin/dedupe`. **Unset means both routes refuse everything** |
 | `YOUTUBE_API_KEY` | no | The music page. Unset means the charts fall back to stored tracks and search returns 503 |
+| `MUSIC_SOURCE` | no | Which catalogue `/music/*` reads: `peertube` (default) or `youtube`. See `services/musicSource.js` |
+| `YOUTUBE_TRENDING_QUERY` | no | Seeds the music home row when YouTube's own home feed is unavailable |
+| `YOUTUBE_STREAM_PROXY` | no | **Local development only.** `1` lets `/music/stream/:id` resolve YouTube audio on a developer's machine. Ignored when `NODE_ENV=production`, deliberately — see `streamController.js` |
+| `YOUTUBE_CACHE_DIR` | no | Where the InnerTube session is cached between restarts. Defaults to `./.yt-session` |
 
 ---
 
