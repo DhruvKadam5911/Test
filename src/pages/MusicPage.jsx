@@ -680,6 +680,7 @@ export default function MusicPage() {
   const RAIL_WIDE = 240;
   const railW = railExpanded ? RAIL_WIDE : RAIL_NARROW;
   const [expanded, setExpanded] = useState(false);
+  const [stageMounted, setStageMounted] = useState(false);
   const [stageIn, setStageIn] = useState(false);
   const [barVisible, setBarVisible] = useState(true);
 
