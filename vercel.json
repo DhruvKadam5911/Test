@@ -1,6 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
+    { "source": "/music/(.*)", "destination": "/api/index.js" },
+    { "source": "/music", "destination": "/api/index.js" },
+    { "source": "/titles/(.*)", "destination": "/api/index.js" },
+    { "source": "/titles", "destination": "/api/index.js" },
+    { "source": "/admin/(.*)", "destination": "/api/index.js" },
+    { "source": "/health", "destination": "/api/index.js" },
     { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ]
 }

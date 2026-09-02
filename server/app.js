@@ -45,7 +45,14 @@ app.use(
       // Non-browser callers — curl, the smoke test, server-to-server — send no
       // Origin at all, and CORS does not apply to them.
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app") ||
+        origin.endsWith(".onion.tv") ||
+        origin.includes("localhost")
+      ) {
+        return callback(null, true);
+      }
 
       if (!isProduction) {
         console.warn(`CORS: allowing unlisted origin ${origin} (development only)`);

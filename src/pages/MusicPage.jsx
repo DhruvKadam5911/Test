@@ -140,9 +140,17 @@ function mediaEngine(el) {
     set loop(value) {
       el.loop = value;
     },
-    play: () => {
-      if (globalAudioCtx?.state === "suspended") globalAudioCtx.resume().catch(() => {});
-      return el.play();
+    play: async () => {
+      try {
+        if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+          await globalAudioCtx.resume();
+        }
+      } catch {}
+      try {
+        return await el.play();
+      } catch (err) {
+        console.warn("HTML5 audio play notice:", err.message);
+      }
     },
     pause: () => el.pause(),
     load: () => el.load(),
@@ -150,8 +158,15 @@ function mediaEngine(el) {
       el.src = url;
       el.load();
       if (autoplay) {
-        if (globalAudioCtx?.state === "suspended") globalAudioCtx.resume().catch(() => {});
-        el.play().catch(() => {});
+        try {
+          if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+            globalAudioCtx.resume().catch(() => {});
+          }
+        } catch {}
+        const p = el.play();
+        if (p && typeof p.catch === "function") {
+          p.catch((err) => console.warn("setSource autoplay notice:", err.message));
+        }
       }
     },
     get paused() {
@@ -489,9 +504,36 @@ export default function MusicPage() {
   const [albums, setAlbums] = useState([]);
   const [explore, setExplore] = useState({ albums: [], top: [] });
   const [forYou, setForYou] = useState([]);
-  const [nowPlaying, setNowPlaying] = useState(() => readStorage(RECENT_KEY)[0] || CURATED_DEFAULT_TRACKS[0]);
-  const [queue, setQueue] = useState([]);
-  const [recent, setRecent] = useState(() => readStorage(RECENT_KEY));
+  const [recent, setRecent] = useState(() => {
+    const raw = readStorage(RECENT_KEY);
+    return raw.map((item) => {
+      if (item && !item.streamUrl) {
+        const found = CURATED_DEFAULT_TRACKS.find(
+          (t) =>
+            t.title?.toLowerCase() === item.title?.toLowerCase() ||
+            (t.sourceId || t.id) === (item.sourceId || item.id)
+        );
+        if (found) return { ...item, streamUrl: found.streamUrl };
+      }
+      return item;
+    });
+  });
+
+  const [nowPlaying, setNowPlaying] = useState(() => {
+    const cached = readStorage(RECENT_KEY)[0];
+    if (cached) {
+      if (!cached.streamUrl) {
+        const found = CURATED_DEFAULT_TRACKS.find(
+          (t) =>
+            t.title?.toLowerCase() === cached.title?.toLowerCase() ||
+            (t.sourceId || t.id) === (cached.sourceId || cached.id)
+        );
+        if (found) return { ...cached, streamUrl: found.streamUrl };
+      }
+      return cached;
+    }
+    return CURATED_DEFAULT_TRACKS[0];
+  });
   const [likedList, setLikedList] = useState(() => readStorage(LIKED_KEY));
   const [error, setError] = useState(null);
 
