@@ -732,6 +732,22 @@ export default function MusicPage() {
     };
   }, [nowPlaying?.title, nowPlaying?.artist, nowPlaying?.durationSec, nowPlaying?.durationSeconds]);
 
+  /* Seek within track */
+  const seekBy = useCallback((seconds) => {
+    const el = mediaElRef.current;
+    const cur = el?.currentTime ?? position;
+    const maxDur = duration || el?.duration || 999999;
+    const to = Math.max(0, Math.min(maxDur, cur + seconds));
+    setPosition(to);
+    if (el) el.currentTime = to;
+    if (audioRef.current) audioRef.current.currentTime = to;
+    if (ytPlayerRef.current?.seekTo) {
+      try {
+        ytPlayerRef.current.seekTo(to, true);
+      } catch {}
+    }
+  }, [duration, position]);
+
   /* Keyboard shortcuts: Left/Right arrow keys skip 5 seconds backward/forward */
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -740,22 +756,16 @@ export default function MusicPage() {
 
       if (e.key === "ArrowRight") {
         e.preventDefault();
-        const cur = audioRef.current?.currentTime ?? position;
-        const to = Math.min(duration || 999999, cur + 5);
-        setPosition(to);
-        if (audioRef.current) audioRef.current.currentTime = to;
+        seekBy(5);
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        const cur = audioRef.current?.currentTime ?? position;
-        const to = Math.max(0, cur - 5);
-        setPosition(to);
-        if (audioRef.current) audioRef.current.currentTime = to;
+        seekBy(-5);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [duration, position]);
+  }, [seekBy]);
 
   const audioRef = useRef(null);
   const mediaEngineRef = useRef(null);
@@ -2289,7 +2299,12 @@ export default function MusicPage() {
                 <button onClick={() => setShuffle((v) => !v)} className="bg-transparent border-none cursor-pointer" style={{ color: shuffle ? colors.accentLight : colors.textMuted }}>
                   <Shuffle size={22} />
                 </button>
-                <button onClick={() => skip(-1)} className="bg-transparent border-none cursor-pointer text-white">
+                <button
+                  onClick={() => seekBy(-5)}
+                  title="Rewind 5s (←)"
+                  aria-label="Rewind 5 seconds"
+                  className="bg-transparent border-none cursor-pointer text-white hover:scale-110 transition-transform"
+                >
                   <SkipBack size={32} />
                 </button>
                 <button
@@ -2298,7 +2313,12 @@ export default function MusicPage() {
                 >
                   {playing ? <Pause size={30} color="#0c0812" /> : <Play size={30} color="#0c0812" style={{ marginLeft: 3 }} />}
                 </button>
-                <button onClick={() => skip(1)} className="bg-transparent border-none cursor-pointer text-white">
+                <button
+                  onClick={() => seekBy(5)}
+                  title="Forward 5s (→)"
+                  aria-label="Forward 5 seconds"
+                  className="bg-transparent border-none cursor-pointer text-white hover:scale-110 transition-transform"
+                >
                   <SkipForward size={32} />
                 </button>
                 <button onClick={() => setRepeat((v) => !v)} className="bg-transparent border-none cursor-pointer" style={{ color: repeat ? colors.accentLight : colors.textMuted }}>
@@ -2451,7 +2471,12 @@ export default function MusicPage() {
 
         {/* Playback Controls */}
         <div className="flex items-center gap-3 flex-shrink-0">
-          <button onClick={() => skip(-1)} aria-label="Previous" className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0">
+          <button
+            onClick={() => seekBy(-5)}
+            title="Rewind 5s (←)"
+            aria-label="Rewind 5 seconds"
+            className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0 hover:scale-110 transition-transform"
+          >
             <SkipBack size={21} />
           </button>
           <button
@@ -2462,7 +2487,12 @@ export default function MusicPage() {
           >
             {playing ? <Pause size={19} color="#fff" /> : <Play size={19} color="#fff" style={{ marginLeft: 2 }} />}
           </button>
-          <button onClick={() => skip(1)} aria-label="Next" className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0">
+          <button
+            onClick={() => seekBy(5)}
+            title="Forward 5s (→)"
+            aria-label="Forward 5 seconds"
+            className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0 hover:scale-110 transition-transform"
+          >
             <SkipForward size={21} />
           </button>
           <span className="hidden sm:block text-xs text-neutral-400 font-mono ml-1">
