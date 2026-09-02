@@ -1490,20 +1490,40 @@ export default function MusicPage() {
                 {displayMode === "song" ? (
                   <div
                     onClick={toggle}
-                    className={`rounded-2xl cursor-pointer shadow-2xl overflow-hidden border border-white/15 relative ${
+                    className={`rounded-full cursor-pointer overflow-hidden border-[6px] border-neutral-900 shadow-[0_20px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(168,85,247,0.2)] relative flex items-center justify-center select-none ${
                       playing ? "vinyl-playing" : "vinyl-paused"
                     }`}
                     style={{
                       width: "min(320px, 76vw)",
                       aspectRatio: "1 / 1",
-                      background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
-                      boxShadow: "0 20px 50px rgba(0,0,0,0.8)",
+                      background: track?.artworkUrl
+                        ? `radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.3) 100%), url(${track.artworkUrl}) center/cover no-repeat`
+                        : colors.bgElevated,
                     }}
                   >
-                    <div className="absolute inset-0 rounded-full border-2 border-white/10 pointer-events-none" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-16 h-16 rounded-full bg-black/50 backdrop-blur-sm border-2 border-white/20 flex items-center justify-center">
-                        <div className="w-5 h-5 rounded-full bg-white/80" />
+                    {/* Concentric Vinyl Grooves Effect */}
+                    <div
+                      className="absolute inset-0 rounded-full pointer-events-none"
+                      style={{
+                        background: `repeating-radial-gradient(circle at center, transparent 0px, transparent 4px, rgba(255,255,255,0.035) 5px, transparent 6px)`,
+                        mixBlendMode: "overlay",
+                      }}
+                    />
+
+                    {/* Vinyl Light Gloss Reflection */}
+                    <div
+                      className="absolute inset-0 rounded-full pointer-events-none"
+                      style={{
+                        background: `linear-gradient(135deg, rgba(255,255,255,0.14) 0%, transparent 45%, rgba(255,255,255,0.06) 55%, transparent 100%)`,
+                      }}
+                    />
+
+                    {/* Center Vinyl Label & Spindle Ring */}
+                    <div className="relative w-20 h-20 rounded-full bg-neutral-950/90 backdrop-blur-md border-2 border-white/25 flex items-center justify-center shadow-2xl">
+                      <div className="w-14 h-14 rounded-full border border-white/10 flex items-center justify-center bg-black/40">
+                        <div className="w-6 h-6 rounded-full bg-neutral-900 border-2 border-neutral-600 shadow-inner flex items-center justify-center">
+                          <div className="w-2 h-2 rounded-full bg-white/90" />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1568,20 +1588,40 @@ export default function MusicPage() {
                 {displayMode === "song" ? (
                   <div
                     onClick={toggle}
-                    className={`rounded-2xl cursor-pointer overflow-hidden border border-white/20 shadow-2xl relative ${
+                    className={`rounded-full cursor-pointer overflow-hidden border-[8px] border-neutral-900 shadow-[0_30px_90px_rgba(0,0,0,0.95),0_0_40px_rgba(168,85,247,0.25)] relative flex items-center justify-center select-none ${
                       playing ? "vinyl-playing" : "vinyl-paused"
                     }`}
                     style={{
                       height: "min(420px, 48vh)",
                       aspectRatio: "1 / 1",
-                      background: track?.artworkUrl ? `url(${track.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
-                      boxShadow: "0 30px 80px rgba(0,0,0,0.85)",
+                      background: track?.artworkUrl
+                        ? `radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.3) 100%), url(${track.artworkUrl}) center/cover no-repeat`
+                        : colors.bgElevated,
                     }}
                   >
-                    <div className="absolute inset-0 rounded-full border-2 border-white/10 pointer-events-none" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-20 h-20 rounded-full bg-black/60 backdrop-blur-md border-2 border-white/20 flex items-center justify-center">
-                        <div className="w-6 h-6 rounded-full bg-white/80" />
+                    {/* Concentric Vinyl Grooves Effect */}
+                    <div
+                      className="absolute inset-0 rounded-full pointer-events-none"
+                      style={{
+                        background: `repeating-radial-gradient(circle at center, transparent 0px, transparent 4px, rgba(255,255,255,0.035) 5px, transparent 6px)`,
+                        mixBlendMode: "overlay",
+                      }}
+                    />
+
+                    {/* Vinyl Light Gloss Reflection */}
+                    <div
+                      className="absolute inset-0 rounded-full pointer-events-none"
+                      style={{
+                        background: `linear-gradient(135deg, rgba(255,255,255,0.14) 0%, transparent 45%, rgba(255,255,255,0.06) 55%, transparent 100%)`,
+                      }}
+                    />
+
+                    {/* Center Vinyl Label & Spindle Ring */}
+                    <div className="relative w-24 h-24 rounded-full bg-neutral-950/90 backdrop-blur-md border-2 border-white/25 flex items-center justify-center shadow-2xl">
+                      <div className="w-16 h-16 rounded-full border border-white/10 flex items-center justify-center bg-black/40">
+                        <div className="w-7 h-7 rounded-full bg-neutral-900 border-2 border-neutral-600 shadow-inner flex items-center justify-center">
+                          <div className="w-2.5 h-2.5 rounded-full bg-white/90" />
+                        </div>
                       </div>
                     </div>
                   </div>
