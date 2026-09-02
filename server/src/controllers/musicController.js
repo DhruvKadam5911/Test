@@ -1,25 +1,16 @@
 import prisma from "../config/db.js";
-import { searchVideos, fetchTrending, searchRelated, searchAlbums } from "../services/youtube.js";
-
-/*
- * Music.
- *
- * One catalogue answers `/music/*`: YouTube, through InnerTube — see
- * services/youtube.js. There was a second source (PeerTube) and a selector in
- * front of both; it is gone, along with everything it had indexed. Nothing here
- * branches on a source any more.
- *
- * The Track table is still a cache, but for latency rather than quota: nothing
- * here is metered, so a miss costs a slow request instead of a slice of a daily
- * allowance. Rows are written on the way out so the stream endpoint can find a
- * track by id later without searching for it again.
- *
- * Every read of that cache filters on `source = 'youtube'`. The table outlives
- * the source that wrote to it, and a PeerTube row surfacing here is a track the
- * stream endpoint can no longer resolve — a result that looks fine and refuses
- * to play. `GET /admin/clear-music?source=peertube&apply=true` deletes them for
- * good; this filter is what makes that a tidy-up rather than a prerequisite.
- */
+import {
+  searchSongs as saavnSearchSongs,
+  fetchTrending as saavnFetchTrending,
+  searchAlbums as saavnSearchAlbums,
+  fetchRelated as saavnFetchRelated,
+} from "../services/saavn.js";
+import {
+  searchVideos as ytSearchVideos,
+  fetchTrending as ytFetchTrending,
+  searchRelated as ytSearchRelated,
+  searchAlbums as ytSearchAlbums,
+} from "../services/youtube.js";
 
 const MAX_LIMIT = 50;
 
@@ -35,7 +26,16 @@ async function storeTracks(tracks) {
     const params = [];
     const tuples = tracks.map((t) => {
       const start = params.length;
-      params.push(t.title, t.artist, t.audioUrl, t.artworkUrl, t.durationSeconds, t.genre, t.source, t.sourceId);
+      params.push(
+        t.title,
+        t.artist,
+        t.streamUrl || t.audioUrl || null,
+        t.artworkUrl,
+        t.durationSec || t.durationSeconds || null,
+        t.genre || null,
+        t.source || "saavn",
+        t.sourceId || t.id
+      );
       const p = (n) => `$${start + n}`;
       return `(gen_random_uuid()::text, ${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)}, ${p(6)}, ${p(7)}, ${p(8)}, NOW())`;
     });
@@ -47,31 +47,41 @@ async function storeTracks(tracks) {
       ...params
     );
   } catch (err) {
-    // Database caching error shouldn't crash the live network response
     console.warn("storeTracks cache notice:", err?.message || err);
   }
 }
 
-// GET /music/tracks — what the network is publishing and watching right now.
+// GET /music/tracks — what the network is publishing and streaming right now.
 export async function getTracks(req, res) {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, MAX_LIMIT);
 
+    // 1. Try Direct 320kbps Saavn stream source
     try {
-      const trending = await fetchTrending({ limit });
-      if (trending.length) {
+      const trending = await saavnFetchTrending({ limit });
+      if (trending && trending.length) {
         await storeTracks(trending);
         return res.status(200).json(trending);
       }
-    } catch (error) {
-      // The network being slow or unreachable should show the last thing that
-      // worked rather than an empty page.
-      console.error("getTracks trending error:", error.message);
+    } catch (err) {
+      console.warn("Saavn trending notice, falling back to YouTube:", err.message);
     }
 
+    // 2. Fallback to YouTube
+    try {
+      const ytTrending = await ytFetchTrending({ limit });
+      if (ytTrending && ytTrending.length) {
+        await storeTracks(ytTrending);
+        return res.status(200).json(ytTrending);
+      }
+    } catch (err) {
+      console.warn("YouTube trending notice:", err.message);
+    }
+
+    // 3. Fallback to cached tracks
     const tracks = await prisma.$queryRaw`
-      SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
-      FROM "Track" WHERE source = 'youtube'
+      SELECT id, title, artist, "audioUrl" as "streamUrl", "artworkUrl", "durationSeconds" as "durationSec", genre, source, "sourceId"
+      FROM "Track"
       ORDER BY "createdAt" DESC LIMIT ${limit}`;
     return res.status(200).json(tracks);
   } catch (error) {
@@ -90,19 +100,33 @@ export async function searchTracks(req, res) {
   const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
 
   try {
-    const found = await searchVideos({ query, limit });
-    if (found.length) {
-      await storeTracks(found);
-      return res.status(200).json(found);
+    // 1. Search direct 320kbps streams via Saavn
+    try {
+      const saavnResults = await saavnSearchSongs(query, { limit });
+      if (saavnResults && saavnResults.length) {
+        await storeTracks(saavnResults);
+        return res.status(200).json(saavnResults);
+      }
+    } catch (err) {
+      console.warn("Saavn search error:", err.message);
     }
 
-    // Nothing from the network: answer from what has been seen before rather
-    // than with an empty list.
+    // 2. Fallback to YouTube
+    try {
+      const ytResults = await ytSearchVideos({ query, limit });
+      if (ytResults && ytResults.length) {
+        await storeTracks(ytResults);
+        return res.status(200).json(ytResults);
+      }
+    } catch (err) {
+      console.warn("YouTube search error:", err.message);
+    }
+
+    // 3. Fallback to cached tracks
     const cached = await prisma.$queryRaw`
-      SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
+      SELECT id, title, artist, "audioUrl" as "streamUrl", "artworkUrl", "durationSeconds" as "durationSec", genre, source, "sourceId"
       FROM "Track"
-      WHERE source = 'youtube'
-        AND (title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`})
+      WHERE (title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`})
       ORDER BY "createdAt" DESC LIMIT ${limit}`;
     return res.status(200).json(cached);
   } catch (error) {
@@ -116,14 +140,28 @@ export async function relatedTracks(req, res) {
   const title = String(req.query.title || "").trim();
   const artist = String(req.query.artist || "").trim();
   const exclude = String(req.query.exclude || "").trim();
-  // An id alone is enough: it seeds YouTube's own radio queue, which is a
-  // better answer than searching the words of the title.
-  if (!title && !exclude) return res.status(200).json([]);
+
+  if (!title && !artist && !exclude) return res.status(200).json([]);
 
   const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
 
   try {
-    const found = await searchRelated({ title, artist, exclude, limit });
+    // 1. Try Saavn related / artist search for direct 320kbps streams
+    try {
+      const related = await saavnFetchRelated(artist || title, { limit });
+      if (related && related.length) {
+        const filtered = related.filter((t) => t.sourceId !== exclude && t.id !== exclude);
+        if (filtered.length) {
+          await storeTracks(filtered);
+          return res.status(200).json(filtered);
+        }
+      }
+    } catch (err) {
+      console.warn("Saavn related notice:", err.message);
+    }
+
+    // 2. Fallback to YouTube related
+    const found = await ytSearchRelated({ title, artist, exclude, limit });
     await storeTracks(found);
     return res.status(200).json(found);
   } catch (error) {
@@ -132,17 +170,7 @@ export async function relatedTracks(req, res) {
   }
 }
 
-/*
- * GET /music/albums?q=
- *
- * A real album search: YouTube Music returns albums with their own ids, artist
- * and cover art, which is one of the things the source it replaced could not
- * answer at all.
- *
- * Albums are not written to the Track table: an album id is not a playable
- * track, and storing it would put rows in there that the stream endpoint would
- * later be asked to play.
- */
+// GET /music/albums?q=
 export async function searchMusicAlbums(req, res) {
   const query = String(req.query.q || "").trim();
   if (query.length < 2) return res.status(200).json([]);
@@ -150,7 +178,18 @@ export async function searchMusicAlbums(req, res) {
   const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
 
   try {
-    const albums = await searchAlbums({ query, limit });
+    // 1. Try Saavn albums
+    try {
+      const saavnAlbums = await saavnSearchAlbums(query, { limit });
+      if (saavnAlbums && saavnAlbums.length) {
+        return res.status(200).json(saavnAlbums);
+      }
+    } catch (err) {
+      console.warn("Saavn album search error:", err.message);
+    }
+
+    // 2. Fallback to YouTube albums
+    const albums = await ytSearchAlbums({ query, limit });
     return res.status(200).json(albums);
   } catch (error) {
     console.error("searchMusicAlbums error:", error);
@@ -163,7 +202,7 @@ export async function getMusicGenres(req, res) {
   try {
     const genres = await prisma.$queryRawUnsafe(
       `SELECT genre, count(*)::int AS count FROM "Track"
-       WHERE genre IS NOT NULL AND source = 'youtube'
+       WHERE genre IS NOT NULL
        GROUP BY genre ORDER BY count DESC`
     );
     return res.status(200).json(genres);

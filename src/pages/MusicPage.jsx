@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
   Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp,
   Film, History, ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
-  ThumbsUp, ThumbsDown, Gauge, Link2, Unlink, Minus, Plus, Video, Disc3, Radio,
+  ThumbsUp, Gauge, Link2, Unlink, Minus, Plus, Video, Disc3, Radio,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
 import OnionMark from "../components/shared/OnionMark";
@@ -43,8 +43,10 @@ const YT_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const clampRate = (v) =>
   Math.min(RATE_MAX, Math.max(RATE_MIN, Math.round(Number(v) * 100) / 100));
 
-const nearestRate = (list, value) =>
-  list.reduce((best, r) => (Math.abs(r - value) < Math.abs(best - value) ? r : best), list[0]);
+const nearestRate = (list, value) => {
+  const valid = Array.isArray(list) && list.length > 0 ? list : YT_RATES;
+  return valid.reduce((best, r) => (Math.abs(r - value) < Math.abs(best - value) ? r : best), valid[0]);
+};
 
 const sameRate = (a, b) => Math.abs(a - b) < 0.005;
 
@@ -58,9 +60,9 @@ function loadYoutubeApi() {
   if (apiPromise) return apiPromise;
 
   apiPromise = new Promise((resolve) => {
-    const interval = setInterval(() => {
+    const checkInterval = setInterval(() => {
       if (window.YT && typeof window.YT.Player === "function") {
-        clearInterval(interval);
+        clearInterval(checkInterval);
         resolve(window.YT);
       }
     }, 50);
@@ -69,7 +71,7 @@ function loadYoutubeApi() {
     window.onYouTubeIframeAPIReady = () => {
       prevReady?.();
       if (window.YT && typeof window.YT.Player === "function") {
-        clearInterval(interval);
+        clearInterval(checkInterval);
         resolve(window.YT);
       }
     };
@@ -92,7 +94,7 @@ function mediaEngine(el) {
     kind: "media",
     canPitch: true,
     snapsTempo: false,
-    dataset: el.dataset,
+    dataset: el.dataset || {},
     get loop() {
       return el.loop;
     },
@@ -102,7 +104,7 @@ function mediaEngine(el) {
     play: () => el.play(),
     pause: () => el.pause(),
     load: () => el.load(),
-    setSource(url, { autoplay }) {
+    setSource(url, { autoplay } = {}) {
       el.src = url;
       el.load();
       if (autoplay) el.play().catch(() => {});
@@ -142,7 +144,7 @@ function mediaEngine(el) {
         el.preservesPitch = preserve;
         if ("mozPreservesPitch" in el) el.mozPreservesPitch = preserve;
         if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = preserve;
-      } catch (e) {}
+      } catch {}
       return { tempo, pitch };
     },
   };
@@ -159,17 +161,26 @@ function extractVideoId(raw) {
 /* YouTube IFrame Player Engine */
 function youtubeEngine(player) {
   return {
+    player,
     kind: "youtube",
     canPitch: true,
     snapsTempo: true,
     dataset: {},
     loop: false,
     get playbackRate() {
-      return player?.getPlaybackRate?.() || 1;
+      try {
+        return player?.getPlaybackRate?.() || 1;
+      } catch {
+        return 1;
+      }
     },
     get rateList() {
-      const list = player?.getAvailablePlaybackRates?.();
-      return list?.length ? list : YT_RATES;
+      try {
+        const list = player?.getAvailablePlaybackRates?.();
+        return list?.length ? list : YT_RATES;
+      } catch {
+        return YT_RATES;
+      }
     },
     play: () => {
       try {
@@ -255,9 +266,11 @@ function youtubeEngine(player) {
       } catch {}
     },
     setRates(tempo, pitch) {
-      const applied = nearestRate(this.rateList, tempo);
+      const applied = nearestRate(YT_RATES, tempo);
       try {
-        player?.setPlaybackRate?.(applied);
+        if (player && typeof player.setPlaybackRate === "function") {
+          player.setPlaybackRate(applied);
+        }
       } catch (e) {
         console.warn("yt setRates error:", e);
       }
@@ -310,7 +323,7 @@ const SHORTCUTS = [
 
 const CURATED_DEFAULT_TRACKS = [
   {
-    id: "yt-NJAv_7lHUIU",
+    id: "NJAv_7lHUIU",
     sourceId: "NJAv_7lHUIU",
     title: "Toxic",
     artist: "AP Dhillon",
@@ -318,7 +331,7 @@ const CURATED_DEFAULT_TRACKS = [
     durationSeconds: 195,
   },
   {
-    id: "yt-BddP6PYo2gs",
+    id: "BddP6PYo2gs",
     sourceId: "BddP6PYo2gs",
     title: "Kesariya",
     artist: "Arijit Singh, Pritam",
@@ -326,7 +339,7 @@ const CURATED_DEFAULT_TRACKS = [
     durationSeconds: 268,
   },
   {
-    id: "yt-6xVyZpGq6xY",
+    id: "6xVyZpGq6xY",
     sourceId: "6xVyZpGq6xY",
     title: "Shararat",
     artist: "Badshah, Hiten",
@@ -334,7 +347,7 @@ const CURATED_DEFAULT_TRACKS = [
     durationSeconds: 180,
   },
   {
-    id: "yt-V7LwfY5U5WI",
+    id: "V7LwfY5U5WI",
     sourceId: "V7LwfY5U5WI",
     title: "Chaleya",
     artist: "Anirudh Ravichander, Arijit Singh",
@@ -342,7 +355,7 @@ const CURATED_DEFAULT_TRACKS = [
     durationSeconds: 200,
   },
   {
-    id: "yt-kJQP7kiw5Fk",
+    id: "kJQP7kiw5Fk",
     sourceId: "kJQP7kiw5Fk",
     title: "Despacito",
     artist: "Luis Fonsi ft. Daddy Yankee",
@@ -350,7 +363,7 @@ const CURATED_DEFAULT_TRACKS = [
     durationSeconds: 282,
   },
   {
-    id: "yt-JGwWNGJdvx8",
+    id: "JGwWNGJdvx8",
     sourceId: "JGwWNGJdvx8",
     title: "Shape of You",
     artist: "Ed Sheeran",
@@ -358,7 +371,7 @@ const CURATED_DEFAULT_TRACKS = [
     durationSeconds: 234,
   },
   {
-    id: "yt-fJ9rUzIMcZQ",
+    id: "fJ9rUzIMcZQ",
     sourceId: "fJ9rUzIMcZQ",
     title: "Bohemian Rhapsody",
     artist: "Queen",
@@ -366,7 +379,7 @@ const CURATED_DEFAULT_TRACKS = [
     durationSeconds: 360,
   },
   {
-    id: "yt-L3wKzyIN1yk",
+    id: "L3wKzyIN1yk",
     sourceId: "L3wKzyIN1yk",
     title: "Starboy",
     artist: "The Weeknd ft. Daft Punk",
@@ -386,9 +399,7 @@ function readStorage(key, fallback = []) {
 function writeStorage(key, data) {
   try {
     localStorage.setItem(key, JSON.stringify(data));
-  } catch {
-    // storage fallback
-  }
+  } catch {}
 }
 
 function formatTime(seconds) {
@@ -445,7 +456,6 @@ export default function MusicPage() {
   const [stageMounted, setStageMounted] = useState(false);
   const [stageIn, setStageIn] = useState(false);
   const [barVisible, setBarVisible] = useState(true);
-  const [sheetOpen, setSheetOpen] = useState(false);
 
   const [narrow, setNarrow] = useState(
     () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
@@ -464,11 +474,17 @@ export default function MusicPage() {
 
   const audioRef = useRef(null);
   const mediaEngineRef = useRef(null);
+  const ytEngineRef = useRef(null);
+  const ytPlayerRef = useRef(null);
+  const ytReadyRef = useRef(false);
   const mediaElRef = useRef(null);
-  const iframeRef = useRef(null);
   const tracksRef = useRef(null);
   const queueRef = useRef([]);
   const actionsRef = useRef({});
+  const tempoRef = useRef(tempo);
+  const pitchRef = useRef(pitch);
+  tempoRef.current = tempo;
+  pitchRef.current = pitch;
 
   const searchActive = query.trim().length >= 2;
   const searchScreen = (narrow ? mobileSearch : searchFocused) && !searchActive;
@@ -477,61 +493,21 @@ export default function MusicPage() {
   queueRef.current = queue;
 
   const isYouTubeTrack = !track?.streamUrl;
-  const canPitch = true;
 
-  const postIframeCommand = (func, args = []) => {
-    try {
-      const iframe = iframeRef.current;
-      if (iframe?.contentWindow) {
-        iframe.contentWindow.postMessage(
-          JSON.stringify({ event: "command", func, args }),
-          "*"
-        );
-      }
-    } catch (e) {
-      console.warn("postIframeCommand error:", e);
-    }
-  };
-
-  /* Listen to YouTube iframe events */
-  useEffect(() => {
-    const onMessage = (event) => {
-      try {
-        if (typeof event.data !== "string") return;
-        const data = JSON.parse(event.data);
-        if (data.event === "infoDelivery" && data.info) {
-          if (typeof data.info.currentTime === "number") {
-            setPosition(data.info.currentTime);
-          }
-          if (typeof data.info.duration === "number" && data.info.duration > 0) {
-            setDuration(data.info.duration);
-          }
-          if (data.info.playerState === 1) {
-            setPlaying(true);
-            setBuffering(false);
-          } else if (data.info.playerState === 2) {
-            setPlaying(false);
-          } else if (data.info.playerState === 3) {
-            setBuffering(true);
-          } else if (data.info.playerState === 0) {
-            actionsRef.current.ended?.();
-          }
-        }
-      } catch {}
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
+  const selectEngine = useCallback((t) => {
+    if (t?.streamUrl) return mediaEngineRef.current;
+    return ytEngineRef.current;
   }, []);
-
-  const switchDisplayMode = (newMode) => {
-    setDisplayMode(newMode);
-  };
 
   /* Initialize HTML5 Media Engine */
   useEffect(() => {
     const el = mediaElRef.current;
     if (!el) return;
-    mediaEngineRef.current = mediaEngine(el);
+    const engine = mediaEngine(el);
+    mediaEngineRef.current = engine;
+    if (nowPlaying?.streamUrl) {
+      audioRef.current = engine;
+    }
     const handlers = [
       ["play", () => { setPlaying(true); setBuffering(false); }],
       ["playing", () => { setPlaying(true); setBuffering(false); }],
@@ -540,15 +516,113 @@ export default function MusicPage() {
       ["loadedmetadata", () => setDuration(el.duration || 0)],
       ["durationchange", () => setDuration(el.duration || 0)],
       ["ended", () => actionsRef.current.ended?.()],
-      ["error", () => {
-        setBuffering(false);
-      }],
+      ["error", () => setBuffering(false)],
     ];
     for (const [event, handler] of handlers) el.addEventListener(event, handler);
     return () => {
       for (const [event, handler] of handlers) el.removeEventListener(event, handler);
     };
+  }, [nowPlaying?.streamUrl]);
+
+  /* Initialize YouTube Iframe Player */
+  useEffect(() => {
+    let active = true;
+    const initialTrack = nowPlaying || CURATED_DEFAULT_TRACKS[0];
+    const initialId = extractVideoId(initialTrack?.sourceId || initialTrack?.id || "NJAv_7lHUIU");
+
+    loadYoutubeApi()
+      .then((YT) => {
+        if (!active) return;
+        const container = document.getElementById("onion-yt-player-slot");
+        if (!container) return;
+
+        if (ytPlayerRef.current) {
+          try {
+            ytPlayerRef.current.destroy?.();
+          } catch {}
+        }
+
+        const player = new YT.Player("onion-yt-player-slot", {
+          height: "100%",
+          width: "100%",
+          videoId: initialId,
+          playerVars: {
+            autoplay: 0,
+            controls: 1,
+            playsinline: 1,
+            rel: 0,
+            enablejsapi: 1,
+            origin: typeof window !== "undefined" ? window.location.origin : undefined,
+          },
+          events: {
+            onReady: (event) => {
+              if (!active) return;
+              ytReadyRef.current = true;
+              const yt = youtubeEngine(event.target);
+              ytEngineRef.current = yt;
+              if (!nowPlaying?.streamUrl) {
+                audioRef.current = yt;
+              }
+              try {
+                event.target.setVolume(Math.round(volume * 100));
+                const applied = nearestRate(YT_RATES, tempoRef.current);
+                event.target.setPlaybackRate(applied);
+              } catch {}
+            },
+            onStateChange: (event) => {
+              if (!active) return;
+              const state = event.data;
+              if (state === 1) {
+                // Playing
+                setPlaying(true);
+                setBuffering(false);
+                try {
+                  const applied = nearestRate(YT_RATES, tempoRef.current);
+                  if (event.target && typeof event.target.setPlaybackRate === "function") {
+                    event.target.setPlaybackRate(applied);
+                  }
+                  const dur = event.target.getDuration();
+                  if (dur && dur > 0) setDuration(dur);
+                } catch {}
+              } else if (state === 2) {
+                // Paused
+                setPlaying(false);
+                setBuffering(false);
+              } else if (state === 3) {
+                // Buffering
+                setBuffering(true);
+              } else if (state === 0) {
+                // Ended
+                setPlaying(false);
+                setBuffering(false);
+                actionsRef.current.ended?.();
+              }
+            },
+            onError: (event) => {
+              console.warn("YouTube player error code:", event.data);
+              setBuffering(false);
+              // Video restricted or unavailable: auto-advance
+              if (event.data === 100 || event.data === 101 || event.data === 150) {
+                setTimeout(() => {
+                  actionsRef.current.skip?.(1);
+                }, 1000);
+              }
+            },
+          },
+        });
+
+        ytPlayerRef.current = player;
+      })
+      .catch((err) => console.warn("loadYoutubeApi error:", err));
+
+    return () => {
+      active = false;
+    };
   }, []);
+
+  const switchDisplayMode = (newMode) => {
+    setDisplayMode(newMode);
+  };
 
   /* Fetch initial tracks */
   const loadTracks = () => {
@@ -588,8 +662,8 @@ export default function MusicPage() {
     Promise.all([
       api.get("/music/albums?q=new%20album%202026&limit=12").catch(() => []),
       api.get("/music/tracks?limit=8").catch(() => []),
-    ]).then(([albums, top]) => {
-      if (!cancelled) setExplore({ albums, top });
+    ]).then(([fetchedAlbums, top]) => {
+      if (!cancelled) setExplore({ albums: fetchedAlbums, top });
     });
     return () => {
       cancelled = true;
@@ -598,7 +672,7 @@ export default function MusicPage() {
 
   /* Related songs for seed */
   const seedTrack = recent[0];
-  const seedId = seedTrack?.sourceId;
+  const seedId = seedTrack?.sourceId || seedTrack?.id;
   useEffect(() => {
     const seed = seedTrack;
     if (!seed?.artist && !seed?.sourceId) return;
@@ -606,7 +680,7 @@ export default function MusicPage() {
     api
       .get(
         `/music/related?title=${encodeURIComponent(seed.title || "")}` +
-          `&artist=${encodeURIComponent(seed.artist || "")}&exclude=${encodeURIComponent(seed.sourceId || "")}&limit=12`
+          `&artist=${encodeURIComponent(seed.artist || "")}&exclude=${encodeURIComponent(seed.sourceId || seed.id || "")}&limit=12`
       )
       .then((data) => {
         if (!cancelled && data.length) setForYou(data);
@@ -615,7 +689,7 @@ export default function MusicPage() {
     return () => {
       cancelled = true;
     };
-  }, [seedId]);
+  }, [seedId, seedTrack]);
 
   /* Debounced Search */
   useEffect(() => {
@@ -647,27 +721,7 @@ export default function MusicPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, searchMode]);
-
-  /* Synchronize track load */
-  useEffect(() => {
-    if (!track) return;
-    const audio = selectEngine(track);
-    if (!audio) return;
-    const source = sourceOf(track);
-    if (!source) return;
-
-    if (audio.dataset.sourceId !== String(source)) {
-      audio.dataset.sourceId = String(source);
-      audio.setSource(source, { autoplay });
-      if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
-        applyRates(audio, tempo, audio.canPitch ? pitch : 1);
-      }
-    }
-    if (autoplay && audio.paused) {
-      audio.play()?.catch?.(() => {});
-    }
-  }, [track?.sourceId, track?.streamUrl, autoplay]);
+  }, [query, searchMode, searches]);
 
   /* Record history */
   useEffect(() => {
@@ -675,11 +729,11 @@ export default function MusicPage() {
     const filtered = [track, ...recent.filter((t) => (t.sourceId || t.id) !== (track.sourceId || track.id))].slice(0, 20);
     setRecent(filtered);
     writeStorage(RECENT_KEY, filtered);
-  }, [track?.sourceId, autoplay]);
+  }, [track, autoplay, recent]);
 
   /* Loop */
   useEffect(() => {
-    if (audioRef.current) audioRef.current.loop = repeat;
+    if (mediaEngineRef.current) mediaEngineRef.current.loop = repeat;
   }, [repeat]);
 
   /* Progress ticker */
@@ -687,11 +741,13 @@ export default function MusicPage() {
     const timer = setInterval(() => {
       const audio = audioRef.current;
       if (!audio) return;
-      const cur = audio.currentTime;
-      const dur = audio.duration;
-      if (typeof cur === "number") setPosition(cur);
-      if (typeof dur === "number" && dur > 0) setDuration(dur);
-    }, 350);
+      try {
+        const cur = audio.currentTime;
+        const dur = audio.duration;
+        if (typeof cur === "number" && !Number.isNaN(cur)) setPosition(cur);
+        if (typeof dur === "number" && dur > 0 && !Number.isNaN(dur)) setDuration(dur);
+      } catch {}
+    }, 300);
     return () => clearInterval(timer);
   }, []);
 
@@ -721,8 +777,8 @@ export default function MusicPage() {
 
     const handlers = [
       ["play", () => actionsRef.current.resume?.()],
-      ["pause", () => audioRef.current?.pause()],
-      ["stop", () => audioRef.current?.pause()],
+      ["pause", () => audioRef.current?.pause?.()],
+      ["stop", () => audioRef.current?.pause?.()],
       ["previoustrack", () => actionsRef.current.skip?.(-1)],
       ["nexttrack", () => actionsRef.current.skip?.(1)],
       ["seekbackward", (d) => nudge(-(d?.seekOffset || SEEK_STEP))],
@@ -740,7 +796,7 @@ export default function MusicPage() {
         } catch {}
       }
     };
-  }, [track?.sourceId, track?.title, track?.artist, track?.artworkUrl, duration]);
+  }, [track, duration]);
 
   /* MediaSession position state */
   useEffect(() => {
@@ -809,7 +865,6 @@ export default function MusicPage() {
     }
     setStageIn(false);
     setBarVisible(true);
-    setSheetOpen(false);
     const timer = setTimeout(() => setStageMounted(false), STAGE_MS);
     return () => clearTimeout(timer);
   }, [expanded, narrow]);
@@ -829,32 +884,48 @@ export default function MusicPage() {
   };
 
   /* Playback handlers */
-  const play = (t) => {
+  const play = useCallback((t) => {
     if (!t) return;
     setAutoplay(true);
     setNowPlaying(t);
     setPlaying(true);
     setBuffering(false);
-    setQueue([t]);
+    setPosition(0);
+    setDuration(t.durationSec || t.durationSeconds || 0);
 
     const source = sourceOf(t);
+    const engine = selectEngine(t);
+    audioRef.current = engine;
 
     if (t.streamUrl) {
-      const audio = mediaEngineRef.current;
-      if (audio) {
-        audioRef.current = audio;
-        audio.setSource(t.streamUrl, { autoplay: true });
+      // Pause YouTube if playing
+      try {
+        ytEngineRef.current?.pause?.();
+      } catch {}
+      if (engine) {
+        engine.setSource(t.streamUrl, { autoplay: true });
         if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
-          applyRates(audio, tempo, audio.canPitch ? pitch : 1);
+          applyRates(engine, tempo, engine.canPitch ? pitch : 1);
         }
       }
     } else {
+      // Pause HTML5 audio if playing
+      try {
+        mediaEngineRef.current?.pause?.();
+      } catch {}
       const id = extractVideoId(source || t.sourceId || t.id);
-      if (iframeRef.current && id) {
-        const origin = typeof window !== "undefined" ? window.location.origin : "";
-        const url = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&enablejsapi=1&origin=${encodeURIComponent(origin)}&playsinline=1&controls=1&rel=0`;
-        iframeRef.current.src = url;
-        postIframeCommand("playVideo");
+      if (id) {
+        if (ytEngineRef.current) {
+          ytEngineRef.current.setSource(id, { autoplay: true });
+          if (!sameRate(tempo, 1)) {
+            applyRates(ytEngineRef.current, tempo, pitch);
+          }
+        } else if (ytPlayerRef.current?.loadVideoById) {
+          try {
+            ytPlayerRef.current.loadVideoById(id);
+            ytPlayerRef.current.playVideo?.();
+          } catch {}
+        }
       }
     }
 
@@ -862,7 +933,7 @@ export default function MusicPage() {
     api
       .get(
         `/music/related?title=${encodeURIComponent(t.title || "")}` +
-          `&artist=${encodeURIComponent(t.artist || "")}&exclude=${encodeURIComponent(t.sourceId || "")}`
+          `&artist=${encodeURIComponent(t.artist || "")}&exclude=${encodeURIComponent(t.sourceId || t.id || "")}`
       )
       .then((related) => {
         if (related && related.length) setQueue([t, ...related]);
@@ -870,35 +941,40 @@ export default function MusicPage() {
       .catch(() => {
         setQueue([t, ...(tracksRef.current || []).filter((x) => (x.sourceId || x.id) !== (t.sourceId || t.id))]);
       });
-  };
+  }, [selectEngine, tempo, pitch]);
 
-  const resume = () => {
+  const resume = useCallback(() => {
     setAutoplay(true);
     setPlaying(true);
     if (nowPlaying?.streamUrl) {
       mediaEngineRef.current?.play?.();
     } else {
-      postIframeCommand("playVideo");
+      ytEngineRef.current?.play?.();
+      try {
+        ytPlayerRef.current?.playVideo?.();
+      } catch {}
     }
-  };
+  }, [nowPlaying?.streamUrl]);
 
-  const toggle = () => {
+  const toggle = useCallback(() => {
     if (playing) {
       setPlaying(false);
       if (nowPlaying?.streamUrl) {
         mediaEngineRef.current?.pause?.();
       } else {
-        postIframeCommand("pauseVideo");
+        ytEngineRef.current?.pause?.();
+        try {
+          ytPlayerRef.current?.pauseVideo?.();
+        } catch {}
       }
     } else {
       resume();
     }
-  };
+  }, [playing, nowPlaying?.streamUrl, resume]);
 
-  const skip = (delta) => {
+  const skip = useCallback((delta) => {
     const list = queueRef.current?.length ? queueRef.current : tracksRef.current;
     if (!list?.length) return;
-    setAutoplay(true);
     if (shuffle && delta > 0) {
       const randomTrack = list[Math.floor(Math.random() * list.length)];
       play(randomTrack);
@@ -906,14 +982,19 @@ export default function MusicPage() {
     }
     const curId = nowPlaying?.sourceId || nowPlaying?.id;
     const i = list.findIndex((t) => (t.sourceId || t.id) === curId);
-    const nextIdx = Math.min(list.length - 1, Math.max(0, i + delta));
-    play(list[nextIdx]);
-  };
+    let nextIdx = i + delta;
+    if (nextIdx < 0) nextIdx = 0;
+    if (nextIdx >= list.length) nextIdx = repeat ? 0 : list.length - 1;
+    if (list[nextIdx]) play(list[nextIdx]);
+  }, [nowPlaying, shuffle, repeat, play]);
 
-  const onEnded = () => {
+  const onEnded = useCallback(() => {
+    if (repeat && nowPlaying) {
+      play(nowPlaying);
+      return;
+    }
     const list = queueRef.current?.length ? queueRef.current : tracksRef.current;
     if (!list?.length) return;
-    setAutoplay(true);
     if (shuffle) {
       play(list[Math.floor(Math.random() * list.length)]);
       return;
@@ -925,7 +1006,7 @@ export default function MusicPage() {
     } else {
       setPlaying(false);
     }
-  };
+  }, [repeat, nowPlaying, shuffle, play]);
 
   actionsRef.current = { toggle, skip, resume, ended: onEnded };
 
@@ -950,10 +1031,8 @@ export default function MusicPage() {
     if (scrubbing === null) return;
     const to = duration ? ratioFrom(event, event.currentTarget) * duration : 0;
     setPosition(to);
-    if (nowPlaying?.streamUrl) {
-      if (mediaEngineRef.current) mediaEngineRef.current.currentTime = to;
-    } else {
-      postIframeCommand("seekTo", [to, true]);
+    if (audioRef.current) {
+      audioRef.current.currentTime = to;
     }
     setScrubbing(null);
   };
@@ -972,12 +1051,17 @@ export default function MusicPage() {
 
     setTempo(wantTempo);
     setPitch(wantPitch);
+    tempoRef.current = wantTempo;
+    pitchRef.current = wantPitch;
 
-    if (nowPlaying?.streamUrl) {
-      mediaEngineRef.current?.setRates?.(wantTempo, wantPitch);
-    } else {
-      const applied = nearestRate(YT_RATES, wantTempo);
-      postIframeCommand("setPlaybackRate", [applied]);
+    if (audioRef.current) {
+      applyRates(audioRef.current, wantTempo, wantPitch);
+    }
+    if (ytPlayerRef.current?.setPlaybackRate) {
+      try {
+        const applied = nearestRate(YT_RATES, wantTempo);
+        ytPlayerRef.current.setPlaybackRate(applied);
+      } catch {}
     }
   };
 
@@ -1008,8 +1092,8 @@ export default function MusicPage() {
     setRatesBefore({ tempo, pitch, unhook });
     setRateNote(
       isYouTubeTrack
-        ? "YouTube Player active: Speed adjustments (0.25x – 2.0x) apply to YouTube video streams. Key pitch correction is managed by YouTube's player."
-        : "Direct Audio active: Pitch and Tempo adjust via Web Audio / HTML5 audio rate engine."
+        ? "YouTube Player active: Speed adjustments (0.25x – 2.0x) apply to music playback. YouTube automatically maintains the musical key/pitch."
+        : "Direct Audio active: Linked mode shifts pitch & tempo together (vinyl style). Unhooked mode preserves pitch."
     );
     setRatesOpen(true);
   };
@@ -1033,11 +1117,9 @@ export default function MusicPage() {
     setVolume(val);
     if (muted) setMuted(false);
 
-    if (nowPlaying?.streamUrl) {
-      if (mediaEngineRef.current) mediaEngineRef.current.volume = val;
-    } else {
-      postIframeCommand("setVolume", [Math.round(val * 100)]);
-      if (muted) postIframeCommand("unMute");
+    if (audioRef.current) {
+      audioRef.current.volume = val;
+      if (muted) audioRef.current.muted = false;
     }
   };
 
@@ -1045,11 +1127,8 @@ export default function MusicPage() {
     const nextMuted = !muted;
     setMuted(nextMuted);
 
-    if (nowPlaying?.streamUrl) {
-      if (mediaEngineRef.current) mediaEngineRef.current.muted = nextMuted;
-    } else {
-      if (nextMuted) postIframeCommand("mute");
-      else postIframeCommand("unMute");
+    if (audioRef.current) {
+      audioRef.current.muted = nextMuted;
     }
   };
 
@@ -1198,38 +1277,60 @@ export default function MusicPage() {
   return (
     <div style={{ background: colors.bg, minHeight: "100vh", fontFamily: bodyFont, color: colors.text }}>
       {/* HTML5 Audio element */}
-      {/* crossOrigin: see the note on the other <audio> below. */}
-      <audio ref={mediaElRef} crossOrigin="anonymous" preload="metadata" playsInline style={{ display: "none" }} />
+      <audio ref={mediaElRef} crossOrigin="anonymous" preload="auto" playsInline style={{ display: "none" }} />
 
-      {/* Global persistent YouTube host container (keeps playing across view changes) */}
+      {/* Global persistent YouTube Player host */}
       <div
         id="onion-yt-global-wrapper"
         style={{
           position: "fixed",
+          transition: "all 0.35s cubic-bezier(0.16, 1, 0.3, 1)",
           ...(expanded && displayMode === "video"
             ? {
                 top: "50%",
-                left: narrow ? "50%" : "calc(50% - 170px)",
+                left: narrow ? "50%" : "calc(50% - 160px)",
                 transform: "translate(-50%, -50%)",
-                width: narrow ? "min(92vw, 420px)" : "min(56vw, 680px)",
+                width: narrow ? "min(92vw, 440px)" : "min(58vw, 720px)",
                 aspectRatio: "16 / 9",
-                zIndex: 60,
-                borderRadius: 12,
+                zIndex: 66,
+                opacity: 1,
+                pointerEvents: "auto",
+                borderRadius: 16,
                 overflow: "hidden",
-                boxShadow: "0 25px 60px rgba(0,0,0,0.85)",
+                boxShadow: "0 25px 70px rgba(0,0,0,0.95), 0 0 40px rgba(123,38,133,0.35)",
+                border: "1px solid rgba(255,255,255,0.2)",
+              }
+            : expanded && displayMode === "song"
+            ? {
+                bottom: narrow ? NAV_HEIGHT + 75 : BAR_HEIGHT + 24,
+                right: 24,
+                width: narrow ? 140 : 200,
+                height: narrow ? 80 : 112,
+                zIndex: 60,
+                opacity: 0.95,
+                pointerEvents: "auto",
+                borderRadius: 10,
+                overflow: "hidden",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.9)",
+                border: "1px solid rgba(255,255,255,0.2)",
               }
             : {
-                top: -9999,
-                left: -9999,
-                width: 356,
-                height: 200,
-                opacity: 0,
-                pointerEvents: "none",
-                zIndex: 1,
+                bottom: narrow ? NAV_HEIGHT + 8 : BAR_HEIGHT + 12,
+                right: 16,
+                width: narrow ? 130 : 220,
+                height: narrow ? 74 : 124,
+                zIndex: 48,
+                opacity: nowPlaying ? 1 : 0,
+                pointerEvents: nowPlaying ? "auto" : "none",
+                borderRadius: 10,
+                overflow: "hidden",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.85)",
+                border: "1px solid rgba(255,255,255,0.15)",
               }),
+          background: "#000",
         }}
       >
-        <div id="onion-yt-host" style={{ width: "100%", height: "100%" }} />
+        <div id="onion-yt-player-slot" style={{ width: "100%", height: "100%" }} />
       </div>
 
       <style>{`
@@ -1626,12 +1727,11 @@ export default function MusicPage() {
                 {displayMode === "song" ? (
                   <div
                     onClick={toggle}
-                    className={`rounded-full cursor-pointer overflow-hidden border-[6px] border-neutral-900 shadow-[0_20px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(168,85,247,0.2)] relative flex items-center justify-center select-none ${
-                      playing ? "vinyl-playing" : "vinyl-paused"
-                    }`}
+                    className="rounded-full cursor-pointer overflow-hidden border-[6px] border-neutral-900 shadow-[0_20px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(168,85,247,0.2)] relative flex items-center justify-center select-none"
                     style={{
                       width: "min(320px, 76vw)",
                       aspectRatio: "1 / 1",
+                      animation: playing ? `vinyl-spin ${Math.max(1.5, 20 / tempo)}s linear infinite` : "none",
                       background: track?.artworkUrl
                         ? `radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.3) 100%), url(${track.artworkUrl}) center/cover no-repeat`
                         : colors.bgElevated,
@@ -1724,12 +1824,11 @@ export default function MusicPage() {
                 {displayMode === "song" ? (
                   <div
                     onClick={toggle}
-                    className={`rounded-full cursor-pointer overflow-hidden border-[8px] border-neutral-900 shadow-[0_30px_90px_rgba(0,0,0,0.95),0_0_40px_rgba(168,85,247,0.25)] relative flex items-center justify-center select-none ${
-                      playing ? "vinyl-playing" : "vinyl-paused"
-                    }`}
+                    className="rounded-full cursor-pointer overflow-hidden border-[8px] border-neutral-900 shadow-[0_30px_90px_rgba(0,0,0,0.95),0_0_40px_rgba(168,85,247,0.25)] relative flex items-center justify-center select-none"
                     style={{
                       height: "min(420px, 48vh)",
                       aspectRatio: "1 / 1",
+                      animation: playing ? `vinyl-spin ${Math.max(1.5, 20 / tempo)}s linear infinite` : "none",
                       background: track?.artworkUrl
                         ? `radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.3) 100%), url(${track.artworkUrl}) center/cover no-repeat`
                         : colors.bgElevated,
@@ -1839,7 +1938,9 @@ export default function MusicPage() {
           {track?.artworkUrl ? (
             <img src={track.artworkUrl} alt="" width={46} height={46} className="rounded object-cover flex-shrink-0 shadow" />
           ) : (
-            <div className="w-[46px] h-[46px] rounded bg-neutral-800 flex-shrink-0" />
+            <div className="w-[46px] h-[46px] rounded bg-neutral-800 flex-shrink-0 flex items-center justify-center">
+              <Music size={20} color={colors.textMuted} />
+            </div>
           )}
           <span className="min-w-0">
             <span style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: colors.text }} className="truncate">
@@ -1958,10 +2059,36 @@ export default function MusicPage() {
               Playback Speed &amp; Pitch
             </div>
 
+            {/* Preset Speeds */}
+            <div className="py-2">
+              <div className="text-xs font-bold text-neutral-400 uppercase mb-2">Speed Presets</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+                  <button
+                    key={rate}
+                    onClick={() => {
+                      if (!unhook) commitRates(rate, rate);
+                      else commitRates(rate, pitch);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold border-none cursor-pointer transition-all"
+                    style={{
+                      background: sameRate(tempo, rate) ? colors.accent : "rgba(255,255,255,0.08)",
+                      color: "#fff",
+                      border: sameRate(tempo, rate) ? `1px solid ${colors.accentLight}` : "1px solid transparent",
+                    }}
+                  >
+                    {rate === 1.0 ? "1.0x (Normal)" : `${rate}x`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-white/10 my-3" />
+
             {/* Tempo Slider */}
             <div className="py-2">
               <div className="flex items-center justify-between text-xs font-bold text-neutral-400 uppercase mb-2">
-                <span>Tempo</span>
+                <span>Tempo / Speed</span>
                 <span className="text-white text-base font-mono">{tempo.toFixed(2)}x</span>
               </div>
               <div className="flex items-center gap-3">
@@ -1998,7 +2125,7 @@ export default function MusicPage() {
             {/* Pitch Slider */}
             <div className="py-2">
               <div className="flex items-center justify-between text-xs font-bold text-neutral-400 uppercase mb-2">
-                <span>Pitch</span>
+                <span>Pitch / Key {!unhook ? "(Linked with Tempo)" : "(Independent)"}</span>
                 <span className="text-white text-base font-mono">{Math.round(pitch * 100)}%</span>
               </div>
               <div className="flex items-center gap-3">
@@ -2074,8 +2201,8 @@ export default function MusicPage() {
                 </span>
                 <span className="block text-xs text-neutral-400 mt-1 leading-relaxed">
                   {unhook
-                    ? "Set apart. Speed can change without the key going with it."
-                    : "Tied together, like a record spun faster — moving one moves the other."}
+                    ? "Set apart. Speed changes without the key going with it."
+                    : "Linked together like a vinyl record — moving tempo shifts pitch proportionally."}
                 </span>
               </span>
             </button>
@@ -2112,85 +2239,6 @@ export default function MusicPage() {
           </div>
         </>
       )}
-
-      {/* Persistent Audio & Video Players */}
-      <audio
-        ref={mediaElRef}
-        crossOrigin="anonymous"
-        preload="auto"
-        playsInline
-        style={{ position: "fixed", bottom: -9999, left: -9999, opacity: 0, pointerEvents: "none" }}
-      />
-
-      {/* Visible Floating & Stage Player */}
-      <div
-        id="onion-yt-global-wrapper"
-        style={{
-          position: "fixed",
-          transition: "all 0.3s ease",
-          ...(displayMode === "video" && expanded
-            ? {
-                top: 70,
-                left: "50%",
-                transform: "translateX(-50%)",
-                width: narrow ? "min(92vw, 480px)" : "min(800px, 60vw)",
-                height: narrow ? "240px" : "min(460px, 48vh)",
-                zIndex: 65,
-                opacity: nowPlaying ? 1 : 0,
-                pointerEvents: nowPlaying ? "auto" : "none",
-                borderRadius: "16px",
-                overflow: "hidden",
-                boxShadow: "0 25px 60px rgba(0,0,0,0.95)",
-                border: "1px solid rgba(255,255,255,0.15)",
-              }
-            : expanded && displayMode === "song"
-            ? {
-                bottom: narrow ? NAV_HEIGHT + 70 : BAR_HEIGHT + 20,
-                right: 20,
-                width: narrow ? "140px" : "200px",
-                height: narrow ? "80px" : "112px",
-                zIndex: 60,
-                opacity: nowPlaying ? 0.92 : 0,
-                pointerEvents: nowPlaying ? "auto" : "none",
-                borderRadius: "10px",
-                overflow: "hidden",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.9)",
-                border: "1px solid rgba(255,255,255,0.2)",
-              }
-            : {
-                bottom: narrow ? NAV_HEIGHT + 6 : BAR_HEIGHT + 10,
-                right: 14,
-                width: narrow ? "130px" : "220px",
-                height: narrow ? "74px" : "124px",
-                zIndex: 48,
-                opacity: nowPlaying ? 1 : 0,
-                pointerEvents: nowPlaying ? "auto" : "none",
-                borderRadius: "10px",
-                overflow: "hidden",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.85)",
-                border: "1px solid rgba(255,255,255,0.15)",
-              }),
-          background: "#000",
-        }}
-      >
-        <iframe
-          ref={iframeRef}
-          id="onion-yt-player-iframe"
-          title="Onion Player"
-          src={
-            nowPlaying?.sourceId
-              ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(
-                  extractVideoId(nowPlaying.sourceId)
-                )}?autoplay=1&enablejsapi=1&origin=${encodeURIComponent(
-                  typeof window !== "undefined" ? window.location.origin : ""
-                )}&playsinline=1&controls=1&rel=0`
-              : ""
-          }
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          style={{ width: "100%", height: "100%", border: "none" }}
-        />
-      </div>
     </div>
   );
 }
