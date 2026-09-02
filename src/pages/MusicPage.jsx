@@ -11,6 +11,7 @@ import OnionMark from "../components/shared/OnionMark";
 import BrandWord from "../components/shared/BrandWord";
 import ExploreView from "../components/music/ExploreView";
 import api from "../api/client";
+import { createPitchShifter } from "../utils/pitchShifter";
 
 /*
  * Onion Music.
@@ -87,6 +88,44 @@ function loadYoutubeApi() {
   return apiPromise;
 }
 
+let globalAudioCtx = null;
+let globalPitchShifter = null;
+let globalSourceNode = null;
+
+function getPitchShifter(el) {
+  if (!globalAudioCtx && typeof window !== "undefined") {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) {
+      globalAudioCtx = new AudioCtx();
+    }
+  }
+  if (globalAudioCtx && !globalPitchShifter && el) {
+    try {
+      if (!globalSourceNode) {
+        globalSourceNode = globalAudioCtx.createMediaElementSource(el);
+      }
+      globalPitchShifter = createPitchShifter(globalAudioCtx);
+      globalSourceNode.connect(globalPitchShifter.input);
+      globalPitchShifter.output.connect(globalAudioCtx.destination);
+    } catch (e) {
+      console.warn("Web Audio pitch shifter note:", e.message);
+    }
+  }
+  if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+    globalAudioCtx.resume().catch(() => {});
+  }
+  return globalPitchShifter;
+}
+
+function semitonesFromPitch(pitch) {
+  const semitones = Math.round(12 * Math.log2(pitch || 1.0));
+  return semitones > 0 ? `+${semitones} st` : semitones < 0 ? `${semitones} st` : "Normal Key (0 st)";
+}
+
+function pitchFromSemitones(semitones) {
+  return Math.pow(2, semitones / 12);
+}
+
 /* HTML5 Media Engine */
 function mediaEngine(el) {
   return {
@@ -101,13 +140,19 @@ function mediaEngine(el) {
     set loop(value) {
       el.loop = value;
     },
-    play: () => el.play(),
+    play: () => {
+      if (globalAudioCtx?.state === "suspended") globalAudioCtx.resume().catch(() => {});
+      return el.play();
+    },
     pause: () => el.pause(),
     load: () => el.load(),
     setSource(url, { autoplay } = {}) {
       el.src = url;
       el.load();
-      if (autoplay) el.play().catch(() => {});
+      if (autoplay) {
+        if (globalAudioCtx?.state === "suspended") globalAudioCtx.resume().catch(() => {});
+        el.play().catch(() => {});
+      }
     },
     get paused() {
       return el.paused;
@@ -138,13 +183,27 @@ function mediaEngine(el) {
     },
     setRates(tempo, pitch) {
       const hooked = sameRate(pitch, tempo);
-      const preserve = !hooked;
       try {
-        el.playbackRate = tempo;
-        el.preservesPitch = preserve;
-        if ("mozPreservesPitch" in el) el.mozPreservesPitch = preserve;
-        if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = preserve;
-      } catch {}
+        if (hooked) {
+          // Vinyl Turntable Mode: Hardware resampling shifts both tempo and pitch naturally!
+          el.playbackRate = tempo;
+          el.preservesPitch = false;
+          if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
+          if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
+          const shifter = getPitchShifter(el);
+          if (shifter) shifter.setPitch(1.0);
+        } else {
+          // Unhooked Mode: Tempo sets playback rate, Web Audio pitch shifter shifts pitch independently!
+          el.playbackRate = tempo;
+          el.preservesPitch = true;
+          if ("mozPreservesPitch" in el) el.mozPreservesPitch = true;
+          if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = true;
+          const shifter = getPitchShifter(el);
+          if (shifter) shifter.setPitch(pitch);
+        }
+      } catch (err) {
+        console.warn("setRates error:", err);
+      }
       return { tempo, pitch };
     },
   };
@@ -2302,7 +2361,9 @@ export default function MusicPage() {
             <div className="py-2">
               <div className="flex items-center justify-between text-xs font-bold text-neutral-400 uppercase mb-2">
                 <span>Pitch / Key {!unhook ? "(Linked with Tempo)" : "(Independent)"}</span>
-                <span className="text-white text-base font-mono">{Math.round(pitch * 100)}%</span>
+                <span className="text-white text-base font-mono">
+                  {Math.round(pitch * 100)}% <span className="text-xs text-purple-300 ml-1">({semitonesFromPitch(pitch)})</span>
+                </span>
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -2328,8 +2389,42 @@ export default function MusicPage() {
                 </button>
               </div>
               <div className="flex items-center justify-between text-[11px] text-neutral-500 mt-1 px-8">
-                <span>{Math.round(RATE_MIN * 100)}%</span>
-                <span>{Math.round(RATE_MAX * 100)}%</span>
+                <span>{Math.round(RATE_MIN * 100)}% (-12 st)</span>
+                <span>{Math.round(RATE_MAX * 100)}% (+12 st)</span>
+              </div>
+            </div>
+
+            {/* Pitch Presets */}
+            <div className="py-2">
+              <div className="text-xs font-bold text-neutral-400 uppercase mb-2">Pitch Presets</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {[
+                  [-5, "-5 st (Deep Bass)"],
+                  [-2, "-2 st (Lower)"],
+                  [0, "Original (0 st)"],
+                  [2, "+2 st (Higher)"],
+                  [4, "+4 st (Nightcore)"],
+                ].map(([st, label]) => {
+                  const targetPitch = pitchFromSemitones(st);
+                  const isSelected = Math.abs(pitch - targetPitch) < 0.03;
+                  return (
+                    <button
+                      key={st}
+                      onClick={() => {
+                        if (!unhook) setUnhook(true);
+                        commitRates(tempo, targetPitch);
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold border-none cursor-pointer transition-all"
+                      style={{
+                        background: isSelected ? colors.accent : "rgba(255,255,255,0.08)",
+                        color: "#fff",
+                        border: isSelected ? `1px solid ${colors.accentLight}` : "1px solid transparent",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

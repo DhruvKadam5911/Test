@@ -51,6 +51,7 @@ Legend: ✅ working · 🟡 partial or simulated · ⛔ not built · 🗑️ dea
 | Pool-fetch error UX | ✅ | Replaces Originals and the genre rows with one error row + Retry (plan 1.6, 2026-08-31) |
 | Music playback | ✅ | Dual-engine player (YouTube IFrame API player + HTML5 Audio for streams), interactive scrubber, volume/mute, tempo/pitch modal, vinyl stage view with ambient blur, song/video mode switcher, dynamic queue, and search (2026-09-02) |
 | Synced Lyrics (Karaoke) | ✅ | Real-time line-by-line synchronized lyrics via LRCLIB API with glowing active line highlight, automatic centering scroll, and tap-to-seek karaoke jump (2026-09-03) |
+| Web Audio API Pitch Shifter | ✅ | Real-time granular pitch shifting (-12 to +12 semitones) without altering tempo, equal-power crossfading, semitone readouts, and quick presets (Deep Bass to Nightcore) (2026-09-03) |
 | 404 route | ⛔ | Unmatched paths render blank |
 | Auth UI | ⛔ | Removed in `0f4f40b` |
 | Continue Watching | ⛔ | |
@@ -135,6 +136,7 @@ Detailed in [tech-spec.md](tech-spec.md) §7. Originally T1–T10; **T1–T7 res
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-09-03 | — | **Real-Time Web Audio API Pitch Shifter added.** Integrated granular delay-modulation pitch shifter (`utils/pitchShifter.js`) connected to browser `AudioContext`. Enables true real-time vocal pitch shifting from -12 semitones to +12 semitones (0.25x to 4.0x) completely independently from playback speed. Added quick pitch presets (`-5 st Deep Bass`, `-2 st`, `Original Key`, `+2 st`, `+4 st Nightcore`) and semitone indicators in the Playback Speed & Pitch modal |
 | 2026-09-03 | — | **Real-Time Synced Lyrics (Karaoke Mode) added.** Integrated LRCLIB lyrics service (`services/lyrics.js`) and `/music/lyrics` endpoint with millisecond-precision `.lrc` timestamp parsing. Fullscreen Stage View gained interactive `Lyrics` mode switcher with auto-centering smooth scroll, glowing active lyric line, and tap-to-seek karaoke jump |
 | 2026-09-02 | — | **Direct 320kbps High-Fidelity Audio Streaming & True Real-Time Pitch Shifting added.** Integrated Saavn direct audio CDN provider (`services/saavn.js`) with 3DES (`des-ede3`) decryption of direct 320kbps MP4/AAC streams, 500x500 high-res artwork, search, albums, and recommendations. HTML5 `<audio>` engine natively executes real-time pitch and tempo adjustments (`preservesPitch = false` for vinyl mode, `preservesPitch = true` for unhooked mode), with YouTube IFrame Player maintained as seamless dual-engine fallback |
 | 2026-09-02 | — | **Music playback fully restored and functional.** Fixed broken `selectEngine` ReferenceError, properly integrated and instantiated the YouTube IFrame API player (`new window.YT.Player`), hooked active engine state to `audioRef.current`, wired all transport controls (play/pause, real-time scrubber with drag-to-seek, volume slider, mute, next/prev queue advance, speed & pitch adjuster, and auto-skip on restricted videos), and polished the vinyl record animation and 16:9 theater video stage view |
