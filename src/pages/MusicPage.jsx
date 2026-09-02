@@ -565,6 +565,15 @@ export default function MusicPage() {
   const rateStep = RATE_STEP_DEFAULT;
   const [ratesOpen, setRatesOpen] = useState(false);
   const [ratesBefore, setRatesBefore] = useState(null);
+  const [drawerClosing, setDrawerClosing] = useState(false);
+
+  const closeDrawer = useCallback(() => {
+    setDrawerClosing(true);
+    setTimeout(() => {
+      setRatesOpen(false);
+      setDrawerClosing(false);
+    }, 200);
+  }, []);
 
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
@@ -1291,7 +1300,7 @@ export default function MusicPage() {
       setUnhook(ratesBefore.unhook);
       commitRates(ratesBefore.tempo, ratesBefore.pitch, ratesBefore.soundEffect, ratesBefore.reverb);
     }
-    setRatesOpen(false);
+    closeDrawer();
   };
 
   const resetRates = () => {
@@ -1573,11 +1582,21 @@ export default function MusicPage() {
         @keyframes onionDrawerUp {
           0% {
             opacity: 0;
-            transform: translate(-50%, 28px) scale(0.96);
+            transform: translateY(20px) scale(0.97);
           }
           100% {
             opacity: 1;
-            transform: translate(-50%, 0) scale(1);
+            transform: translateY(0) scale(1);
+          }
+        }
+        @keyframes onionDrawerDown {
+          0% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(20px) scale(0.97);
           }
         }
       `}</style>
@@ -2350,7 +2369,7 @@ export default function MusicPage() {
       {ratesOpen && (
         <>
           <div
-            onClick={() => setRatesOpen(false)}
+            onClick={() => closeDrawer()}
             className="fixed inset-0 z-[70]"
             style={{ background: "transparent" }}
           />
@@ -2369,7 +2388,9 @@ export default function MusicPage() {
               boxShadow: "0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)",
               zIndex: 71,
               padding: "14px 16px 16px",
-              animation: "onionDrawerUp 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
+              animation: drawerClosing
+                ? "onionDrawerDown 200ms cubic-bezier(0.4, 0, 1, 1) forwards"
+                : "onionDrawerUp 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
             }}
           >
             {/* Header */}
@@ -2388,7 +2409,7 @@ export default function MusicPage() {
                   <RotateCcw size={10} /> Reset
                 </button>
                 <button
-                  onClick={() => setRatesOpen(false)}
+                  onClick={() => closeDrawer()}
                   style={{ padding: 4, borderRadius: 8, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", transition: "all 0.15s" }}
                 >
                   <X size={14} />
