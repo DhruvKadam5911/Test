@@ -23,7 +23,7 @@
 import * as peertube from "./peertube.js";
 import * as youtube from "./youtube.js";
 
-const SOURCE = () => (process.env.MUSIC_SOURCE || "peertube").toLowerCase();
+const SOURCE = () => (process.env.MUSIC_SOURCE || "youtube").toLowerCase();
 
 export function activeSource() {
   const name = SOURCE();
