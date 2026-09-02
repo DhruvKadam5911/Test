@@ -74,7 +74,7 @@ export function createPitchShifter(audioContext) {
   trebleShelf.connect(antiCombFilter);
 
   const NUM_GRAINS = 4;
-  const BASE_GRAIN_TIME = 0.080; // 80ms optimized for clear vocal & bass response without phase distortion
+  const BASE_GRAIN_TIME = 0.080; // 80ms optimized for clear vocal & bass response
   const grainSamples = Math.round(BASE_GRAIN_TIME * sampleRate);
 
   // Hanning window fade buffer for seamless overlap-add crossfading
@@ -84,38 +84,35 @@ export function createPitchShifter(audioContext) {
     fadeData[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / grainSamples));
   }
 
-  // Pitch-down delay buffer: delay increases from 0 to BASE_GRAIN_TIME
-  const delayDownBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
-  const downData = delayDownBuffer.getChannelData(0);
+  // Normalized linear sawtooth ramp [0 -> 1]
+  const rampBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
+  const rampData = rampBuffer.getChannelData(0);
   for (let i = 0; i < grainSamples; i++) {
-    downData[i] = (i / grainSamples) * BASE_GRAIN_TIME;
-  }
-
-  // Pitch-up delay buffer: delay decreases from BASE_GRAIN_TIME down to 0
-  const delayUpBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
-  const upData = delayUpBuffer.getChannelData(0);
-  for (let i = 0; i < grainSamples; i++) {
-    upData[i] = (1 - i / grainSamples) * BASE_GRAIN_TIME;
+    rampData[i] = i / grainSamples;
   }
 
   const delayNodes = [];
   const grainGains = [];
+  const lfoGains = [];
   const delayLFOs = [];
   const fadeLFOs = [];
 
   for (let i = 0; i < NUM_GRAINS; i++) {
     const delay = audioContext.createDelay(1.0);
-    const gain = audioContext.createGain();
+    const grainGain = audioContext.createGain();
+    const lfoGain = audioContext.createGain();
 
     delay.delayTime.value = 0;
-    gain.gain.value = 0;
+    grainGain.gain.value = 0;
+    lfoGain.gain.value = BASE_GRAIN_TIME;
 
     antiCombFilter.connect(delay);
-    delay.connect(gain);
-    gain.connect(pitchPath);
+    delay.connect(grainGain);
+    grainGain.connect(pitchPath);
 
     delayNodes.push(delay);
-    grainGains.push(gain);
+    grainGains.push(grainGain);
+    lfoGains.push(lfoGain);
   }
 
   let isPitchEngineStarted = false;
@@ -128,14 +125,15 @@ export function createPitchShifter(audioContext) {
 
       for (let i = 0; i < NUM_GRAINS; i++) {
         const dLFO = audioContext.createBufferSource();
-        dLFO.buffer = delayDownBuffer;
+        dLFO.buffer = rampBuffer;
         dLFO.loop = true;
 
         const fLFO = audioContext.createBufferSource();
         fLFO.buffer = fadeBuffer;
         fLFO.loop = true;
 
-        dLFO.connect(delayNodes[i].delayTime);
+        dLFO.connect(lfoGains[i]);
+        lfoGains[i].connect(delayNodes[i].delayTime);
         fLFO.connect(grainGains[i].gain);
 
         const offsetTime = i * phaseOffset;
@@ -205,15 +203,19 @@ export function createPitchShifter(audioContext) {
     const isPitchUp = speed >= 0;
 
     for (let i = 0; i < NUM_GRAINS; i++) {
-      if (delayLFOs[i]) {
-        // Swap buffer cleanly if direction changed:
-        if (isPitchUp && delayLFOs[i].buffer !== delayUpBuffer) {
-          delayLFOs[i].buffer = delayUpBuffer;
-        } else if (!isPitchUp && delayLFOs[i].buffer !== delayDownBuffer) {
-          delayLFOs[i].buffer = delayDownBuffer;
-        }
+      if (delayLFOs[i] && lfoGains[i]) {
         delayLFOs[i].playbackRate.setTargetAtTime(lfoRate, now, 0.02);
         fadeLFOs[i].playbackRate.setTargetAtTime(lfoRate, now, 0.02);
+
+        if (isPitchUp) {
+          // Pitch Up (delay ramp goes from BASE_GRAIN_TIME down to 0)
+          delayNodes[i].delayTime.setTargetAtTime(BASE_GRAIN_TIME, now, 0.02);
+          lfoGains[i].gain.setTargetAtTime(-BASE_GRAIN_TIME, now, 0.02);
+        } else {
+          // Pitch Down (delay ramp goes from 0 up to BASE_GRAIN_TIME)
+          delayNodes[i].delayTime.setTargetAtTime(0, now, 0.02);
+          lfoGains[i].gain.setTargetAtTime(BASE_GRAIN_TIME, now, 0.02);
+        }
       }
     }
   }
