@@ -51,22 +51,37 @@ const sameRate = (a, b) => Math.abs(a - b) < 0.005;
 /* Load YouTube Iframe API once */
 let apiPromise = null;
 function loadYoutubeApi() {
-  if (typeof window !== "undefined" && window.YT?.Player) {
+  if (typeof window === "undefined") return Promise.reject(new Error("No window"));
+  if (window.YT && typeof window.YT.Player === "function") {
     return Promise.resolve(window.YT);
   }
   if (apiPromise) return apiPromise;
+
   apiPromise = new Promise((resolve) => {
-    const previous = window.onYouTubeIframeAPIReady;
+    const interval = setInterval(() => {
+      if (window.YT && typeof window.YT.Player === "function") {
+        clearInterval(interval);
+        resolve(window.YT);
+      }
+    }, 50);
+
+    const prevReady = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
-      previous?.();
-      resolve(window.YT);
+      prevReady?.();
+      if (window.YT && typeof window.YT.Player === "function") {
+        clearInterval(interval);
+        resolve(window.YT);
+      }
     };
+
     if (!document.querySelector(`script[src="${IFRAME_API}"]`)) {
       const script = document.createElement("script");
       script.src = IFRAME_API;
+      script.async = true;
       document.head.appendChild(script);
     }
   });
+
   return apiPromise;
 }
 
@@ -447,8 +462,10 @@ export default function MusicPage() {
           height: "100%",
           width: "100%",
           playerVars: {
-            autoplay: 0,
+            autoplay: 1,
             controls: 1,
+            enablejsapi: 1,
+            origin: typeof window !== "undefined" ? window.location.origin : undefined,
             modestbranding: 1,
             rel: 0,
             playsinline: 1,
@@ -460,9 +477,8 @@ export default function MusicPage() {
               ytPlayerRef.current = event.target;
               const engine = youtubeEngine(event.target);
               youtubeEngineRef.current = engine;
-              if (!audioRef.current && (!nowPlaying || !nowPlaying.streamUrl)) {
-                audioRef.current = engine;
-              }
+              audioRef.current = engine;
+
               if (pendingTrackRef.current) {
                 const pending = pendingTrackRef.current;
                 pendingTrackRef.current = null;
@@ -472,16 +488,17 @@ export default function MusicPage() {
               }
             },
             onStateChange: (event) => {
-              if (event.data === YT.PlayerState.PLAYING) {
+              const state = event.data;
+              if (state === 1 || state === window.YT?.PlayerState?.PLAYING) {
                 setPlaying(true);
                 setBuffering(false);
                 const d = ytPlayerRef.current?.getDuration?.();
                 if (d) setDuration(d);
-              } else if (event.data === YT.PlayerState.PAUSED) {
+              } else if (state === 2 || state === window.YT?.PlayerState?.PAUSED) {
                 setPlaying(false);
-              } else if (event.data === YT.PlayerState.BUFFERING) {
+              } else if (state === 3 || state === window.YT?.PlayerState?.BUFFERING) {
                 setBuffering(true);
-              } else if (event.data === YT.PlayerState.ENDED) {
+              } else if (state === 0 || state === window.YT?.PlayerState?.ENDED) {
                 actionsRef.current.ended?.();
               }
             },
