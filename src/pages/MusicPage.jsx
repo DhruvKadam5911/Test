@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
   Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Menu,
   Film, History, ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
   ThumbsUp, Gauge, Link2, Unlink, Minus, Plus, Video, Disc3, Radio, Mic2,
   SlidersHorizontal, RotateCcw,
@@ -675,8 +675,11 @@ export default function MusicPage() {
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
 
+  const [railExpanded, setRailExpanded] = useState(true);
+  const RAIL_NARROW = 72;
+  const RAIL_WIDE = 240;
+  const railW = railExpanded ? RAIL_WIDE : RAIL_NARROW;
   const [expanded, setExpanded] = useState(false);
-  const [stageMounted, setStageMounted] = useState(false);
   const [stageIn, setStageIn] = useState(false);
   const [barVisible, setBarVisible] = useState(true);
 
@@ -1543,22 +1546,37 @@ export default function MusicPage() {
     );
   };
 
-  const railItem = (key, label, Icon) => (
-    <button
-      key={key}
-      onClick={() => { setView(key); setQuery(""); }}
-      className="flex items-center gap-4 w-full rounded-lg transition-all"
-      style={{
-        background: view === key ? "rgba(255,255,255,0.12)" : "transparent",
-        border: "none", cursor: "pointer", padding: "12px 16px",
-        color: view === key ? colors.text : colors.textMuted,
-        fontFamily: bodyFont, fontSize: 14.5, fontWeight: view === key ? 700 : 500,
-      }}
-    >
-      <Icon size={20} color={view === key ? colors.accentLight : colors.textMuted} />
-      {label}
-    </button>
-  );
+  const railItem = (key, label, Icon) => {
+    const isActive = view === key;
+    return (
+      <button
+        key={key}
+        onClick={() => { setView(key); setQuery(""); }}
+        title={!railExpanded ? label : undefined}
+        style={{
+          display: "flex",
+          flexDirection: railExpanded ? "row" : "column",
+          alignItems: "center",
+          justifyContent: railExpanded ? "flex-start" : "center",
+          gap: railExpanded ? 16 : 4,
+          width: "100%",
+          borderRadius: 10,
+          background: isActive ? "rgba(255,255,255,0.12)" : "transparent",
+          border: "none",
+          cursor: "pointer",
+          padding: railExpanded ? "12px 16px" : "10px 0",
+          color: isActive ? colors.text : colors.textMuted,
+          fontFamily: bodyFont,
+          fontSize: railExpanded ? 14.5 : 10,
+          fontWeight: isActive ? 700 : 500,
+          transition: "background 0.15s, color 0.15s",
+        }}
+      >
+        <Icon size={railExpanded ? 20 : 22} color={isActive ? colors.accentLight : colors.textMuted} />
+        <span style={{ whiteSpace: "nowrap", overflow: "hidden" }}>{label}</span>
+      </button>
+    );
+  };
 
   return (
     <div style={{ background: colors.bg, minHeight: "100vh", fontFamily: bodyFont, color: colors.text }}>
@@ -1667,28 +1685,95 @@ export default function MusicPage() {
         }
       `}</style>
 
-      {/* Left Navigation Rail (Desktop) */}
+      {/* Left Navigation Rail (Desktop) — YouTube Music style collapsible */}
       <div
-        className="hidden md:flex flex-col gap-1.5 fixed left-0 top-0 bottom-0 px-3 pt-5"
-        style={{ width: RAIL_WIDTH, borderRight: `1px solid ${colors.ring}`, zIndex: 30, background: colors.bg }}
+        className="hidden md:flex flex-col fixed left-0 top-0 bottom-0"
+        style={{
+          width: railW,
+          borderRight: `1px solid ${colors.ring}`,
+          zIndex: 30,
+          background: colors.bg,
+          transition: "width 200ms cubic-bezier(0.16,1,0.3,1)",
+          overflowX: "hidden",
+          paddingTop: 12,
+        }}
       >
-        <Link to="/music" onClick={() => setView("home")} className="flex items-center gap-1.5" style={{ textDecoration: "none", marginBottom: 16, paddingLeft: 4 }}>
-          <OnionMark height={80} />
-          <BrandWord word="music" height={20} />
-        </Link>
-        {railItem("home", "Home", Home)}
-        {railItem("explore", "Explore", Compass)}
-        {railItem("history", "History", History)}
-        {railItem("library", "Library", Library)}
-        <div style={{ borderTop: `1px solid ${colors.ring}`, margin: "14px 8px" }} />
-        <Link to="/" style={{ fontSize: 13.5, color: colors.textMuted, textDecoration: "none", padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 }}>
-          <Film size={16} /> Movies &amp; Shows
-        </Link>
+        {/* Top: Hamburger + Logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "4px 12px 16px", flexShrink: 0 }}>
+          <button
+            onClick={() => setRailExpanded((v) => !v)}
+            aria-label="Toggle sidebar"
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: colors.textMuted, display: "flex", alignItems: "center",
+              padding: 6, borderRadius: 8, flexShrink: 0,
+            }}
+          >
+            <Menu size={22} />
+          </button>
+          {railExpanded && (
+            <Link to="/music" onClick={() => setView("home")} style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}>
+              <OnionMark height={60} />
+              <BrandWord word="music" height={16} />
+            </Link>
+          )}
+        </div>
+
+        {/* Nav items */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 8px", flex: 1 }}>
+          {railItem("home", "Home", Home)}
+          {railItem("explore", "Explore", Compass)}
+          {railItem("history", "History", History)}
+          {railItem("library", "Library", Library)}
+
+          {railExpanded && (
+            <>
+              <div style={{ borderTop: `1px solid ${colors.ring}`, margin: "12px 8px" }} />
+              <button
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  background: "rgba(255,255,255,0.06)",
+                  border: `1px solid ${colors.ring}`,
+                  borderRadius: 999, cursor: "pointer",
+                  color: colors.text, fontFamily: bodyFont, fontSize: 14, fontWeight: 600,
+                  padding: "9px 18px", width: "100%",
+                  transition: "background 0.15s",
+                }}
+              >
+                <Plus size={18} /> New playlist
+              </button>
+              <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12, padding: "0 8px" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }}>Liked music</div>
+                  <div style={{ fontSize: 11, color: colors.textMuted }}>⚡ Auto playlist</div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Bottom: Movies link */}
+        <div style={{ padding: "8px 8px 16px", flexShrink: 0 }}>
+          <Link
+            to="/"
+            style={{
+              display: "flex", flexDirection: railExpanded ? "row" : "column",
+              alignItems: "center", gap: railExpanded ? 10 : 4,
+              justifyContent: railExpanded ? "flex-start" : "center",
+              color: colors.textMuted, textDecoration: "none",
+              fontSize: railExpanded ? 13.5 : 10, fontWeight: 500,
+              padding: railExpanded ? "8px 16px" : "8px 0",
+              borderRadius: 10,
+            }}
+          >
+            <Film size={railExpanded ? 16 : 22} /> Movies
+          </Link>
+        </div>
       </div>
 
       <style>{`
         .music-shell { padding-left: 0; }
-        @media (min-width: 768px) { .music-shell { padding-left: ${RAIL_WIDTH}px; } }
+        @media (min-width: 768px) { .music-shell { padding-left: ${railW}px; transition: padding-left 200ms cubic-bezier(0.16,1,0.3,1); } }
       `}</style>
 
       <div className="music-shell">
