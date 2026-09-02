@@ -209,7 +209,7 @@ function mediaEngine(el) {
     get playbackRate() {
       return el.playbackRate;
     },
-    setRates(tempo, pitch, effectName, reverbVal) {
+    setRates(tempo, pitch, effectName, reverbVal, isUnhooked) {
       try {
         const shifter = getPitchShifter(el);
         if (shifter) {
@@ -218,12 +218,37 @@ function mediaEngine(el) {
           if (pitch !== undefined) shifter.setPitch(pitch);
         }
 
-        // Direct Hardware Resampling: Changes pitch & tempo naturally with 0% stutter and 0% audio breakup on all phones!
-        const targetRate = pitch !== undefined ? pitch : (tempo !== undefined ? tempo : 1.0);
-        el.preservesPitch = false;
-        if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
-        if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
-        el.playbackRate = targetRate;
+        const wantTempo = Number(tempo) || 1.0;
+        const wantPitch = Number(pitch) || 1.0;
+        const isLocked = !isUnhooked && sameRate(wantPitch, wantTempo);
+
+        if (isLocked) {
+          // Locked / Turntable Mode: Speed and Pitch change together naturally
+          el.playbackRate = wantTempo;
+          el.preservesPitch = false;
+          if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
+          if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
+        } else if (isUnhooked) {
+          // Unhooked Mode:
+          if (!sameRate(wantTempo, 1.0) && sameRate(wantPitch, 1.0)) {
+            // Speed (Tempo) changed while Pitch is 1.0 -> preserve natural key
+            el.playbackRate = wantTempo;
+            el.preservesPitch = true;
+            if ("mozPreservesPitch" in el) el.mozPreservesPitch = true;
+            if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = true;
+          } else {
+            // Pitch changed:
+            el.playbackRate = wantPitch;
+            el.preservesPitch = false;
+            if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
+            if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
+          }
+        } else {
+          el.playbackRate = wantTempo;
+          el.preservesPitch = false;
+          if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
+          if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
+        }
       } catch (err) {
         console.warn("setRates error:", err);
       }
@@ -361,10 +386,10 @@ function youtubeEngine(player) {
   };
 }
 
-function applyRates(engine, tempo, pitch, effectName, reverbVal) {
+function applyRates(engine, tempo, pitch, effectName, reverbVal, isUnhooked) {
   if (!engine?.setRates) return null;
   try {
-    return engine.setRates(tempo, pitch, effectName, reverbVal);
+    return engine.setRates(tempo, pitch, effectName, reverbVal, isUnhooked);
   } catch (err) {
     console.warn("setRates failed:", err);
     return null;
@@ -1514,7 +1539,7 @@ export default function MusicPage() {
     if (reverbVal !== undefined) setReverb(reverbVal);
 
     if (audioRef.current) {
-      applyRates(audioRef.current, wantTempo, wantPitch, fxName, fxReverb);
+      applyRates(audioRef.current, wantTempo, wantPitch, fxName, fxReverb, unhook);
     }
     if (ytPlayerRef.current?.setPlaybackRate) {
       try {
