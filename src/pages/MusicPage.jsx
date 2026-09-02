@@ -181,24 +181,27 @@ function mediaEngine(el) {
     get playbackRate() {
       return el.playbackRate;
     },
-    setRates(tempo, pitch) {
+    setRates(tempo, pitch, effectName, reverbVal) {
       const hooked = sameRate(pitch, tempo);
       try {
-        if (hooked) {
+        const shifter = getPitchShifter(el);
+        if (shifter) {
+          if (effectName !== undefined) shifter.setEffectPreset(effectName);
+          if (reverbVal !== undefined) shifter.setReverb(reverbVal);
+        }
+        if (hooked && (!effectName || effectName === "clean") && (!reverbVal || reverbVal === 0)) {
           // Vinyl Turntable Mode: Hardware resampling shifts both tempo and pitch naturally!
           el.playbackRate = tempo;
           el.preservesPitch = false;
           if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
           if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
-          const shifter = getPitchShifter(el);
           if (shifter) shifter.setPitch(1.0);
         } else {
-          // Unhooked Mode: Tempo sets playback rate, Web Audio pitch shifter shifts pitch independently!
+          // Unhooked Mode / Sound FX: Web Audio DSP handles pitch, EQ, and reverb
           el.playbackRate = tempo;
           el.preservesPitch = true;
           if ("mozPreservesPitch" in el) el.mozPreservesPitch = true;
           if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = true;
-          const shifter = getPitchShifter(el);
           if (shifter) shifter.setPitch(pitch);
         }
       } catch (err) {
@@ -338,10 +341,10 @@ function youtubeEngine(player) {
   };
 }
 
-function applyRates(engine, tempo, pitch) {
+function applyRates(engine, tempo, pitch, effectName, reverbVal) {
   if (!engine?.setRates) return null;
   try {
-    return engine.setRates(tempo, pitch);
+    return engine.setRates(tempo, pitch, effectName, reverbVal);
   } catch (err) {
     console.warn("setRates failed:", err);
     return null;
@@ -382,68 +385,70 @@ const SHORTCUTS = [
 
 const CURATED_DEFAULT_TRACKS = [
   {
-    id: "NJAv_7lHUIU",
-    sourceId: "NJAv_7lHUIU",
+    id: "saavn_e-5Sl38y",
+    source: "saavn",
+    sourceId: "e-5Sl38y",
     title: "Toxic",
     artist: "AP Dhillon",
-    artworkUrl: "https://i.ytimg.com/vi/NJAv_7lHUIU/hqdefault.jpg",
-    durationSeconds: 195,
+    album: "Toxic",
+    artworkUrl: "https://c.saavncdn.com/784/Toxic-English-2020-20201008032450-500x500.jpg",
+    streamUrl: "https://aac.saavncdn.com/784/622dd2177187ea5a7f56535de2906ed2_320.mp4",
+    durationSec: 184,
   },
   {
-    id: "BddP6PYo2gs",
-    sourceId: "BddP6PYo2gs",
+    id: "saavn_rjkrTnma",
+    source: "saavn",
+    sourceId: "rjkrTnma",
     title: "Kesariya",
     artist: "Arijit Singh, Pritam",
-    artworkUrl: "https://i.ytimg.com/vi/BddP6PYo2gs/hqdefault.jpg",
-    durationSeconds: 268,
+    album: "Brahmastra",
+    artworkUrl: "https://c.saavncdn.com/871/Brahmastra-Original-Motion-Picture-Soundtrack-Hindi-2022-20221006155213-500x500.jpg",
+    streamUrl: "https://aac.saavncdn.com/871/c2febd353f3a076a406fa37510f31f9f_320.mp4",
+    durationSec: 268,
   },
   {
-    id: "6xVyZpGq6xY",
-    sourceId: "6xVyZpGq6xY",
+    id: "saavn_OPuNmCJG",
+    source: "saavn",
+    sourceId: "OPuNmCJG",
     title: "Shararat",
-    artist: "Badshah, Hiten",
-    artworkUrl: "https://i.ytimg.com/vi/6xVyZpGq6xY/hqdefault.jpg",
-    durationSeconds: 180,
+    artist: "Badshah, Jasmine Sandlas",
+    album: "Shararat",
+    artworkUrl: "https://c.saavncdn.com/532/Shararat-From-Dhurandhar-Hindi-2025-20251215084216-500x500.jpg",
+    streamUrl: "https://aac.saavncdn.com/532/63933d59147ec7011e635281beccb716_320.mp4",
+    durationSec: 224,
   },
   {
-    id: "V7LwfY5U5WI",
-    sourceId: "V7LwfY5U5WI",
+    id: "saavn_yDnFw7my",
+    source: "saavn",
+    sourceId: "yDnFw7my",
     title: "Chaleya",
     artist: "Anirudh Ravichander, Arijit Singh",
-    artworkUrl: "https://i.ytimg.com/vi/V7LwfY5U5WI/hqdefault.jpg",
-    durationSeconds: 200,
+    album: "Jawan",
+    artworkUrl: "https://c.saavncdn.com/179/World-Music-Day-Best-Of-Bollywood-Hits-Hindi-2026-20260622111029-500x500.jpg",
+    streamUrl: "https://aac.saavncdn.com/179/1be373323edc90024d93873d85f644ec_320.mp4",
+    durationSec: 200,
   },
   {
-    id: "kJQP7kiw5Fk",
-    sourceId: "kJQP7kiw5Fk",
-    title: "Despacito",
-    artist: "Luis Fonsi ft. Daddy Yankee",
-    artworkUrl: "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg",
-    durationSeconds: 282,
-  },
-  {
-    id: "JGwWNGJdvx8",
-    sourceId: "JGwWNGJdvx8",
-    title: "Shape of You",
-    artist: "Ed Sheeran",
-    artworkUrl: "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg",
-    durationSeconds: 234,
-  },
-  {
-    id: "fJ9rUzIMcZQ",
-    sourceId: "fJ9rUzIMcZQ",
-    title: "Bohemian Rhapsody",
-    artist: "Queen",
-    artworkUrl: "https://i.ytimg.com/vi/fJ9rUzIMcZQ/hqdefault.jpg",
-    durationSeconds: 360,
-  },
-  {
-    id: "L3wKzyIN1yk",
-    sourceId: "L3wKzyIN1yk",
+    id: "saavn_Paem2Kf1",
+    source: "saavn",
+    sourceId: "Paem2Kf1",
     title: "Starboy",
     artist: "The Weeknd ft. Daft Punk",
-    artworkUrl: "https://i.ytimg.com/vi/L3wKzyIN1yk/hqdefault.jpg",
-    durationSeconds: 230,
+    album: "Starboy",
+    artworkUrl: "https://c.saavncdn.com/372/Starboy-English-2016-500x500.jpg",
+    streamUrl: "https://aac.saavncdn.com/372/38de816bee7a6df4607f1f0e6822c5bc_320.mp4",
+    durationSec: 230,
+  },
+  {
+    id: "saavn_-anQDrP1",
+    source: "saavn",
+    sourceId: "-anQDrP1",
+    title: "Despacito",
+    artist: "Luis Fonsi ft. Daddy Yankee",
+    album: "Despacito",
+    artworkUrl: "https://c.saavncdn.com/312/Jing-Dian-Liu-Xing-Chang-Pian-Hang-English-2026-20260710055134-500x500.jpg",
+    streamUrl: "https://aac.saavncdn.com/312/2317b05d93c969303b30fb0f318318c3_320.mp4",
+    durationSec: 228,
   },
 ];
 
@@ -597,7 +602,11 @@ export default function MusicPage() {
   useEffect(() => {
     const el = mediaElRef.current;
     if (!el) return;
-    getPitchShifter(el);
+    const shifter = getPitchShifter(el);
+    if (shifter) {
+      shifter.setEffectPreset(soundEffect);
+      shifter.setReverb(reverb);
+    }
     const engine = mediaEngine(el);
     mediaEngineRef.current = engine;
     if (nowPlaying?.streamUrl) {
@@ -617,7 +626,7 @@ export default function MusicPage() {
     return () => {
       for (const [event, handler] of handlers) el.removeEventListener(event, handler);
     };
-  }, [nowPlaying?.streamUrl]);
+  }, [nowPlaying?.streamUrl, soundEffect, reverb]);
 
   /* Initialize YouTube Iframe Player */
   useEffect(() => {
@@ -1007,9 +1016,7 @@ export default function MusicPage() {
       } catch {}
       if (engine) {
         engine.setSource(t.streamUrl, { autoplay: true });
-        if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
-          applyRates(engine, tempo, engine.canPitch ? pitch : 1);
-        }
+        applyRates(engine, tempo, engine.canPitch ? pitch : 1, soundEffect, reverb);
       }
     } else {
       // Pause HTML5 audio if playing
@@ -1044,7 +1051,7 @@ export default function MusicPage() {
       .catch(() => {
         setQueue([t, ...(tracksRef.current || []).filter((x) => (x.sourceId || x.id) !== (t.sourceId || t.id))]);
       });
-  }, [selectEngine, tempo, pitch]);
+  }, [selectEngine, tempo, pitch, soundEffect, reverb]);
 
   const resume = useCallback(() => {
     setAutoplay(true);
