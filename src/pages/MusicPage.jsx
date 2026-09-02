@@ -537,11 +537,12 @@ function CardRow({ title, items, onPlay, colors, displayFont }) {
           <button
             onClick={() => doScroll(-1)}
             aria-label="Scroll left"
+            className="hidden md:flex items-center justify-center cursor-pointer"
             style={{
               position: "absolute", left: -16, top: 80, transform: "translateY(-50%)",
               zIndex: 5, width: 40, height: 40, borderRadius: "50%",
               background: "rgba(18,12,28,0.92)", border: "1px solid rgba(255,255,255,0.15)",
-              color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff",
               boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
             }}
           >
@@ -552,11 +553,12 @@ function CardRow({ title, items, onPlay, colors, displayFont }) {
           <button
             onClick={() => doScroll(1)}
             aria-label="Scroll right"
+            className="hidden md:flex items-center justify-center cursor-pointer"
             style={{
               position: "absolute", right: -16, top: 80, transform: "translateY(-50%)",
               zIndex: 5, width: 40, height: 40, borderRadius: "50%",
               background: "rgba(18,12,28,0.92)", border: "1px solid rgba(255,255,255,0.15)",
-              color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff",
               boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
             }}
           >
@@ -1842,8 +1844,8 @@ export default function MusicPage() {
       </div>
 
       <style>{`
-        .music-shell { padding-left: 0; }
-        @media (min-width: 768px) { .music-shell { padding-left: ${railW}px; transition: padding-left 200ms cubic-bezier(0.16,1,0.3,1); } }
+        .music-shell { padding-left: 0; padding-bottom: 150px; }
+        @media (min-width: 768px) { .music-shell { padding-left: ${railW}px; padding-bottom: 96px; transition: padding-left 200ms cubic-bezier(0.16,1,0.3,1); } }
       `}</style>
 
       <div className="music-shell">
@@ -2469,107 +2471,166 @@ export default function MusicPage() {
           </div>
         </div>
 
-        {/* Playback Controls */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <button
-            onClick={() => seekBy(-5)}
-            title="Rewind 5s (←)"
-            aria-label="Rewind 5 seconds"
-            className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0 hover:scale-110 transition-transform"
-          >
-            <SkipBack size={21} />
-          </button>
-          <button
-            onClick={toggle}
-            aria-label={playing ? "Pause" : "Play"}
-            className="w-10 h-10 rounded-full flex items-center justify-center border-none cursor-pointer shadow-lg hover:scale-105 transition-transform"
-            style={{ background: colors.accent }}
-          >
-            {playing ? <Pause size={19} color="#fff" /> : <Play size={19} color="#fff" style={{ marginLeft: 2 }} />}
-          </button>
-          <button
-            onClick={() => seekBy(5)}
-            title="Forward 5s (→)"
-            aria-label="Forward 5 seconds"
-            className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0 hover:scale-110 transition-transform"
-          >
-            <SkipForward size={21} />
-          </button>
-          <span className="hidden sm:block text-xs text-neutral-400 font-mono ml-1">
-            {formatTime(shownPosition)} / {formatTime(duration)}
-          </span>
-        </div>
-
-        {/* Current Track Info */}
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="flex items-center gap-3 min-w-0 flex-1 text-left bg-transparent border-none cursor-pointer p-0"
-        >
-          {track?.artworkUrl ? (
-            <img src={track.artworkUrl} alt="" width={46} height={46} className="rounded object-cover flex-shrink-0 shadow" />
-          ) : (
-            <div className="w-[46px] h-[46px] rounded bg-neutral-800 flex-shrink-0 flex items-center justify-center">
-              <Music size={20} color={colors.textMuted} />
-            </div>
-          )}
-          <span className="min-w-0">
-            <span style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: colors.text }} className="truncate">
-              {track?.title || "Nothing playing"}
-            </span>
-            <span style={{ display: "block", fontSize: 12, color: colors.textMuted, marginTop: 2 }} className="truncate">
-              {buffering ? "Buffering…" : track?.artist || "Pick a song to play"}
-            </span>
-          </span>
-        </button>
-
-        {/* Extra Action Controls */}
-        <div className="flex items-center gap-4 flex-shrink-0">
-          <button
-            onClick={() => toggleLike(track)}
-            aria-label="Like"
-            className="hidden sm:flex bg-transparent border-none cursor-pointer"
-            style={{ color: isLiked(track) ? colors.accentLight : colors.textMuted }}
-          >
-            <ThumbsUp size={18} fill={isLiked(track) ? colors.accentLight : "none"} />
-          </button>
-
-          {/* Volume slider */}
-          <div className="hidden sm:flex items-center group/vol">
-            <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} className="bg-transparent border-none cursor-pointer text-neutral-400 p-0">
-              {muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
+        {/* Playback & Track Info (Responsive) */}
+        {narrow ? (
+          /* Mobile Mini-Player Bar Layout (Spotify / YouTube Music Style) */
+          <div className="flex items-center justify-between w-full gap-2 min-w-0">
+            {/* Tappable Track Info (Expands full stage) */}
+            <button
+              onClick={() => setExpanded(true)}
+              className="flex items-center gap-2.5 min-w-0 flex-1 text-left bg-transparent border-none cursor-pointer p-0"
+            >
+              {track?.artworkUrl ? (
+                <img src={track.artworkUrl} alt="" width={42} height={42} className="rounded-lg object-cover flex-shrink-0 shadow" />
+              ) : (
+                <div className="w-[42px] h-[42px] rounded-lg bg-neutral-800 flex-shrink-0 flex items-center justify-center">
+                  <Music size={18} color={colors.textMuted} />
+                </div>
+              )}
+              <div className="min-w-0 flex-1 pr-1">
+                <div style={{ fontSize: 13, fontWeight: 700, color: colors.text }} className="truncate">
+                  {track?.title || "Nothing playing"}
+                </div>
+                <div style={{ fontSize: 11, color: colors.textMuted, marginTop: 1 }} className="truncate">
+                  {buffering ? "Buffering…" : track?.artist || "Pick a song to play"}
+                </div>
+              </div>
             </button>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={Math.round(volume * 100)}
-              onChange={(e) => setVolumeLevel(Number(e.target.value) / 100)}
-              aria-label="Volume"
-              className="onion-volume"
-            />
+
+            {/* Mobile Playback Controls */}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                onClick={() => seekBy(-5)}
+                title="Rewind 5s"
+                aria-label="Rewind 5 seconds"
+                className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-1.5"
+              >
+                <SkipBack size={19} />
+              </button>
+              <button
+                onClick={toggle}
+                aria-label={playing ? "Pause" : "Play"}
+                className="w-9 h-9 rounded-full flex items-center justify-center border-none cursor-pointer shadow-lg active:scale-95 transition-transform"
+                style={{ background: colors.accent }}
+              >
+                {playing ? <Pause size={17} color="#fff" /> : <Play size={17} color="#fff" style={{ marginLeft: 2 }} />}
+              </button>
+              <button
+                onClick={() => seekBy(5)}
+                title="Forward 5s"
+                aria-label="Forward 5 seconds"
+                className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-1.5"
+              >
+                <SkipForward size={19} />
+              </button>
+            </div>
           </div>
+        ) : (
+          /* Desktop Full Player Bar Layout */
+          <>
+            {/* Playback Controls */}
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <button
+                onClick={() => seekBy(-5)}
+                title="Rewind 5s (←)"
+                aria-label="Rewind 5 seconds"
+                className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0 hover:scale-110 transition-transform"
+              >
+                <SkipBack size={21} />
+              </button>
+              <button
+                onClick={toggle}
+                aria-label={playing ? "Pause" : "Play"}
+                className="w-10 h-10 rounded-full flex items-center justify-center border-none cursor-pointer shadow-lg hover:scale-105 transition-transform"
+                style={{ background: colors.accent }}
+              >
+                {playing ? <Pause size={19} color="#fff" /> : <Play size={19} color="#fff" style={{ marginLeft: 2 }} />}
+              </button>
+              <button
+                onClick={() => seekBy(5)}
+                title="Forward 5s (→)"
+                aria-label="Forward 5 seconds"
+                className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0 hover:scale-110 transition-transform"
+              >
+                <SkipForward size={21} />
+              </button>
+              <span className="hidden sm:block text-xs text-neutral-400 font-mono ml-1">
+                {formatTime(shownPosition)} / {formatTime(duration)}
+              </span>
+            </div>
 
-          {/* Tempo reading */}
-          <button
-            onClick={openRates}
-            aria-label="Tempo"
-            className="flex items-center gap-1 bg-transparent border-none cursor-pointer text-xs font-bold"
-            style={{ color: ratesTouched ? colors.accentLight : colors.textMuted }}
-          >
-            <Gauge size={17} />
-            <span className="font-mono">{tempo.toFixed(2)}x</span>
-          </button>
+            {/* Current Track Info */}
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="flex items-center gap-3 min-w-0 flex-1 text-left bg-transparent border-none cursor-pointer p-0"
+            >
+              {track?.artworkUrl ? (
+                <img src={track.artworkUrl} alt="" width={46} height={46} className="rounded object-cover flex-shrink-0 shadow" />
+              ) : (
+                <div className="w-[46px] h-[46px] rounded bg-neutral-800 flex-shrink-0 flex items-center justify-center">
+                  <Music size={20} color={colors.textMuted} />
+                </div>
+              )}
+              <span className="min-w-0">
+                <span style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: colors.text }} className="truncate">
+                  {track?.title || "Nothing playing"}
+                </span>
+                <span style={{ display: "block", fontSize: 12, color: colors.textMuted, marginTop: 2 }} className="truncate">
+                  {buffering ? "Buffering…" : track?.artist || "Pick a song to play"}
+                </span>
+              </span>
+            </button>
 
-          <button onClick={() => setRepeat((v) => !v)} className="hidden sm:flex bg-transparent border-none cursor-pointer" style={{ color: repeat ? colors.accentLight : colors.textMuted }}>
-            <Repeat size={18} />
-          </button>
-          <button onClick={() => setShuffle((v) => !v)} className="hidden sm:flex bg-transparent border-none cursor-pointer" style={{ color: shuffle ? colors.accentLight : colors.textMuted }}>
-            <Shuffle size={18} />
-          </button>
-          <button onClick={() => setExpanded((v) => !v)} className="bg-transparent border-none cursor-pointer text-neutral-400 p-0">
-            {expanded ? <ChevronDown size={22} /> : <ChevronUp size={22} />}
-          </button>
-        </div>
+            {/* Extra Action Controls */}
+            <div className="flex items-center gap-4 flex-shrink-0">
+              <button
+                onClick={() => toggleLike(track)}
+                aria-label="Like"
+                className="hidden sm:flex bg-transparent border-none cursor-pointer"
+                style={{ color: isLiked(track) ? colors.accentLight : colors.textMuted }}
+              >
+                <ThumbsUp size={18} fill={isLiked(track) ? colors.accentLight : "none"} />
+              </button>
+
+              {/* Volume slider */}
+              <div className="hidden sm:flex items-center group/vol">
+                <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} className="bg-transparent border-none cursor-pointer text-neutral-400 p-0">
+                  {muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={Math.round(volume * 100)}
+                  onChange={(e) => setVolumeLevel(Number(e.target.value) / 100)}
+                  aria-label="Volume"
+                  className="onion-volume"
+                />
+              </div>
+
+              {/* Tempo reading */}
+              <button
+                onClick={openRates}
+                aria-label="Tempo"
+                className="flex items-center gap-1 bg-transparent border-none cursor-pointer text-xs font-bold"
+                style={{ color: ratesTouched ? colors.accentLight : colors.textMuted }}
+              >
+                <Gauge size={17} />
+                <span className="font-mono">{tempo.toFixed(2)}x</span>
+              </button>
+
+              <button onClick={() => setRepeat((v) => !v)} className="hidden sm:flex bg-transparent border-none cursor-pointer" style={{ color: repeat ? colors.accentLight : colors.textMuted }}>
+                <Repeat size={18} />
+              </button>
+              <button onClick={() => setShuffle((v) => !v)} className="hidden sm:flex bg-transparent border-none cursor-pointer" style={{ color: shuffle ? colors.accentLight : colors.textMuted }}>
+                <Shuffle size={18} />
+              </button>
+              <button onClick={() => setExpanded((v) => !v)} className="bg-transparent border-none cursor-pointer text-neutral-400 p-0">
+                {expanded ? <ChevronDown size={22} /> : <ChevronUp size={22} />}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
