@@ -2401,9 +2401,9 @@ export default function MusicPage() {
                   <Shuffle size={20} />
                 </button>
                 <button
-                  onClick={() => seekBy(-5)}
-                  title="Rewind 5s"
-                  aria-label="Rewind 5 seconds"
+                  onClick={() => skip(-1)}
+                  title="Previous track"
+                  aria-label="Previous track"
                   className="p-2 bg-transparent border-none cursor-pointer text-white active:scale-95 transition-transform"
                 >
                   <SkipBack size={26} />
@@ -2415,9 +2415,9 @@ export default function MusicPage() {
                   {playing ? <Pause size={26} color="#0c0812" /> : <Play size={26} color="#0c0812" style={{ marginLeft: 3 }} />}
                 </button>
                 <button
-                  onClick={() => seekBy(5)}
-                  title="Forward 5s"
-                  aria-label="Forward 5 seconds"
+                  onClick={() => skip(1)}
+                  title="Next track"
+                  aria-label="Next track"
                   className="p-2 bg-transparent border-none cursor-pointer text-white active:scale-95 transition-transform"
                 >
                   <SkipForward size={26} />
@@ -2720,12 +2720,12 @@ export default function MusicPage() {
               {/* Mobile Playback Controls */}
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button
-                  onClick={() => seekBy(-5)}
-                  title="Rewind 5s"
-                  aria-label="Rewind 5 seconds"
-                  className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-1.5"
+                  onClick={() => skip(-1)}
+                  title="Previous track"
+                  aria-label="Previous track"
+                  className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-1.5 active:scale-95 transition-transform"
                 >
-                  <SkipBack size={19} />
+                  <SkipBack size={20} />
                 </button>
                 <button
                   onClick={toggle}
@@ -2736,12 +2736,12 @@ export default function MusicPage() {
                   {playing ? <Pause size={17} color="#fff" /> : <Play size={17} color="#fff" style={{ marginLeft: 2 }} />}
                 </button>
                 <button
-                  onClick={() => seekBy(5)}
-                  title="Forward 5s"
-                  aria-label="Forward 5 seconds"
-                  className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-1.5"
+                  onClick={() => skip(1)}
+                  title="Next track"
+                  aria-label="Next track"
+                  className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-1.5 active:scale-95 transition-transform"
                 >
-                  <SkipForward size={19} />
+                  <SkipForward size={20} />
                 </button>
               </div>
             </div>
@@ -2751,9 +2751,9 @@ export default function MusicPage() {
               {/* Transport Buttons */}
               <div className="flex items-center gap-3 flex-shrink-0">
                 <button
-                  onClick={() => seekBy(-5)}
-                  title="Rewind 5s (←)"
-                  aria-label="Rewind 5 seconds"
+                  onClick={() => skip(-1)}
+                  title="Previous track (←)"
+                  aria-label="Previous track"
                   className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0 hover:scale-110 transition-transform"
                 >
                   <SkipBack size={21} />
@@ -2767,9 +2767,9 @@ export default function MusicPage() {
                   {playing ? <Pause size={19} color="#fff" /> : <Play size={19} color="#fff" style={{ marginLeft: 2 }} />}
                 </button>
                 <button
-                  onClick={() => seekBy(5)}
-                  title="Forward 5s (→)"
-                  aria-label="Forward 5 seconds"
+                  onClick={() => skip(1)}
+                  title="Next track (→)"
+                  aria-label="Next track"
                   className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0 hover:scale-110 transition-transform"
                 >
                   <SkipForward size={21} />
