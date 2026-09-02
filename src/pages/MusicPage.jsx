@@ -1688,14 +1688,16 @@ export default function MusicPage() {
 
       {/* Left Navigation Rail (Desktop) — YouTube Music style collapsible */}
       <div
-        className="hidden md:flex flex-col fixed left-0 top-0 bottom-0"
+        className="hidden md:flex flex-col fixed left-0 top-0"
         style={{
           width: railW,
+          bottom: BAR_HEIGHT,
           borderRight: `1px solid ${colors.ring}`,
           zIndex: 30,
           background: colors.bg,
           transition: "width 200ms cubic-bezier(0.16,1,0.3,1)",
           overflowX: "hidden",
+          overflowY: "auto",
           paddingTop: 12,
         }}
       >
@@ -1727,6 +1729,35 @@ export default function MusicPage() {
           {railItem("history", "History", History)}
           {railItem("library", "Library", Library)}
 
+          {/* Movies link directly in primary rail */}
+          <Link
+            to="/"
+            title={!railExpanded ? "Movies" : undefined}
+            style={{
+              display: "flex",
+              flexDirection: railExpanded ? "row" : "column",
+              alignItems: "center",
+              justifyContent: railExpanded ? "flex-start" : "center",
+              gap: railExpanded ? 16 : 4,
+              width: "100%",
+              borderRadius: 10,
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: railExpanded ? "12px 16px" : "10px 0",
+              color: colors.textMuted,
+              fontFamily: bodyFont,
+              fontSize: railExpanded ? 14.5 : 10,
+              fontWeight: 500,
+              textDecoration: "none",
+              transition: "background 0.15s, color 0.15s",
+            }}
+            className="hover:bg-white/10 hover:text-white"
+          >
+            <Film size={railExpanded ? 20 : 22} color={colors.textMuted} />
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden" }}>Movies</span>
+          </Link>
+
           {railExpanded && (
             <>
               <div style={{ borderTop: `1px solid ${colors.ring}`, margin: "12px 8px" }} />
@@ -1751,24 +1782,6 @@ export default function MusicPage() {
               </div>
             </>
           )}
-        </div>
-
-        {/* Bottom: Movies link */}
-        <div style={{ padding: "8px 8px 16px", flexShrink: 0 }}>
-          <Link
-            to="/"
-            style={{
-              display: "flex", flexDirection: railExpanded ? "row" : "column",
-              alignItems: "center", gap: railExpanded ? 10 : 4,
-              justifyContent: railExpanded ? "flex-start" : "center",
-              color: colors.textMuted, textDecoration: "none",
-              fontSize: railExpanded ? 13.5 : 10, fontWeight: 500,
-              padding: railExpanded ? "8px 16px" : "8px 0",
-              borderRadius: 10,
-            }}
-          >
-            <Film size={railExpanded ? 16 : 22} /> Movies
-          </Link>
         </div>
       </div>
 
