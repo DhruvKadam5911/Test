@@ -1525,6 +1525,11 @@ export default function MusicPage() {
   };
 
   const onTempoChange = (value) => {
+    try {
+      if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+        globalAudioCtx.resume().catch(() => {});
+      }
+    } catch {}
     const nextVal = clampRate(value);
     if (!unhook) {
       return commitRates(nextVal, nextVal);
@@ -1533,6 +1538,11 @@ export default function MusicPage() {
   };
 
   const onPitchChange = (value) => {
+    try {
+      if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+        globalAudioCtx.resume().catch(() => {});
+      }
+    } catch {}
     const nextVal = clampRate(value);
     if (!unhook) {
       return commitRates(nextVal, nextVal);
@@ -1548,6 +1558,11 @@ export default function MusicPage() {
   };
 
   const openRates = () => {
+    try {
+      if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+        globalAudioCtx.resume().catch(() => {});
+      }
+    } catch {}
     setRatesBefore({ tempo, pitch, unhook, soundEffect, reverb });
     setRatesOpen(true);
   };
