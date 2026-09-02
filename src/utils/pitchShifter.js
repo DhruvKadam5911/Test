@@ -74,31 +74,41 @@ export function createPitchShifter(audioContext) {
   trebleShelf.connect(antiCombFilter);
 
   const NUM_GRAINS = 4;
-  const BASE_GRAIN_TIME = 0.120; // 120ms
+  const BASE_GRAIN_TIME = 0.080; // 80ms optimized for clear vocal & bass response without phase distortion
   const grainSamples = Math.round(BASE_GRAIN_TIME * sampleRate);
 
+  // Hanning window fade buffer for seamless overlap-add crossfading
   const fadeBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
   const fadeData = fadeBuffer.getChannelData(0);
   for (let i = 0; i < grainSamples; i++) {
     fadeData[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / grainSamples));
   }
 
-  const delayBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
-  const delayData = delayBuffer.getChannelData(0);
+  // Pitch-down delay buffer: delay increases from 0 to BASE_GRAIN_TIME
+  const delayDownBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
+  const downData = delayDownBuffer.getChannelData(0);
   for (let i = 0; i < grainSamples; i++) {
-    delayData[i] = (i / grainSamples) * BASE_GRAIN_TIME;
+    downData[i] = (i / grainSamples) * BASE_GRAIN_TIME;
+  }
+
+  // Pitch-up delay buffer: delay decreases from BASE_GRAIN_TIME down to 0
+  const delayUpBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
+  const upData = delayUpBuffer.getChannelData(0);
+  for (let i = 0; i < grainSamples; i++) {
+    upData[i] = (1 - i / grainSamples) * BASE_GRAIN_TIME;
   }
 
   const delayNodes = [];
   const grainGains = [];
-  const lfoGains = [];
   const delayLFOs = [];
   const fadeLFOs = [];
 
   for (let i = 0; i < NUM_GRAINS; i++) {
     const delay = audioContext.createDelay(1.0);
     const gain = audioContext.createGain();
-    const lfoGain = audioContext.createGain();
+
+    delay.delayTime.value = 0;
+    gain.gain.value = 0;
 
     antiCombFilter.connect(delay);
     delay.connect(gain);
@@ -106,7 +116,6 @@ export function createPitchShifter(audioContext) {
 
     delayNodes.push(delay);
     grainGains.push(gain);
-    lfoGains.push(lfoGain);
   }
 
   let isPitchEngineStarted = false;
@@ -119,16 +128,14 @@ export function createPitchShifter(audioContext) {
 
       for (let i = 0; i < NUM_GRAINS; i++) {
         const dLFO = audioContext.createBufferSource();
-        dLFO.buffer = delayBuffer;
+        dLFO.buffer = delayDownBuffer;
         dLFO.loop = true;
 
         const fLFO = audioContext.createBufferSource();
         fLFO.buffer = fadeBuffer;
         fLFO.loop = true;
 
-        dLFO.connect(lfoGains[i]);
-        lfoGains[i].connect(delayNodes[i].delayTime);
-
+        dLFO.connect(delayNodes[i].delayTime);
         fLFO.connect(grainGains[i].gain);
 
         const offsetTime = i * phaseOffset;
@@ -194,14 +201,19 @@ export function createPitchShifter(audioContext) {
     pitchPath.gain.setTargetAtTime(1.0, now, 0.02);
 
     const speed = pitch - 1.0;
-    const lfoRate = Math.max(0.001, Math.abs(speed));
-    const modSign = speed >= 0 ? 1 : -1;
+    const lfoRate = Math.max(0.01, Math.abs(speed));
+    const isPitchUp = speed >= 0;
 
     for (let i = 0; i < NUM_GRAINS; i++) {
       if (delayLFOs[i]) {
-        delayLFOs[i].playbackRate.setTargetAtTime(lfoRate, now, 0.015);
-        fadeLFOs[i].playbackRate.setTargetAtTime(lfoRate, now, 0.015);
-        lfoGains[i].gain.setTargetAtTime(modSign * BASE_GRAIN_TIME, now, 0.015);
+        // Swap buffer cleanly if direction changed:
+        if (isPitchUp && delayLFOs[i].buffer !== delayUpBuffer) {
+          delayLFOs[i].buffer = delayUpBuffer;
+        } else if (!isPitchUp && delayLFOs[i].buffer !== delayDownBuffer) {
+          delayLFOs[i].buffer = delayDownBuffer;
+        }
+        delayLFOs[i].playbackRate.setTargetAtTime(lfoRate, now, 0.02);
+        fadeLFOs[i].playbackRate.setTargetAtTime(lfoRate, now, 0.02);
       }
     }
   }

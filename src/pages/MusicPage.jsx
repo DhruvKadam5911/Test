@@ -3094,43 +3094,133 @@ export default function MusicPage() {
             </div>
 
             {/* Sliders */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {/* Tempo */}
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>Tempo</span>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{tempo.toFixed(2)}x</span>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: 600 }}>Tempo</span>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.95)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{tempo.toFixed(2)}x</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button onClick={() => onTempoChange(tempo - rateStep)} style={{ width: 24, height: 24, borderRadius: 7, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Minus size={12} /></button>
-                  <input type="range" min={RATE_MIN} max={RATE_MAX} step={0.01} value={tempo} onChange={(e) => onTempoChange(Number(e.target.value))} className="onion-rate flex-1" />
-                  <button onClick={() => onTempoChange(tempo + rateStep)} style={{ width: 24, height: 24, borderRadius: 7, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Plus size={12} /></button>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <button
+                    onClick={() => onTempoChange(tempo - rateStep)}
+                    style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
+                    className="active:scale-90"
+                    aria-label="Decrease tempo"
+                  >
+                    <Minus size={15} />
+                  </button>
+                  <input
+                    type="range"
+                    min={RATE_MIN}
+                    max={RATE_MAX}
+                    step={0.01}
+                    value={tempo}
+                    onChange={(e) => onTempoChange(Number(e.target.value))}
+                    className="onion-rate flex-1"
+                    style={{
+                      background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${((tempo - RATE_MIN) / (RATE_MAX - RATE_MIN)) * 100}%, rgba(255,255,255,0.18) ${((tempo - RATE_MIN) / (RATE_MAX - RATE_MIN)) * 100}%, rgba(255,255,255,0.18) 100%)`,
+                    }}
+                  />
+                  <button
+                    onClick={() => onTempoChange(tempo + rateStep)}
+                    style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
+                    className="active:scale-90"
+                    aria-label="Increase tempo"
+                  >
+                    <Plus size={15} />
+                  </button>
                 </div>
               </div>
 
               {/* Pitch */}
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>Pitch</span>
-                    <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 5, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.45)", fontVariantNumeric: "tabular-nums" }}>{semitonesFromPitch(pitch)}</span>
+                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: 600 }}>Pitch</span>
+                    <span style={{ fontSize: 10.5, padding: "2px 6px", borderRadius: 6, background: "rgba(168,85,247,0.2)", color: "#d8b4fe", border: "1px solid rgba(168,85,247,0.3)", fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>{semitonesFromPitch(pitch)}</span>
                   </div>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{Math.round(pitch * 100)}%</span>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.95)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{Math.round(pitch * 100)}%</span>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button onClick={() => onPitchChange(pitch - rateStep)} style={{ width: 24, height: 24, borderRadius: 7, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Minus size={12} /></button>
-                  <input type="range" min={RATE_MIN} max={RATE_MAX} step={0.01} value={pitch} onChange={(e) => onPitchChange(Number(e.target.value))} className="onion-rate flex-1" />
-                  <button onClick={() => onPitchChange(pitch + rateStep)} style={{ width: 24, height: 24, borderRadius: 7, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Plus size={12} /></button>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <button
+                    onClick={() => onPitchChange(pitch - rateStep)}
+                    style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
+                    className="active:scale-90"
+                    aria-label="Decrease pitch"
+                  >
+                    <Minus size={15} />
+                  </button>
+                  <input
+                    type="range"
+                    min={RATE_MIN}
+                    max={RATE_MAX}
+                    step={0.01}
+                    value={pitch}
+                    onChange={(e) => onPitchChange(Number(e.target.value))}
+                    className="onion-rate flex-1"
+                    style={{
+                      background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${((pitch - RATE_MIN) / (RATE_MAX - RATE_MIN)) * 100}%, rgba(255,255,255,0.18) ${((pitch - RATE_MIN) / (RATE_MAX - RATE_MIN)) * 100}%, rgba(255,255,255,0.18) 100%)`,
+                    }}
+                  />
+                  <button
+                    onClick={() => onPitchChange(pitch + rateStep)}
+                    style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
+                    className="active:scale-90"
+                    aria-label="Increase pitch"
+                  >
+                    <Plus size={15} />
+                  </button>
                 </div>
               </div>
 
               {/* Reverb */}
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>Reverb</span>
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{Math.round(reverb * 100)}%</span>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: 600 }}>Reverb & Ambience</span>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.95)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{Math.round(reverb * 100)}%</span>
                 </div>
-                <input type="range" min="0" max="100" value={Math.round(reverb * 100)} onChange={(e) => { const val = Number(e.target.value) / 100; setReverb(val); if (globalPitchShifter) globalPitchShifter.setReverb(val); }} className="onion-rate w-full" />
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <button
+                    onClick={() => {
+                      const next = Math.max(0, Number((reverb - 0.05).toFixed(2)));
+                      setReverb(next);
+                      if (globalPitchShifter) globalPitchShifter.setReverb(next);
+                    }}
+                    style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
+                    className="active:scale-90"
+                    aria-label="Decrease reverb"
+                  >
+                    <Minus size={15} />
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={Math.round(reverb * 100)}
+                    onChange={(e) => {
+                      const val = Number(e.target.value) / 100;
+                      setReverb(val);
+                      if (globalPitchShifter) globalPitchShifter.setReverb(val);
+                    }}
+                    className="onion-rate flex-1"
+                    style={{
+                      background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${reverb * 100}%, rgba(255,255,255,0.18) ${reverb * 100}%, rgba(255,255,255,0.18) 100%)`,
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const next = Math.min(1, Number((reverb + 0.05).toFixed(2)));
+                      setReverb(next);
+                      if (globalPitchShifter) globalPitchShifter.setReverb(next);
+                    }}
+                    style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
+                    className="active:scale-90"
+                    aria-label="Increase reverb"
+                  >
+                    <Plus size={15} />
+                  </button>
+                </div>
               </div>
 
               {/* Unhook Toggle */}
