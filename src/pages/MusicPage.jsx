@@ -386,7 +386,7 @@ function sourceOf(track) {
   return track.streamUrl || track.sourceId || track.id || "";
 }
 
-const STAGE_MS = 460;
+const STAGE_MS = 560;
 const BAR_REVEAL_AT = 120;
 const SHEET_PEEK = 66;
 
@@ -691,6 +691,9 @@ export default function MusicPage() {
   const [lyricsData, setLyricsData] = useState({ synced: [], plain: "", hasSynced: false, loading: false });
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   const [isFastForward, setIsFastForward] = useState(false);
+  const [stageDragY, setStageDragY] = useState(0);
+  const [isDraggingStage, setIsDraggingStage] = useState(false);
+  const dragStartYRef = useRef(0);
   const prevTempoRef = useRef(1.0);
   const isHoldingRef = useRef(false);
   const holdTimerRef = useRef(null);
@@ -2234,13 +2237,58 @@ export default function MusicPage() {
       {/* Expanded Now-Playing Fullscreen Stage */}
       {stageMounted && (
         <div
+          onTouchStart={(e) => {
+            dragStartYRef.current = e.touches[0].clientY;
+            setIsDraggingStage(false);
+            setStageDragY(0);
+            stopFastForward();
+          }}
+          onTouchMove={(e) => {
+            if (!dragStartYRef.current) return;
+            const delta = e.touches[0].clientY - dragStartYRef.current;
+            if (delta > 8) {
+              // Pulling down in real-time
+              setIsDraggingStage(true);
+              setStageDragY(delta);
+              stopFastForward();
+            } else if (delta < -30) {
+              // Swiping up -> open Up Next
+              setMobileQueueOpen(true);
+              dragStartYRef.current = 0;
+            }
+          }}
+          onTouchEnd={() => {
+            if (stageDragY > 95) {
+              // Dragged down past threshold -> close smoothly!
+              setIsDraggingStage(false);
+              setStageDragY(0);
+              stopFastForward();
+              setExpanded(false);
+            } else {
+              // Snap back smoothly
+              setIsDraggingStage(false);
+              setStageDragY(0);
+            }
+            dragStartYRef.current = 0;
+          }}
+          onTouchCancel={() => {
+            setIsDraggingStage(false);
+            setStageDragY(0);
+            dragStartYRef.current = 0;
+          }}
           className="fixed inset-0 flex flex-col"
           style={{
             background: colors.bg,
             zIndex: 55,
             paddingBottom: 0,
-            transform: stageIn ? "translateY(0)" : "translateY(100%)",
-            transition: `transform ${STAGE_MS}ms cubic-bezier(0.16, 1, 0.3, 1)`,
+            transform: !stageIn
+              ? "translateY(100%)"
+              : isDraggingStage
+              ? `translateY(${Math.max(0, stageDragY)}px)`
+              : "translateY(0)",
+            transition: isDraggingStage
+              ? "none"
+              : `transform ${STAGE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`,
             willChange: "transform",
           }}
         >
@@ -2261,27 +2309,12 @@ export default function MusicPage() {
           <div className="absolute inset-0 pointer-events-none" style={{ background: "rgba(12,8,18,0.7)" }} />
 
           {/* Top Stage Bar */}
-          <div
-            onTouchStart={(e) => {
-              touchStartYRef.current = e.touches[0].clientY;
-              stopFastForward();
-            }}
-            onTouchMove={(e) => {
-              if (!touchStartYRef.current) return;
-              const deltaY = touchStartYRef.current - e.touches[0].clientY;
-              if (deltaY < -20 || deltaY > 20) {
-                stopFastForward();
-              }
-              if (deltaY < -20) {
+          <div className="relative flex items-center justify-between px-6 pt-5 pb-2">
+            <button
+              onClick={() => {
                 stopFastForward();
                 setExpanded(false);
-                touchStartYRef.current = 0;
-              }
-            }}
-            className="relative flex items-center justify-between px-6 pt-5 pb-2"
-          >
-            <button
-              onClick={() => setExpanded(false)}
+              }}
               aria-label="Collapse"
               className="p-2 text-white bg-transparent border-none cursor-pointer flex items-center"
             >
@@ -2324,34 +2357,7 @@ export default function MusicPage() {
 
           {/* Main Stage Content */}
           {narrow ? (
-            <div
-              onTouchStart={(e) => {
-                touchStartYRef.current = e.touches[0].clientY;
-                stopFastForward();
-              }}
-              onTouchMove={(e) => {
-                if (!touchStartYRef.current) return;
-                const deltaY = touchStartYRef.current - e.touches[0].clientY;
-                if (deltaY < -15 || deltaY > 15) {
-                  stopFastForward();
-                }
-                if (deltaY > 25) {
-                  // Swipe UP -> open Up Next
-                  setMobileQueueOpen(true);
-                  touchStartYRef.current = 0;
-                } else if (deltaY < -35) {
-                  // Swipe DOWN -> close player stage or Up Next smoothly
-                  stopFastForward();
-                  if (mobileQueueOpen) {
-                    setMobileQueueOpen(false);
-                  } else {
-                    setExpanded(false);
-                  }
-                  touchStartYRef.current = 0;
-                }
-              }}
-              className="relative flex-1 min-h-0 flex flex-col justify-between px-5 pb-3 overflow-hidden select-none"
-            >
+            <div className="relative flex-1 min-h-0 flex flex-col justify-between px-5 pb-3 overflow-hidden select-none">
               {/* Artwork or Lyrics Container */}
               <div className="flex-1 min-h-0 flex items-center justify-center py-2 relative">
                 {displayMode === "song" ? (
