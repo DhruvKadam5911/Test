@@ -133,6 +133,14 @@ function mediaEngine(el) {
   };
 }
 
+function extractVideoId(raw) {
+  if (!raw) return "";
+  const s = String(raw).trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
+  const match = s.match(/(?:v=|\/embed\/|\/watch\?v=|youtu\.be\/|\/v\/|^)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : s;
+}
+
 /* YouTube IFrame Player Engine */
 function youtubeEngine(player) {
   return {
@@ -164,38 +172,72 @@ function youtubeEngine(player) {
       }
     },
     load: () => {},
-    setSource(videoId, { autoplay }) {
+    setSource(source, { autoplay } = {}) {
       try {
-        if (autoplay) player?.loadVideoById?.(videoId);
-        else player?.cueVideoById?.(videoId);
+        const id = extractVideoId(source);
+        if (!id) return;
+        if (autoplay) {
+          player?.loadVideoById?.(id);
+          try {
+            player?.playVideo?.();
+          } catch {}
+        } else {
+          player?.cueVideoById?.(id);
+        }
       } catch (err) {
         console.warn("yt setSource error:", err);
       }
     },
     get paused() {
-      return player?.getPlayerState?.() !== 1;
+      try {
+        return player?.getPlayerState?.() !== 1;
+      } catch {
+        return true;
+      }
     },
     get currentTime() {
-      return player?.getCurrentTime?.() || 0;
+      try {
+        return player?.getCurrentTime?.() || 0;
+      } catch {
+        return 0;
+      }
     },
     set currentTime(to) {
-      player?.seekTo?.(to, true);
+      try {
+        player?.seekTo?.(to, true);
+      } catch {}
     },
     get duration() {
-      return player?.getDuration?.() || 0;
+      try {
+        return player?.getDuration?.() || 0;
+      } catch {
+        return 0;
+      }
     },
     get muted() {
-      return Boolean(player?.isMuted?.());
+      try {
+        return Boolean(player?.isMuted?.());
+      } catch {
+        return false;
+      }
     },
     set muted(value) {
-      if (value) player?.mute?.();
-      else player?.unMute?.();
+      try {
+        if (value) player?.mute?.();
+        else player?.unMute?.();
+      } catch {}
     },
     get volume() {
-      return (player?.getVolume?.() ?? 100) / 100;
+      try {
+        return (player?.getVolume?.() ?? 100) / 100;
+      } catch {
+        return 1;
+      }
     },
     set volume(value) {
-      player?.setVolume?.(Math.round(value * 100));
+      try {
+        player?.setVolume?.(Math.round(value * 100));
+      } catch {}
     },
     setRates(tempo, pitch) {
       const applied = nearestRate(this.rateList, tempo);
@@ -343,7 +385,7 @@ export default function MusicPage() {
   const youtubeEngineRef = useRef(null);
   const mediaElRef = useRef(null);
   const ytPlayerRef = useRef(null);
-  const ytContainerRef = useRef(null);
+  const pendingTrackRef = useRef(null);
   const tracksRef = useRef(null);
   const queueRef = useRef([]);
   const actionsRef = useRef({});
@@ -416,9 +458,17 @@ export default function MusicPage() {
           events: {
             onReady: (event) => {
               ytPlayerRef.current = event.target;
-              youtubeEngineRef.current = youtubeEngine(event.target);
+              const engine = youtubeEngine(event.target);
+              youtubeEngineRef.current = engine;
               if (!audioRef.current && (!nowPlaying || !nowPlaying.streamUrl)) {
-                audioRef.current = youtubeEngineRef.current;
+                audioRef.current = engine;
+              }
+              if (pendingTrackRef.current) {
+                const pending = pendingTrackRef.current;
+                pendingTrackRef.current = null;
+                const src = sourceOf(pending);
+                engine.dataset.sourceId = String(src);
+                engine.setSource(src, { autoplay: true });
               }
             },
             onStateChange: (event) => {
@@ -723,6 +773,7 @@ export default function MusicPage() {
 
   /* Playback handlers */
   const play = (t) => {
+    if (!t) return;
     setAutoplay(true);
     setNowPlaying(t);
     setQueue([t]);
@@ -730,15 +781,14 @@ export default function MusicPage() {
     const audio = selectEngine(t);
     const source = sourceOf(t);
     if (audio && source) {
-      if (audio.dataset.sourceId !== String(source)) {
-        audio.dataset.sourceId = String(source);
-        audio.setSource(source, { autoplay: true });
-        if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
-          applyRates(audio, tempo, audio.canPitch ? pitch : 1);
-        }
-      } else {
-        audio.play();
+      audio.dataset.sourceId = String(source);
+      audio.setSource(source, { autoplay: true });
+      audio.play?.();
+      if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
+        applyRates(audio, tempo, audio.canPitch ? pitch : 1);
       }
+    } else {
+      pendingTrackRef.current = t;
     }
 
     // Dynamic queue recommendations
@@ -1998,17 +2048,21 @@ export default function MusicPage() {
         style={{ position: "fixed", bottom: -9999, left: -9999, opacity: 0, pointerEvents: "none" }}
       />
       <div
+        id="onion-yt-global-wrapper"
         style={{
           position: "fixed",
-          bottom: displayMode === "video" && expanded ? 0 : -9999,
-          left: displayMode === "video" && expanded ? 0 : -9999,
-          right: displayMode === "video" && expanded ? 0 : undefined,
-          top: displayMode === "video" && expanded ? 60 : undefined,
-          zIndex: displayMode === "video" && expanded ? 60 : -1,
-          width: displayMode === "video" && expanded ? "100%" : "200px",
-          height: displayMode === "video" && expanded ? "calc(100% - 140px)" : "200px",
+          bottom: displayMode === "video" && expanded ? "auto" : 0,
+          top: displayMode === "video" && expanded ? 64 : "auto",
+          left: displayMode === "video" && expanded ? "50%" : 0,
+          transform: displayMode === "video" && expanded ? "translateX(-50%)" : "none",
+          width: displayMode === "video" && expanded ? (narrow ? "min(92vw, 480px)" : "min(800px, 60vw)") : "200px",
+          height: displayMode === "video" && expanded ? (narrow ? "260px" : "min(460px, 50vh)") : "200px",
+          zIndex: displayMode === "video" && expanded ? 65 : -10,
+          opacity: displayMode === "video" && expanded ? 1 : 0.01,
           pointerEvents: displayMode === "video" && expanded ? "auto" : "none",
           background: "#000",
+          borderRadius: displayMode === "video" && expanded ? "16px" : "0",
+          overflow: "hidden",
         }}
       >
         <div id="onion-yt-host" style={{ width: "100%", height: "100%" }} />
