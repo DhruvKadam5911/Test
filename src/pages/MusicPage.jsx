@@ -847,7 +847,11 @@ export default function MusicPage() {
     } catch {}
   }, [position, duration, tempo]);
 
-  /* Keyboard shortcuts: Left/Right arrow keys skip 5 seconds backward/forward */
+  /* Global Keyboard shortcuts:
+   * Left/Right arrow keys: skip 5 seconds backward/forward
+   * Up/Down arrow keys: volume up/down
+   * Space / K: play / pause
+   */
   useEffect(() => {
     const handleKeyDown = (e) => {
       const tag = e.target?.tagName?.toLowerCase();
@@ -859,6 +863,25 @@ export default function MusicPage() {
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
         seekBy(-5);
+      } else if (e.key === " " || e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        actionsRef.current.toggle?.();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setVolume((v) => {
+          const next = Math.min(1, Number((v + 0.05).toFixed(2)));
+          if (mediaElRef.current) mediaElRef.current.volume = next;
+          if (audioRef.current) audioRef.current.volume = next;
+          return next;
+        });
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setVolume((v) => {
+          const next = Math.max(0, Number((v - 0.05).toFixed(2)));
+          if (mediaElRef.current) mediaElRef.current.volume = next;
+          if (audioRef.current) audioRef.current.volume = next;
+          return next;
+        });
       }
     };
 
@@ -1300,6 +1323,9 @@ export default function MusicPage() {
     setBuffering(false);
     setPosition(0);
     setDuration(t.durationSec || t.durationSeconds || 0);
+    if (narrow) {
+      setExpanded(true);
+    }
 
     const source = sourceOf(t);
     const engine = selectEngine(t);
@@ -2204,7 +2230,18 @@ export default function MusicPage() {
           <div className="absolute inset-0 pointer-events-none" style={{ background: "rgba(12,8,18,0.7)" }} />
 
           {/* Top Stage Bar */}
-          <div className="relative flex items-center justify-between px-6 pt-5 pb-2">
+          <div
+            onTouchStart={(e) => { touchStartYRef.current = e.touches[0].clientY; }}
+            onTouchMove={(e) => {
+              if (!touchStartYRef.current) return;
+              const deltaY = touchStartYRef.current - e.touches[0].clientY;
+              if (deltaY < -20) {
+                setExpanded(false);
+                touchStartYRef.current = 0;
+              }
+            }}
+            className="relative flex items-center justify-between px-6 pt-5 pb-2"
+          >
             <button
               onClick={() => setExpanded(false)}
               aria-label="Collapse"
@@ -2255,7 +2292,16 @@ export default function MusicPage() {
                 if (!touchStartYRef.current) return;
                 const deltaY = touchStartYRef.current - e.touches[0].clientY;
                 if (deltaY > 25) {
+                  // Swipe UP -> open Up Next
                   setMobileQueueOpen(true);
+                  touchStartYRef.current = 0;
+                } else if (deltaY < -35) {
+                  // Swipe DOWN -> close player stage or Up Next
+                  if (mobileQueueOpen) {
+                    setMobileQueueOpen(false);
+                  } else {
+                    setExpanded(false);
+                  }
                   touchStartYRef.current = 0;
                 }
               }}
@@ -2812,25 +2858,34 @@ export default function MusicPage() {
                   <ThumbsUp size={18} fill={isLiked(track) ? colors.accentLight : "none"} />
                 </button>
 
-                {/* Volume slider */}
-                <div className="hidden sm:flex items-center group/vol">
-                  <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} className="bg-transparent border-none cursor-pointer text-neutral-400 p-0">
-                    {muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
+                {/* High-visibility filled volume slider */}
+                <div className="hidden sm:flex items-center gap-2 group/vol">
+                  <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0">
+                    {muted || volume === 0 ? <VolumeX size={19} /> : <Volume2 size={19} />}
                   </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={muted ? 0 : volume}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setVolume(v);
-                      if (audioRef.current) audioRef.current.volume = v;
-                      if (muted) setMuted(false);
-                    }}
-                    className="w-0 group-hover/vol:w-20 transition-all ml-2 accent-purple-500 cursor-pointer"
-                  />
+                  <div className="relative flex items-center w-24">
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={muted ? 0 : volume}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setVolume(v);
+                        if (mediaElRef.current) mediaElRef.current.volume = v;
+                        if (audioRef.current) audioRef.current.volume = v;
+                        if (muted) setMuted(false);
+                      }}
+                      className="w-full h-1.5 rounded-full cursor-pointer appearance-none bg-white/20 accent-purple-500"
+                      style={{
+                        background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${(muted ? 0 : volume) * 100}%, rgba(255,255,255,0.25) ${(muted ? 0 : volume) * 100}%, rgba(255,255,255,0.25) 100%)`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-[11px] font-mono text-neutral-400 w-7 text-right">
+                    {muted ? 0 : Math.round(volume * 100)}%
+                  </span>
                 </div>
 
                 <button
