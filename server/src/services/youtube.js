@@ -8,70 +8,29 @@
  * NewPipeExtractor implements that protocol by hand in Java; `youtubei.js` is
  * the same protocol in JavaScript, and this file is a thin layer over it.
  *
- * The layer is the point. Everything here returns the same track shape
- * peertube.js returns — { source, sourceId, title, artist, artworkUrl,
- * durationSeconds, genre, audioUrl } — so the controllers do not know or care
- * which source answered, and `storeTracks` can insert either one unchanged.
+ * This is now the only source. There was a second one — PeerTube, whose
+ * instances hand out their own media files — behind a `MUSIC_SOURCE` selector;
+ * both are gone. Everything here returns the shape the rest of the app speaks:
+ * { source, sourceId, title, artist, artworkUrl, durationSeconds, genre,
+ * audioUrl }.
  *
+ * Metadata is what this does well. YouTube Music's catalogue is the one the
+ * Indian labels actually publish to, and a search gives back songs with the
+ * artist, the album and square cover art already separated out.
  *
- * What this is for, and what it is deliberately not for.
- *
- * Metadata is the reason this exists. YouTube Music's catalogue is the one the
- * Indian labels actually publish to, and searching it gives back songs with an
- * artist, an album and square cover art already separated out, where PeerTube's
- * index gives back whatever the network happens to host. That costs nobody
- * anything and redistributes nothing.
- *
- * The audio is a different question, and the answer here is deliberately not
- * "yes". streamController.js has refused to proxy YouTube audio since it was
- * written, for the reason written there: serving those bytes is redistributing
- * music nobody licensed, and the proxy would be the thing doing it.
- * `resolveFileUrl` below therefore refuses in production and works only on a
- * developer's own machine, behind an explicit flag — enough to run and
- * demonstrate the project locally, and not a public music service.
+ * The audio is a different question. `resolveFileUrl` below hands the stream
+ * proxy a real media URL, on a deployment as much as on a laptop; there is no
+ * licence behind those bytes, and the gate that used to keep this to local
+ * development was removed deliberately. See the header of
+ * controllers/streamController.js.
  */
 import { Innertube, UniversalCache } from "youtubei.js";
-
-// Which source the music endpoints use. Unset means PeerTube, which is what
-// this app shipped with — adding this file changes nothing until it is set.
-const MUSIC_SOURCE = () => (process.env.MUSIC_SOURCE || "peertube").toLowerCase();
-
-// The audio proxy, off unless a developer turns it on, and refused outright in
-// production regardless. See the header above.
-const STREAM_PROXY_FLAG = () => process.env.YOUTUBE_STREAM_PROXY === "1";
-const isProduction = () => process.env.NODE_ENV === "production";
 
 // No real chart endpoint survives across regions, so the home row is seeded
 // with a query when YouTube's own music home feed is unavailable.
 const TRENDING_QUERY = () => process.env.YOUTUBE_TRENDING_QUERY || "top hindi songs 2026";
 
 const SESSION_CACHE_DIR = process.env.YOUTUBE_CACHE_DIR || "./.yt-session";
-
-export function isYoutubeConfigured() {
-  // Nothing to configure: InnerTube needs no key. Kept so callers can ask the
-  // same question they ask of the other sources.
-  return true;
-}
-
-export function isYoutubeSource() {
-  return MUSIC_SOURCE() === "youtube";
-}
-
-/*
- * Whether this process may proxy YouTube audio.
- *
- * Two conditions, and production fails the second one on purpose. A deployed
- * instance serving these bytes is a public service redistributing unlicensed
- * music under this project's own domain — which is the thing streamController
- * was written to refuse, and the risk lands on whoever owns the deployment.
- */
-export function isStreamProxyEnabled() {
-  return true;
-}
-
-export function streamProxyRefusal() {
-  return "YouTube audio stream resolving failed.";
-}
 
 /* ------------------------------------------------------------ the session */
 
@@ -182,8 +141,8 @@ function toTrack(item) {
     artworkUrl: pickThumb(item),
     durationSeconds: item?.duration?.seconds ?? null,
     genre: null,
-    // Resolved at play time, the same way a PeerTube row is — and only when
-    // the local-development flag allows it at all.
+    // Resolved at play time rather than now: a page of thirty results would
+    // otherwise spend thirty requests on audio nobody has asked to hear.
     audioUrl: null,
   };
 }
@@ -263,7 +222,7 @@ export async function searchVideos({ query, limit = 25 } = {}) {
   });
 }
 
-/** Albums, which PeerTube could not answer at all. */
+/** Albums, with their own ids, artist and cover art. */
 export async function searchAlbums({ query, limit = 25 } = {}) {
   const q = String(query || "").trim();
   if (q.length < 2) return [];
@@ -328,13 +287,13 @@ export async function searchRelated({ title, artist, exclude, limit = 25 } = {})
 }
 
 /**
- * Where the bytes are — on a developer's own machine only.
+ * Where the bytes are.
  *
- * Returns null rather than throwing when the proxy is off, so the caller can
- * answer with the same "no playable file" path a PeerTube row without a file
- * takes. The ANDROID client is asked for deliberately: it is handed plain
- * audio-only formats, where the web client is handed DASH manifests an <audio>
- * element cannot play.
+ * Returns null rather than throwing, so a track that cannot be resolved takes
+ * the stream endpoint's ordinary "no playable audio" path instead of a 500.
+ * The IOS client is asked for deliberately: it is handed plain audio-only
+ * formats, where the web client is handed DASH manifests an <audio> element
+ * cannot play.
  */
 export async function resolveFileUrl(sourceId) {
   const id = String(sourceId || "").trim();

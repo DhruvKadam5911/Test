@@ -1097,7 +1097,8 @@ export default function MusicPage() {
   return (
     <div style={{ background: colors.bg, minHeight: "100vh", fontFamily: bodyFont, color: colors.text }}>
       {/* HTML5 Audio element */}
-      <audio ref={mediaElRef} preload="metadata" playsInline style={{ display: "none" }} />
+      {/* crossOrigin: see the note on the other <audio> below. */}
+      <audio ref={mediaElRef} crossOrigin="anonymous" preload="metadata" playsInline style={{ display: "none" }} />
 
       {/* Global persistent YouTube host container (keeps playing across view changes) */}
       <div
@@ -2012,8 +2013,17 @@ export default function MusicPage() {
       )}
 
       {/* Persistent Audio & Video Players */}
+      {/*
+        crossOrigin is not optional. Without it the element loads the stream as
+        a no-cors request, and Chrome's Opaque Response Blocking drops it: the
+        first Range answer is two bytes, too few to sniff as audio, so ORB
+        refuses a response it cannot identify and the element reports "no
+        supported sources". Asking for CORS instead makes it a checked response
+        — the API already echoes the origin back — and ORB does not apply.
+      */}
       <audio
         ref={mediaElRef}
+        crossOrigin="anonymous"
         preload="auto"
         playsInline
         style={{ position: "fixed", bottom: -9999, left: -9999, opacity: 0, pointerEvents: "none" }}

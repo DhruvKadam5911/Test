@@ -20,13 +20,9 @@ const fail = (step, error) => {
 };
 
 console.log("\n[1] Configuration\n");
-show("MUSIC_SOURCE", process.env.MUSIC_SOURCE || "(unset -> peertube)");
-show("YOUTUBE_STREAM_PROXY", process.env.YOUTUBE_STREAM_PROXY || "(unset -> audio off)");
+show("YOUTUBE_TRENDING_QUERY", process.env.YOUTUBE_TRENDING_QUERY || "(unset -> default)");
+show("YOUTUBE_CACHE_DIR", process.env.YOUTUBE_CACHE_DIR || "(unset -> ./.yt-session)");
 show("NODE_ENV", process.env.NODE_ENV || "(unset -> development)");
-if ((process.env.MUSIC_SOURCE || "peertube") !== "youtube") {
-  console.log("\n  ! MUSIC_SOURCE is not \"youtube\", so /music/* is still answering from PeerTube.");
-  console.log("    Set it in server/.env and restart the server.\n");
-}
 
 console.log("\n[2] Reaching YouTube at all\n");
 try {

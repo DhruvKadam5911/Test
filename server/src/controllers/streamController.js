@@ -1,6 +1,5 @@
 import prisma from "../config/db.js";
-import { resolveFileUrl } from "../services/musicSource.js";
-import { isStreamProxyEnabled, streamProxyRefusal } from "../services/youtube.js";
+import { resolveFileUrl } from "../services/youtube.js";
 
 /*
  * Streaming a track's audio.
@@ -14,18 +13,15 @@ import { isStreamProxyEnabled, streamProxyRefusal } from "../services/youtube.js
  * That keeps the source out of the client, so storage can move, URLs can be
  * signed, and none of it reaches the browser.
  *
- * What this is not, and must not become: a public way to pull audio out of
- * YouTube. Serving those bytes from a deployed instance is redistributing music
- * nobody licensed, and this proxy would be the thing doing it. That has been
- * the rule here since this file was written and it still is.
+ * What it is serving, and what that means: YouTube audio, resolved through
+ * InnerTube. There is no licence behind those bytes. This file used to refuse
+ * them on a deployment and resolve them only on a developer's own machine; that
+ * gate was removed, and PeerTube — the source whose files were published to be
+ * played — was removed with it. Whoever deploys this owns that decision.
  *
- * What changed, and exactly how far: a YouTube row can now resolve a file on a
- * developer's own machine, behind YOUTUBE_STREAM_PROXY=1, and never when
- * NODE_ENV=production — enough to run and demonstrate the project locally,
- * refused everywhere it would be a service. The gate is one function,
- * `isStreamProxyEnabled()` in services/youtube.js; if you are about to widen
- * it, read its header first. A deployed instance still answers 409 for YouTube
- * rows, which is what it did before.
+ * A second, practical consequence of the same change: YouTube rotates its
+ * player cipher, and when it does, resolving breaks until `youtubei.js` is
+ * updated. Nothing here can work around that.
  *
  * Two details the element depends on, either of which silently breaks playback:
  *
@@ -71,17 +67,14 @@ export async function streamTrack(req, res) {
   /*
    * A row is stored without a file URL: finding it costs a request per video,
    * and a page of results would spend thirty of them on files nobody has asked
-   * to hear. It is resolved on the first play instead.
+   * to hear. It is resolved on the first play instead — and never written back,
+   * because a resolved URL is signed, expires, and is tied to the address that
+   * asked for it.
    */
-  if (!track.audioUrl && (track.source === "peertube" || track.source === "youtube")) {
+  if (!track.audioUrl) {
     try {
-      const resolved = await resolveFileUrl(track.source, track.sourceId);
-      if (resolved) {
-        if (track.source === "peertube") {
-          await prisma.$executeRaw`UPDATE "Track" SET "audioUrl" = ${resolved} WHERE id = ${track.id}`;
-        }
-        track = { ...track, audioUrl: resolved };
-      }
+      const resolved = await resolveFileUrl(track.sourceId);
+      if (resolved) track = { ...track, audioUrl: resolved };
     } catch (error) {
       console.error("streamTrack resolve error:", error.message);
     }
@@ -89,7 +82,7 @@ export async function streamTrack(req, res) {
 
   if (!track.audioUrl) {
     return res.status(409).json({
-      error: "That track's instance did not offer a playable file.",
+      error: "No playable audio could be resolved for that track.",
     });
   }
 

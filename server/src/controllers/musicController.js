@@ -1,20 +1,24 @@
 import prisma from "../config/db.js";
-import { searchVideos, fetchTrending, searchRelated, searchAlbums } from "../services/musicSource.js";
+import { searchVideos, fetchTrending, searchRelated, searchAlbums } from "../services/youtube.js";
 
 /*
  * Music.
  *
- * Which catalogue answers is chosen by MUSIC_SOURCE — see
- * services/musicSource.js. PeerTube hands out the media file itself, which is
- * why it is the default and the only one that streams on a deployment;
- * YouTube answers with far better metadata and, off a developer's own machine,
- * with no audio. Neither difference reaches this file: both sources return the
- * same track shape, so everything below is written once.
+ * One catalogue answers `/music/*`: YouTube, through InnerTube — see
+ * services/youtube.js. There was a second source (PeerTube) and a selector in
+ * front of both; it is gone, along with everything it had indexed. Nothing here
+ * branches on a source any more.
  *
  * The Track table is still a cache, but for latency rather than quota: nothing
  * here is metered, so a miss costs a slow request instead of a slice of a daily
  * allowance. Rows are written on the way out so the stream endpoint can find a
  * track by id later without searching for it again.
+ *
+ * Every read of that cache filters on `source = 'youtube'`. The table outlives
+ * the source that wrote to it, and a PeerTube row surfacing here is a track the
+ * stream endpoint can no longer resolve — a result that looks fine and refuses
+ * to play. `GET /admin/clear-music?source=peertube&apply=true` deletes them for
+ * good; this filter is what makes that a tidy-up rather than a prerequisite.
  */
 
 const MAX_LIMIT = 50;
@@ -67,7 +71,8 @@ export async function getTracks(req, res) {
 
     const tracks = await prisma.$queryRaw`
       SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
-      FROM "Track" ORDER BY "createdAt" DESC LIMIT ${limit}`;
+      FROM "Track" WHERE source = 'youtube'
+      ORDER BY "createdAt" DESC LIMIT ${limit}`;
     return res.status(200).json(tracks);
   } catch (error) {
     const empty = emptyIfNoTable(error, res);
@@ -96,7 +101,8 @@ export async function searchTracks(req, res) {
     const cached = await prisma.$queryRaw`
       SELECT id, title, artist, "artworkUrl", "durationSeconds", genre, source, "sourceId"
       FROM "Track"
-      WHERE title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`}
+      WHERE source = 'youtube'
+        AND (title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`})
       ORDER BY "createdAt" DESC LIMIT ${limit}`;
     return res.status(200).json(cached);
   } catch (error) {
@@ -110,8 +116,8 @@ export async function relatedTracks(req, res) {
   const title = String(req.query.title || "").trim();
   const artist = String(req.query.artist || "").trim();
   const exclude = String(req.query.exclude || "").trim();
-  // An id alone is enough for YouTube's radio queue, which is the better
-  // answer when it is available; PeerTube still needs words to search for.
+  // An id alone is enough: it seeds YouTube's own radio queue, which is a
+  // better answer than searching the words of the title.
   if (!title && !exclude) return res.status(200).json([]);
 
   const limit = Math.min(Number(req.query.limit) || 25, MAX_LIMIT);
@@ -129,9 +135,9 @@ export async function relatedTracks(req, res) {
 /*
  * GET /music/albums?q=
  *
- * A real album search where the source has one. PeerTube does not — it models
- * playlists and channels, neither wired up here — so it falls back to songs
- * inside musicSource.js rather than leaving the tab looking broken.
+ * A real album search: YouTube Music returns albums with their own ids, artist
+ * and cover art, which is one of the things the source it replaced could not
+ * answer at all.
  *
  * Albums are not written to the Track table: an album id is not a playable
  * track, and storing it would put rows in there that the stream endpoint would
@@ -157,7 +163,8 @@ export async function getMusicGenres(req, res) {
   try {
     const genres = await prisma.$queryRawUnsafe(
       `SELECT genre, count(*)::int AS count FROM "Track"
-       WHERE genre IS NOT NULL GROUP BY genre ORDER BY count DESC`
+       WHERE genre IS NOT NULL AND source = 'youtube'
+       GROUP BY genre ORDER BY count DESC`
     );
     return res.status(200).json(genres);
   } catch (error) {
