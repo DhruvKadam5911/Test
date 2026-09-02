@@ -2010,6 +2010,30 @@ export default function MusicPage() {
           </div>
         </>
       )}
+
+      {/* Persistent Audio & Video Players */}
+      <audio
+        ref={mediaElRef}
+        preload="auto"
+        playsInline
+        style={{ position: "fixed", bottom: -9999, left: -9999, opacity: 0, pointerEvents: "none" }}
+      />
+      <div
+        style={{
+          position: "fixed",
+          bottom: displayMode === "video" && expanded ? 0 : -9999,
+          left: displayMode === "video" && expanded ? 0 : -9999,
+          right: displayMode === "video" && expanded ? 0 : undefined,
+          top: displayMode === "video" && expanded ? 60 : undefined,
+          zIndex: displayMode === "video" && expanded ? 60 : -1,
+          width: displayMode === "video" && expanded ? "100%" : "200px",
+          height: displayMode === "video" && expanded ? "calc(100% - 140px)" : "200px",
+          pointerEvents: displayMode === "video" && expanded ? "auto" : "none",
+          background: "#000",
+        }}
+      >
+        <div id="onion-yt-host" style={{ width: "100%", height: "100%" }} />
+      </div>
     </div>
   );
 }
