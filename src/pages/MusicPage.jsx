@@ -5,6 +5,7 @@ import {
   Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp,
   Film, History, ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
   ThumbsUp, Gauge, Link2, Unlink, Minus, Plus, Video, Disc3, Radio, Mic2,
+  SlidersHorizontal, RotateCcw,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
 import OnionMark from "../components/shared/OnionMark";
@@ -31,13 +32,7 @@ const IFRAME_API = "https://www.youtube.com/iframe_api";
 // Rate controls
 const RATE_MIN = 0.1;
 const RATE_MAX = 3.0;
-const RATE_STEPS = [
-  ["1%", 0.01],
-  ["5%", 0.05],
-  ["10%", 0.1],
-  ["25%", 0.25],
-  ["100%", 1.0],
-];
+const RATE_STEP_DEFAULT = 0.05;
 
 const YT_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
@@ -567,10 +562,9 @@ export default function MusicPage() {
   const [unhook, setUnhook] = useState(false);
   const [soundEffect, setSoundEffect] = useState("clean");
   const [reverb, setReverb] = useState(0);
-  const [rateStep, setRateStep] = useState(0.05);
+  const rateStep = RATE_STEP_DEFAULT;
   const [ratesOpen, setRatesOpen] = useState(false);
   const [ratesBefore, setRatesBefore] = useState(null);
-  const [rateNote, setRateNote] = useState(null);
 
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
@@ -1281,27 +1275,21 @@ export default function MusicPage() {
   };
 
   const openRates = () => {
-    setRatesBefore({ tempo, pitch, unhook });
-    setRateNote(
-      isYouTubeTrack
-        ? "YouTube Player active: Speed adjustments (0.25x – 2.0x) apply to music playback. YouTube automatically maintains the musical key/pitch."
-        : "Direct Audio active: Linked mode shifts pitch & tempo together (vinyl style). Unhooked mode preserves pitch."
-    );
+    setRatesBefore({ tempo, pitch, unhook, soundEffect, reverb });
     setRatesOpen(true);
   };
 
   const cancelRates = () => {
     if (ratesBefore) {
       setUnhook(ratesBefore.unhook);
-      commitRates(ratesBefore.tempo, ratesBefore.pitch);
+      commitRates(ratesBefore.tempo, ratesBefore.pitch, ratesBefore.soundEffect, ratesBefore.reverb);
     }
-    setRateNote(null);
     setRatesOpen(false);
   };
 
   const resetRates = () => {
     setUnhook(false);
-    commitRates(1, 1);
+    commitRates(1.0, 1.0, "clean", 0.0);
   };
 
   const setVolumeLevel = (level) => {
@@ -1575,12 +1563,15 @@ export default function MusicPage() {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
-        .vinyl-playing {
-          animation: vinyl-spin 20s linear infinite;
-        }
-        .vinyl-paused {
-          animation: vinyl-spin 20s linear infinite;
-          animation-play-state: paused;
+        @keyframes onionDrawerUp {
+          0% {
+            opacity: 0;
+            transform: translate(-50%, 28px) scale(0.96);
+          }
+          100% {
+            opacity: 1;
+            transform: translate(-50%, 0) scale(1);
+          }
         }
       `}</style>
 
@@ -2348,94 +2339,62 @@ export default function MusicPage() {
         </div>
       )}
 
-      {/* Tempo & Pitch Adjustment Modal */}
+      {/* Sleek Minimalist Slide-Up Audio Controls & FX Drawer */}
       {ratesOpen && (
         <>
-          <div onClick={cancelRates} className="fixed inset-0 bg-black/60 z-[70] backdrop-blur-sm" />
           <div
-            className="fixed rounded-2xl p-6 no-scrollbar"
+            onClick={cancelRates}
+            className="fixed inset-0 bg-black/60 z-[70] backdrop-blur-sm transition-opacity duration-300"
+          />
+          <div
+            className="fixed rounded-t-3xl md:rounded-3xl p-5 md:p-6 no-scrollbar"
             style={{
               left: "50%",
-              bottom: narrow ? NAV_HEIGHT + 14 : BAR_HEIGHT + 16,
+              bottom: narrow ? NAV_HEIGHT : BAR_HEIGHT + 10,
               transform: "translateX(-50%)",
-              width: "min(560px, 94vw)",
-              maxHeight: "min(660px, 86vh)",
-              overflowY: "auto",
-              background: colors.bgElevated,
-              border: `1px solid ${colors.ring}`,
-              boxShadow: "0 25px 60px rgba(0,0,0,0.85)",
+              width: "min(500px, 95vw)",
+              background: "rgba(18, 14, 28, 0.96)",
+              backdropFilter: "blur(24px)",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.9), 0 0 35px rgba(168,85,247,0.18)",
               zIndex: 71,
+              animation: "onionDrawerUp 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
             }}
           >
-            <div style={{ fontFamily: displayFont, fontSize: 20, fontWeight: 700, marginBottom: 16 }}>
-              Playback Speed &amp; Pitch
+            {/* Header: Title + Reset & Close */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal size={17} className="text-purple-400" />
+                <span style={{ fontFamily: displayFont, fontSize: 16, fontWeight: 700, color: "#fff" }}>
+                  Speed &amp; Sound FX
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={resetRates}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-full bg-white/10 hover:bg-white/20 text-neutral-300 hover:text-white border-none cursor-pointer transition-all flex items-center gap-1"
+                >
+                  <RotateCcw size={11} /> Reset
+                </button>
+                <button
+                  onClick={cancelRates}
+                  className="p-1 rounded-full text-neutral-400 hover:text-white hover:bg-white/10 border-none cursor-pointer flex items-center justify-center transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
-            {/* Music Listener FX Presets */}
-            <div className="py-2">
-              <div className="text-xs font-bold text-neutral-400 uppercase mb-2">Listener Sound FX Modes</div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {/* Sound FX Modes (6 Compact Single-Line Chips) */}
+            <div className="pt-3 pb-2.5">
+              <div className="grid grid-cols-3 gap-2">
                 {[
-                  {
-                    id: "clean",
-                    label: "Original (Studio)",
-                    desc: "Pure lossless audio",
-                    tempo: 1.0,
-                    pitch: 1.0,
-                    effect: "clean",
-                    reverb: 0.0,
-                    unhook: false,
-                  },
-                  {
-                    id: "slowed_reverb",
-                    label: "🌙 Slowed + Reverb",
-                    desc: "Deep bass + Ambience",
-                    tempo: 0.88,
-                    pitch: pitchFromSemitones(-2.5),
-                    effect: "slowed_reverb",
-                    reverb: 0.45,
-                    unhook: true,
-                  },
-                  {
-                    id: "nightcore",
-                    label: "⚡ Nightcore",
-                    desc: "High key + Fast beat",
-                    tempo: 1.15,
-                    pitch: pitchFromSemitones(3.5),
-                    effect: "nightcore",
-                    reverb: 0.12,
-                    unhook: true,
-                  },
-                  {
-                    id: "concert",
-                    label: "🏟️ Concert / 8D",
-                    desc: "Lush stadium acoustics",
-                    tempo: 1.0,
-                    pitch: 1.0,
-                    effect: "concert",
-                    reverb: 0.55,
-                    unhook: false,
-                  },
-                  {
-                    id: "bass_boost",
-                    label: "🔊 Bass Boost",
-                    desc: "Punchy sub-lows",
-                    tempo: 1.0,
-                    pitch: 1.0,
-                    effect: "bass_boost",
-                    reverb: 0.0,
-                    unhook: false,
-                  },
-                  {
-                    id: "vocal",
-                    label: "🎤 Vocal Boost",
-                    desc: "Crisp forward vocals",
-                    tempo: 1.0,
-                    pitch: 1.0,
-                    effect: "vocal",
-                    reverb: 0.15,
-                    unhook: false,
-                  },
+                  { id: "clean", label: "Studio (1.0x)", tempo: 1.0, pitch: 1.0, reverb: 0.0, unhook: false },
+                  { id: "slowed_reverb", label: "🌙 Slowed", tempo: 0.88, pitch: pitchFromSemitones(-2.5), reverb: 0.45, unhook: true },
+                  { id: "nightcore", label: "⚡ Nightcore", tempo: 1.15, pitch: pitchFromSemitones(3.5), reverb: 0.12, unhook: true },
+                  { id: "concert", label: "🏟️ Concert 8D", tempo: 1.0, pitch: 1.0, reverb: 0.55, unhook: false },
+                  { id: "bass_boost", label: "🔊 Bass Boost", tempo: 1.0, pitch: 1.0, reverb: 0.0, unhook: false },
+                  { id: "vocal", label: "🎤 Vocal Boost", tempo: 1.0, pitch: 1.0, reverb: 0.15, unhook: false },
                 ].map((preset) => {
                   const isSelected = soundEffect === preset.id;
                   return (
@@ -2445,258 +2404,131 @@ export default function MusicPage() {
                         setUnhook(preset.unhook);
                         commitRates(preset.tempo, preset.pitch, preset.id, preset.reverb);
                       }}
-                      className="p-2.5 rounded-xl text-left border-none cursor-pointer transition-all hover:scale-[1.02]"
+                      className="py-2 px-1.5 rounded-xl text-center border-none cursor-pointer transition-all truncate text-xs font-semibold tracking-wide"
                       style={{
                         background: isSelected
-                          ? `linear-gradient(135deg, ${colors.accent}, #ec4899)`
+                          ? "linear-gradient(135deg, #a855f7, #ec4899)"
                           : "rgba(255,255,255,0.06)",
-                        color: "#fff",
-                        border: isSelected ? "1px solid rgba(255,255,255,0.4)" : "1px solid rgba(255,255,255,0.08)",
-                        boxShadow: isSelected ? "0 4px 15px rgba(168,85,247,0.35)" : "none",
+                        color: isSelected ? "#fff" : "rgba(255,255,255,0.8)",
+                        border: isSelected ? "1px solid rgba(255,255,255,0.4)" : "1px solid rgba(255,255,255,0.06)",
+                        boxShadow: isSelected ? "0 4px 14px rgba(168,85,247,0.35)" : "none",
                       }}
                     >
-                      <div className="text-xs font-bold truncate">{preset.label}</div>
-                      <div className="text-[10.5px] opacity-75 truncate mt-0.5">{preset.desc}</div>
+                      {preset.label}
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            <div className="border-t border-white/10 my-3" />
-
-            {/* Spatial Ambience Reverb Slider */}
-            <div className="py-2">
-              <div className="flex items-center justify-between text-xs font-bold text-neutral-400 uppercase mb-2">
-                <span>Spatial Ambience / Reverb</span>
-                <span className="text-white text-base font-mono">{Math.round(reverb * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={Math.round(reverb * 100)}
-                onChange={(e) => {
-                  const val = Number(e.target.value) / 100;
-                  setReverb(val);
-                  if (globalPitchShifter) globalPitchShifter.setReverb(val);
-                }}
-                className="onion-rate"
-              />
-            </div>
-
-            <div className="border-t border-white/10 my-3" />
-
-            {/* Preset Speeds */}
-            <div className="py-2">
-              <div className="text-xs font-bold text-neutral-400 uppercase mb-2">Speed Presets</div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) => (
+            {/* Compact Sliders Container */}
+            <div className="space-y-3 pt-1">
+              {/* Tempo / Speed */}
+              <div>
+                <div className="flex items-center justify-between text-xs font-medium text-neutral-400 mb-1">
+                  <span className="font-semibold text-neutral-300">Tempo / Speed</span>
+                  <span className="text-white font-mono font-bold text-sm">{tempo.toFixed(2)}x</span>
+                </div>
+                <div className="flex items-center gap-2.5">
                   <button
-                    key={rate}
-                    onClick={() => {
-                      if (!unhook) commitRates(rate, rate);
-                      else commitRates(rate, pitch);
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold border-none cursor-pointer transition-all"
-                    style={{
-                      background: sameRate(tempo, rate) ? colors.accent : "rgba(255,255,255,0.08)",
-                      color: "#fff",
-                      border: sameRate(tempo, rate) ? `1px solid ${colors.accentLight}` : "1px solid transparent",
-                    }}
+                    onClick={() => onTempoChange(tempo - rateStep)}
+                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer flex items-center justify-center transition-colors flex-shrink-0"
                   >
-                    {rate === 1.0 ? "1.0x (Normal)" : `${rate}x`}
+                    <Minus size={14} />
                   </button>
-                ))}
+                  <input
+                    type="range"
+                    min={RATE_MIN}
+                    max={RATE_MAX}
+                    step={0.01}
+                    value={tempo}
+                    onChange={(e) => onTempoChange(Number(e.target.value))}
+                    className="onion-rate flex-1"
+                  />
+                  <button
+                    onClick={() => onTempoChange(tempo + rateStep)}
+                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer flex items-center justify-center transition-colors flex-shrink-0"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="border-t border-white/10 my-3" />
-
-            {/* Tempo Slider */}
-            <div className="py-2">
-              <div className="flex items-center justify-between text-xs font-bold text-neutral-400 uppercase mb-2">
-                <span>Tempo / Speed</span>
-                <span className="text-white text-base font-mono">{tempo.toFixed(2)}x</span>
+              {/* Pitch / Key */}
+              <div>
+                <div className="flex items-center justify-between text-xs font-medium text-neutral-400 mb-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-neutral-300">Pitch / Key</span>
+                    <span className="text-[11px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono">
+                      {semitonesFromPitch(pitch)}
+                    </span>
+                  </div>
+                  <span className="text-white font-mono font-bold text-sm">{Math.round(pitch * 100)}%</span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => onPitchChange(pitch - rateStep)}
+                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer flex items-center justify-center transition-colors flex-shrink-0"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <input
+                    type="range"
+                    min={RATE_MIN}
+                    max={RATE_MAX}
+                    step={0.01}
+                    value={pitch}
+                    onChange={(e) => onPitchChange(Number(e.target.value))}
+                    className="onion-rate flex-1"
+                  />
+                  <button
+                    onClick={() => onPitchChange(pitch + rateStep)}
+                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer flex items-center justify-center transition-colors flex-shrink-0"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => onTempoChange(tempo - rateStep)}
-                  className="p-1.5 rounded bg-white/10 text-white border-none cursor-pointer flex items-center justify-center hover:bg-white/20 transition-colors"
-                >
-                  <Minus size={16} />
-                </button>
+
+              {/* Reverb Slider */}
+              <div>
+                <div className="flex items-center justify-between text-xs font-medium text-neutral-400 mb-1">
+                  <span className="font-semibold text-neutral-300">3D Spatial Reverb</span>
+                  <span className="text-white font-mono font-bold text-sm">{Math.round(reverb * 100)}%</span>
+                </div>
                 <input
                   type="range"
-                  min={RATE_MIN}
-                  max={RATE_MAX}
-                  step={0.01}
-                  value={tempo}
-                  onChange={(e) => onTempoChange(Number(e.target.value))}
-                  className="onion-rate"
+                  min="0"
+                  max="100"
+                  value={Math.round(reverb * 100)}
+                  onChange={(e) => {
+                    const val = Number(e.target.value) / 100;
+                    setReverb(val);
+                    if (globalPitchShifter) globalPitchShifter.setReverb(val);
+                  }}
+                  className="onion-rate w-full"
                 />
+              </div>
+
+              {/* Unhook Pitch ON/OFF Toggle Button */}
+              <div className="flex items-center justify-between pt-2.5 border-t border-white/10">
+                <div className="flex items-center gap-2">
+                  {unhook ? <Unlink size={15} className="text-purple-400" /> : <Link2 size={15} className="text-neutral-400" />}
+                  <span className="text-xs font-semibold text-neutral-200">
+                    Unhook Pitch from Speed
+                  </span>
+                </div>
                 <button
-                  onClick={() => onTempoChange(tempo + rateStep)}
-                  className="p-1.5 rounded bg-white/10 text-white border-none cursor-pointer flex items-center justify-center hover:bg-white/20 transition-colors"
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-neutral-500 mt-1 px-8">
-                <span>{RATE_MIN}x</span>
-                <span>{RATE_MAX}x</span>
-              </div>
-            </div>
-
-            <div className="border-t border-white/10 my-3" />
-
-            {/* Pitch Slider */}
-            <div className="py-2">
-              <div className="flex items-center justify-between text-xs font-bold text-neutral-400 uppercase mb-2">
-                <span>Pitch / Key {!unhook ? "(Linked with Tempo)" : "(Independent)"}</span>
-                <span className="text-white text-base font-mono">
-                  {Math.round(pitch * 100)}% <span className="text-xs text-purple-300 ml-1">({semitonesFromPitch(pitch)})</span>
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => onPitchChange(pitch - rateStep)}
-                  className="p-1.5 rounded bg-white/10 text-white border-none cursor-pointer flex items-center justify-center hover:bg-white/20 transition-colors"
-                >
-                  <Minus size={16} />
-                </button>
-                <input
-                  type="range"
-                  min={RATE_MIN}
-                  max={RATE_MAX}
-                  step={0.01}
-                  value={pitch}
-                  onChange={(e) => onPitchChange(Number(e.target.value))}
-                  className="onion-rate"
-                />
-                <button
-                  onClick={() => onPitchChange(pitch + rateStep)}
-                  className="p-1.5 rounded bg-white/10 text-white border-none cursor-pointer flex items-center justify-center hover:bg-white/20 transition-colors"
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-neutral-500 mt-1 px-8">
-                <span>{Math.round(RATE_MIN * 100)}% (-12 st)</span>
-                <span>{Math.round(RATE_MAX * 100)}% (+12 st)</span>
-              </div>
-            </div>
-
-            {/* Pitch Presets */}
-            <div className="py-2">
-              <div className="text-xs font-bold text-neutral-400 uppercase mb-2">Pitch Presets</div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {[
-                  [-5, "-5 st (Deep Bass)"],
-                  [-2, "-2 st (Lower)"],
-                  [0, "Original (0 st)"],
-                  [2, "+2 st (Higher)"],
-                  [4, "+4 st (Nightcore)"],
-                ].map(([st, label]) => {
-                  const targetPitch = pitchFromSemitones(st);
-                  const isSelected = Math.abs(pitch - targetPitch) < 0.03;
-                  return (
-                    <button
-                      key={st}
-                      onClick={() => {
-                        if (!unhook) setUnhook(true);
-                        commitRates(tempo, targetPitch);
-                      }}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold border-none cursor-pointer transition-all"
-                      style={{
-                        background: isSelected ? colors.accent : "rgba(255,255,255,0.08)",
-                        color: "#fff",
-                        border: isSelected ? `1px solid ${colors.accentLight}` : "1px solid transparent",
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="border-t border-white/10 my-3" />
-
-            {/* Step sizes */}
-            <div className="flex items-center gap-2 flex-wrap py-1">
-              <span className="text-xs font-bold text-neutral-400 uppercase mr-2">Step</span>
-              {RATE_STEPS.map(([label, value]) => (
-                <button
-                  key={label}
-                  onClick={() => setRateStep(value)}
-                  className="px-3.5 py-1.5 rounded-full text-xs font-semibold border-none cursor-pointer transition-all"
+                  onClick={() => onUnhookChange(!unhook)}
+                  className="px-3 py-1 rounded-full text-xs font-bold border-none cursor-pointer transition-all flex items-center gap-1.5"
                   style={{
-                    background: rateStep === value ? colors.text : "rgba(255,255,255,0.08)",
-                    color: rateStep === value ? colors.bg : colors.text,
+                    background: unhook ? "#a855f7" : "rgba(255,255,255,0.1)",
+                    color: unhook ? "#fff" : "rgba(255,255,255,0.6)",
+                    border: unhook ? "1px solid rgba(255,255,255,0.4)" : "1px solid rgba(255,255,255,0.1)",
                   }}
                 >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="border-t border-white/10 my-3" />
-
-            {/* Unhook Button */}
-            <button
-              onClick={() => onUnhookChange(!unhook)}
-              className="w-full flex items-start gap-3 text-left py-2 px-1 rounded-lg bg-transparent border-none cursor-pointer transition-colors hover:bg-white/[0.04]"
-            >
-              <span
-                className="flex items-center justify-center flex-shrink-0 mt-0.5 rounded"
-                style={{
-                  width: 22,
-                  height: 22,
-                  border: `1.5px solid ${unhook ? colors.accent : colors.ring}`,
-                  background: unhook ? colors.accent : "transparent",
-                }}
-              >
-                {unhook ? <Unlink size={13} color="#fff" /> : <Link2 size={13} color={colors.textMuted} />}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-white">
-                  Unhook tempo from pitch
-                </span>
-                <span className="block text-xs text-neutral-400 mt-1 leading-relaxed">
-                  {unhook
-                    ? "Set apart. Speed changes without the key going with it."
-                    : "Linked together like a vinyl record — moving tempo shifts pitch proportionally."}
-                </span>
-              </span>
-            </button>
-
-            {rateNote && (
-              <div className="mt-3 p-3 rounded bg-white/5 border border-white/10 text-xs text-neutral-400 leading-relaxed">
-                {rateNote}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between mt-5 pt-4 border-t border-white/10">
-              <button
-                onClick={resetRates}
-                className="bg-transparent border-none text-neutral-400 text-xs font-bold cursor-pointer hover:text-white px-2 py-1.5"
-              >
-                RESET
-              </button>
-              <div className="flex gap-2">
-                <button
-                  onClick={cancelRates}
-                  className="bg-transparent border-none text-neutral-400 text-xs font-bold cursor-pointer hover:text-white px-4 py-1.5"
-                >
-                  CANCEL
-                </button>
-                <button
-                  onClick={() => setRatesOpen(false)}
-                  className="px-5 py-2 rounded-lg text-xs font-bold text-white border-none cursor-pointer transition-transform hover:scale-105"
-                  style={{ background: colors.accent }}
-                >
-                  DONE
+                  <span className={`w-2 h-2 rounded-full ${unhook ? "bg-white animate-pulse" : "bg-neutral-500"}`} />
+                  {unhook ? "ON" : "OFF"}
                 </button>
               </div>
             </div>
