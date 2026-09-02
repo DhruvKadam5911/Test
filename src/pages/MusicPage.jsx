@@ -1701,25 +1701,47 @@ export default function MusicPage() {
           paddingTop: 12,
         }}
       >
-        {/* Top: Hamburger + Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "4px 12px 16px", flexShrink: 0 }}>
+        {/* Top: Hamburger + Logo (Seamless in both wide and collapsed modes) */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: railExpanded ? "row" : "column",
+            alignItems: "center",
+            justifyContent: railExpanded ? "flex-start" : "center",
+            gap: railExpanded ? 10 : 8,
+            padding: railExpanded ? "6px 14px 16px" : "6px 0 14px",
+            flexShrink: 0,
+            transition: "all 200ms cubic-bezier(0.16,1,0.3,1)",
+          }}
+        >
           <button
             onClick={() => setRailExpanded((v) => !v)}
             aria-label="Toggle sidebar"
             style={{
               background: "none", border: "none", cursor: "pointer",
               color: colors.textMuted, display: "flex", alignItems: "center",
+              justifyContent: "center",
               padding: 6, borderRadius: 8, flexShrink: 0,
             }}
+            className="hover:bg-white/10 hover:text-white transition-colors"
           >
             <Menu size={22} />
           </button>
-          {railExpanded && (
-            <Link to="/music" onClick={() => setView("home")} style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}>
-              <OnionMark height={60} />
-              <BrandWord word="music" height={16} />
-            </Link>
-          )}
+          <Link
+            to="/music"
+            onClick={() => setView("home")}
+            title="Onion Music Home"
+            style={{
+              textDecoration: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+            }}
+          >
+            <OnionMark height={railExpanded ? 58 : 36} />
+            {railExpanded && <BrandWord word="music" height={16} />}
+          </Link>
         </div>
 
         {/* Nav items */}
