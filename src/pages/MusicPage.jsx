@@ -1238,46 +1238,26 @@ export default function MusicPage() {
     } catch {}
   }, [playing, position, duration]);
 
-  /* Global Keyboard Shortcuts */
+  /* Background audio keepalive on screen lock / tab switch */
   useEffect(() => {
-    const onKey = (e) => {
-      const el = document.activeElement;
-      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
-      const audio = audioRef.current;
-      if (!audio) return;
-      switch (e.key) {
-        case " ":
-        case "k":
-          e.preventDefault();
-          actionsRef.current.toggle?.();
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          audio.volume = Math.min(1, (audio.volume || 0) + 0.1);
-          setVolume(audio.volume);
-          if (audio.muted) {
-            audio.muted = false;
-            setMuted(false);
-          }
-          break;
-        case "ArrowDown":
-          e.preventDefault();
-          audio.volume = Math.max(0, (audio.volume || 0) - 0.1);
-          setVolume(audio.volume);
-          break;
-        case "ArrowRight":
-          e.preventDefault();
-          actionsRef.current.skip?.(1);
-          break;
-        case "ArrowLeft":
-          e.preventDefault();
-          actionsRef.current.skip?.(-1);
-          break;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+          globalAudioCtx.resume().catch(() => {});
+        }
+        if (mediaElRef.current && playing && mediaElRef.current.paused) {
+          mediaElRef.current.play().catch(() => {});
+        }
+      } else {
+        if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+          globalAudioCtx.resume().catch(() => {});
+        }
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [playing]);
 
   /* Stage animation & overflow lock */
   useEffect(() => {
@@ -2426,11 +2406,11 @@ export default function MusicPage() {
                 </button>
               </div>
 
-              {/* Mobile Up Next Bottom Section */}
+              {/* Mobile Up Next Bottom Bar (Tap or Swipe Up to reveal queue) */}
               <div className="mt-2.5 pt-2 border-t border-white/10">
                 <button
-                  onClick={() => setMobileQueueOpen((v) => !v)}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/10 text-left transition-all"
+                  onClick={() => setMobileQueueOpen(true)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.06] active:bg-white/15 border border-white/10 text-left transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <ListMusic size={16} className="text-purple-400 flex-shrink-0" />
@@ -2439,37 +2419,93 @@ export default function MusicPage() {
                       <span className="text-[11px] text-neutral-400 truncate max-w-[140px]">• Next: {queue[1].title}</span>
                     )}
                   </div>
-                  <ChevronUp size={16} className={`text-neutral-400 transition-transform ${mobileQueueOpen ? "rotate-180" : ""}`} />
+                  <div className="flex items-center gap-1 text-[11px] text-purple-400 font-semibold">
+                    <span>Swipe up</span>
+                    <ChevronUp size={15} />
+                  </div>
                 </button>
+              </div>
 
-                {/* Up Next Expandable List */}
-                {mobileQueueOpen && (
-                  <div className="mt-2 max-h-[30vh] overflow-y-auto pr-1 bg-neutral-950/85 rounded-xl p-2 border border-white/10 no-scrollbar">
-                    {(queue.length ? queue : tracks || []).map((t, idx) => (
+              {/* Animated Up Next Slide-Up Bottom Sheet Drawer */}
+              {mobileQueueOpen && (
+                <div
+                  className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-fade-in"
+                  onClick={() => setMobileQueueOpen(false)}
+                />
+              )}
+              <div
+                className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-neutral-950/95 backdrop-blur-2xl border-t border-white/20 shadow-[0_-20px_60px_rgba(0,0,0,0.95)] flex flex-col transition-transform duration-300 ease-out"
+                style={{
+                  height: "72vh",
+                  transform: mobileQueueOpen ? "translateY(0)" : "translateY(100%)",
+                }}
+              >
+                {/* Drag Handle Bar */}
+                <div
+                  onClick={() => setMobileQueueOpen(false)}
+                  className="w-full pt-3 pb-2 flex flex-col items-center cursor-pointer select-none"
+                >
+                  <div className="w-12 h-1.5 rounded-full bg-white/30" />
+                </div>
+
+                {/* Drawer Header */}
+                <div className="flex items-center justify-between px-5 pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <ListMusic size={20} className="text-purple-400" />
+                    <span style={{ fontFamily: displayFont, fontSize: 17, fontWeight: 700, color: colors.text }}>
+                      Up Next ({queue.length || tracks?.length || 0})
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setMobileQueueOpen(false)}
+                    className="p-1.5 rounded-full bg-white/10 active:bg-white/20 text-neutral-300 border-none cursor-pointer flex items-center justify-center"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Track List */}
+                <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2 no-scrollbar">
+                  {(queue.length ? queue : tracks || []).map((t, idx) => {
+                    const isActive = (t.sourceId || t.id) === (nowPlaying?.sourceId || nowPlaying?.id);
+                    return (
                       <button
                         key={t.sourceId || t.id || idx}
-                        onClick={() => openTrack(t)}
-                        className={`w-full flex items-center gap-2.5 p-1.5 rounded-lg text-left transition-colors ${
-                          (t.sourceId || t.id) === (nowPlaying?.sourceId || nowPlaying?.id)
-                            ? "bg-purple-600/20 text-purple-300"
-                            : "hover:bg-white/5 text-neutral-300"
+                        onClick={() => {
+                          openTrack(t);
+                          setMobileQueueOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all border ${
+                          isActive
+                            ? "bg-purple-600/25 border-purple-500/40 text-purple-200 shadow-md shadow-purple-900/30"
+                            : "bg-white/[0.03] border-transparent active:bg-white/[0.08] text-neutral-200"
                         }`}
                       >
-                        {t.artworkUrl ? (
-                          <img src={t.artworkUrl} alt="" width={32} height={32} className="rounded object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-8 h-8 rounded bg-neutral-800 flex items-center justify-center flex-shrink-0">
-                            <Music size={14} color={colors.textMuted} />
-                          </div>
-                        )}
+                        <div className="relative w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 bg-neutral-800">
+                          {t.artworkUrl ? (
+                            <img src={t.artworkUrl} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Music size={18} color={colors.textMuted} />
+                            </div>
+                          )}
+                          {isActive && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                              <Play size={16} color="#fff" fill="#fff" />
+                            </div>
+                          )}
+                        </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-xs font-semibold truncate">{t.title}</div>
-                          <div className="text-[10px] text-neutral-400 truncate">{t.artist}</div>
+                          <div className="text-sm font-semibold truncate">{t.title}</div>
+                          <div className="text-xs text-neutral-400 truncate mt-0.5">{t.artist}</div>
+                        </div>
+                        <div className="text-xs text-neutral-500 font-mono">
+                          {formatTime(t.durationSec || t.durationSeconds || 0)}
                         </div>
                       </button>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           ) : (
