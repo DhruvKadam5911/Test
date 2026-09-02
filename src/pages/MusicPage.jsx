@@ -1701,17 +1701,15 @@ export default function MusicPage() {
           paddingTop: 12,
         }}
       >
-        {/* Top: Hamburger + Logo (Seamless in both wide and collapsed modes) */}
+        {/* Top: Hamburger + Logo */}
         <div
           style={{
             display: "flex",
-            flexDirection: railExpanded ? "row" : "column",
             alignItems: "center",
             justifyContent: railExpanded ? "flex-start" : "center",
-            gap: railExpanded ? 10 : 8,
+            gap: 12,
             padding: railExpanded ? "6px 14px 16px" : "6px 0 14px",
             flexShrink: 0,
-            transition: "all 200ms cubic-bezier(0.16,1,0.3,1)",
           }}
         >
           <button
@@ -1727,21 +1725,22 @@ export default function MusicPage() {
           >
             <Menu size={22} />
           </button>
-          <Link
-            to="/music"
-            onClick={() => setView("home")}
-            title="Onion Music Home"
-            style={{
-              textDecoration: "none",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-            }}
-          >
-            <OnionMark height={railExpanded ? 58 : 36} />
-            {railExpanded && <BrandWord word="music" height={16} />}
-          </Link>
+          {railExpanded && (
+            <Link
+              to="/music"
+              onClick={() => setView("home")}
+              title="Onion Music Home"
+              style={{
+                textDecoration: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <OnionMark height={58} />
+              <BrandWord word="music" height={16} />
+            </Link>
+          )}
         </div>
 
         {/* Nav items */}
@@ -1818,6 +1817,18 @@ export default function MusicPage() {
           className="sticky top-0 flex items-center gap-3 px-4 md:px-8 py-3.5 backdrop-blur-md"
           style={{ background: "rgba(12,8,18,0.85)", borderBottom: `1px solid ${colors.ring}`, zIndex: 25 }}
         >
+          {/* When sidebar is collapsed on desktop, show big Onion Music logo outside sidebar */}
+          {!narrow && !railExpanded && (
+            <Link
+              to="/music"
+              onClick={() => setView("home")}
+              className="flex items-center gap-1.5 flex-shrink-0 mr-2"
+              style={{ textDecoration: "none" }}
+            >
+              <OnionMark height={58} />
+              <BrandWord word="music" height={16} />
+            </Link>
+          )}
           {narrow && !mobileSearch && (
             <>
               <Link to="/music" className="flex items-center gap-1" style={{ textDecoration: "none" }}>
