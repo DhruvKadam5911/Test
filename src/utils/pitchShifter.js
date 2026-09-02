@@ -1,19 +1,12 @@
 /**
- * Studio-Grade Web Audio DSP & Acoustic Engine
+ * Studio-Grade Web Audio DSP & Pitch Shift Engine
  * 
  * Pipeline:
- * input
- *   │
- *   ▼
- * [Acoustic Equalizer Bank: Low-Shelf + Mid-Peak + High-Shelf]
- *   │
- *   ├─── Direct Path (when pitch == 1.0) ────────┐
- *   │                                            │
- *   └─── [4-OLA Granular Pitch Shifter Engine] ──┴──> [Spatial Reverb Convolver & Mixer] ──> output
- *        (when pitch != 1.0)
+ * input ──> [EQ Bank: Bass + Mid + Treble] ──┬──> [Clean Path (when pitch == 1.0)] ──────────┬──> [Reverb Convolver] ──> output
+ *                                            └──> [Dual-Delay Grain Pitch Engine (pitch!=1)] ┘
  */
 
-function generateImpulseResponse(audioContext, duration = 1.8, decay = 2.4) {
+function generateImpulseResponse(audioContext, duration = 1.6, decay = 2.0) {
   const sampleRate = audioContext.sampleRate;
   const length = Math.round(sampleRate * duration);
   const impulse = audioContext.createBuffer(2, length, sampleRate);
@@ -32,32 +25,32 @@ function generateImpulseResponse(audioContext, duration = 1.8, decay = 2.4) {
 export function createPitchShifter(audioContext) {
   const sampleRate = audioContext.sampleRate;
 
-  // Master Busses
+  // Master Buses
   const input = audioContext.createGain();
   const output = audioContext.createGain();
 
   // 1. Equalizer Bank
   const bassShelf = audioContext.createBiquadFilter();
   bassShelf.type = "lowshelf";
-  bassShelf.frequency.value = 120; // Deep sub-bass
+  bassShelf.frequency.value = 110;
   bassShelf.gain.value = 0;
 
   const midPeak = audioContext.createBiquadFilter();
   midPeak.type = "peaking";
-  midPeak.frequency.value = 2400; // Vocal presence
+  midPeak.frequency.value = 2400;
   midPeak.Q.value = 1.0;
   midPeak.gain.value = 0;
 
   const trebleShelf = audioContext.createBiquadFilter();
   trebleShelf.type = "highshelf";
-  trebleShelf.frequency.value = 6000; // Air & brilliance
+  trebleShelf.frequency.value = 6000;
   trebleShelf.gain.value = 0;
 
   input.connect(bassShelf);
   bassShelf.connect(midPeak);
   midPeak.connect(trebleShelf);
 
-  // 2. Pitch Shifter / Clean Crossfader
+  // 2. Crossfader: Clean Direct Path vs Pitch-Shift Path
   const cleanPath = audioContext.createGain();
   const pitchPath = audioContext.createGain();
   cleanPath.gain.value = 1.0;
@@ -65,90 +58,106 @@ export function createPitchShifter(audioContext) {
 
   trebleShelf.connect(cleanPath);
 
-  // 3. 4-Phase Overlap-Add Granular Engine
-  const antiCombFilter = audioContext.createBiquadFilter();
-  antiCombFilter.type = "lowpass";
-  antiCombFilter.frequency.value = 18000;
-  antiCombFilter.Q.value = 0.707;
+  // 3. Smooth Overlap-Add Pitch Shift Delay Engine
+  const GRAIN_SIZE = 0.090; // 90ms optimal grain size for musical clarity
+  const grainSamples = Math.round(GRAIN_SIZE * sampleRate);
 
-  trebleShelf.connect(antiCombFilter);
-
-  const NUM_GRAINS = 4;
-  const BASE_GRAIN_TIME = 0.120; // 120ms
-  const grainSamples = Math.round(BASE_GRAIN_TIME * sampleRate);
-
-  const fadeBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
-  const fadeData = fadeBuffer.getChannelData(0);
+  // Ramp modulation buffer (linear ramp from 0 to GRAIN_SIZE)
+  const rampBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
+  const rampData = rampBuffer.getChannelData(0);
   for (let i = 0; i < grainSamples; i++) {
-    fadeData[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / grainSamples));
+    rampData[i] = (i / grainSamples) * GRAIN_SIZE;
   }
 
-  const delayBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
-  const delayData = delayBuffer.getChannelData(0);
+  // Triangular Window Buffer (anti-clicking crossfade)
+  const windowBuffer = audioContext.createBuffer(1, grainSamples, sampleRate);
+  const winData = windowBuffer.getChannelData(0);
   for (let i = 0; i < grainSamples; i++) {
-    delayData[i] = (i / grainSamples) * BASE_GRAIN_TIME;
+    winData[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / grainSamples));
   }
 
-  const delayNodes = [];
-  const grainGains = [];
-  const lfoGains = [];
-  const delayLFOs = [];
-  const fadeLFOs = [];
+  // Delay Tap 1
+  const delay1 = audioContext.createDelay(1.0);
+  const gain1 = audioContext.createGain();
+  gain1.gain.value = 0;
+  trebleShelf.connect(delay1);
+  delay1.connect(gain1);
+  gain1.connect(pitchPath);
 
-  for (let i = 0; i < NUM_GRAINS; i++) {
-    const delay = audioContext.createDelay(1.0);
-    const gain = audioContext.createGain();
-    const lfoGain = audioContext.createGain();
+  // Delay Tap 2
+  const delay2 = audioContext.createDelay(1.0);
+  const gain2 = audioContext.createGain();
+  gain2.gain.value = 0;
+  trebleShelf.connect(delay2);
+  delay2.connect(gain2);
+  gain2.connect(pitchPath);
 
-    antiCombFilter.connect(delay);
-    delay.connect(gain);
-    gain.connect(pitchPath);
+  // LFO modulators
+  const modGain1 = audioContext.createGain();
+  const modGain2 = audioContext.createGain();
+  modGain1.connect(delay1.delayTime);
+  modGain2.connect(delay2.delayTime);
 
-    delayNodes.push(delay);
-    grainGains.push(gain);
-    lfoGains.push(lfoGain);
-  }
+  let rampSource1 = null;
+  let rampSource2 = null;
+  let winSource1 = null;
+  let winSource2 = null;
+  let isPitchRunning = false;
 
-  let isPitchEngineStarted = false;
-
-  function startPitchEngine() {
-    if (isPitchEngineStarted) return;
+  function startPitchEngine(pitch) {
     try {
-      const now = audioContext.currentTime;
-      const phaseOffset = BASE_GRAIN_TIME / NUM_GRAINS;
+      rampSource1?.stop();
+      rampSource2?.stop();
+      winSource1?.stop();
+      winSource2?.stop();
+    } catch {}
 
-      for (let i = 0; i < NUM_GRAINS; i++) {
-        const dLFO = audioContext.createBufferSource();
-        dLFO.buffer = delayBuffer;
-        dLFO.loop = true;
+    const now = audioContext.currentTime;
+    const speed = pitch - 1.0;
+    const rate = Math.max(0.005, Math.abs(speed));
+    const sign = speed >= 0 ? 1 : -1;
 
-        const fLFO = audioContext.createBufferSource();
-        fLFO.buffer = fadeBuffer;
-        fLFO.loop = true;
+    modGain1.gain.setValueAtTime(sign * GRAIN_SIZE, now);
+    modGain2.gain.setValueAtTime(sign * GRAIN_SIZE, now);
 
-        dLFO.connect(lfoGains[i]);
-        lfoGains[i].connect(delayNodes[i].delayTime);
+    rampSource1 = audioContext.createBufferSource();
+    rampSource1.buffer = rampBuffer;
+    rampSource1.loop = true;
+    rampSource1.playbackRate.value = rate;
 
-        fLFO.connect(grainGains[i].gain);
+    rampSource2 = audioContext.createBufferSource();
+    rampSource2.buffer = rampBuffer;
+    rampSource2.loop = true;
+    rampSource2.playbackRate.value = rate;
 
-        const offsetTime = i * phaseOffset;
-        dLFO.start(now, offsetTime);
-        fLFO.start(now, offsetTime);
+    winSource1 = audioContext.createBufferSource();
+    winSource1.buffer = windowBuffer;
+    winSource1.loop = true;
+    winSource1.playbackRate.value = rate;
 
-        delayLFOs.push(dLFO);
-        fadeLFOs.push(fLFO);
-      }
+    winSource2 = audioContext.createBufferSource();
+    winSource2.buffer = windowBuffer;
+    winSource2.loop = true;
+    winSource2.playbackRate.value = rate;
 
-      isPitchEngineStarted = true;
-    } catch (err) {
-      console.warn("Pitch engine start notice:", err);
-    }
+    rampSource1.connect(modGain1);
+    rampSource2.connect(modGain2);
+    winSource1.connect(gain1.gain);
+    winSource2.connect(gain2.gain);
+
+    const halfPeriod = (GRAIN_SIZE / rate) / 2;
+    rampSource1.start(now);
+    winSource1.start(now);
+    rampSource2.start(now, halfPeriod);
+    winSource2.start(now, halfPeriod);
+
+    isPitchRunning = true;
   }
 
   // 4. Spatial Reverb & Ambience Mixer
   const reverbConvolver = audioContext.createConvolver();
   try {
-    reverbConvolver.buffer = generateImpulseResponse(audioContext, 2.0, 2.2);
+    reverbConvolver.buffer = generateImpulseResponse(audioContext, 1.8, 2.2);
   } catch {}
 
   const postPitchBus = audioContext.createGain();
@@ -172,38 +181,40 @@ export function createPitchShifter(audioContext) {
   let currentEffect = "clean";
 
   function setPitch(pitchMultiplier) {
-    const pitch = Math.max(0.25, Math.min(4.0, pitchMultiplier || 1.0));
+    const pitch = Math.max(0.4, Math.min(2.5, pitchMultiplier || 1.0));
     currentPitch = pitch;
     const now = audioContext.currentTime;
 
-    const isNormalKey = Math.abs(pitch - 1.0) < 0.005;
+    const isNormal = Math.abs(pitch - 1.0) < 0.01;
 
-    if (isNormalKey) {
-      // Direct clean path (zero delay processing)
-      cleanPath.gain.setTargetAtTime(1.0, now, 0.02);
-      pitchPath.gain.setTargetAtTime(0.0, now, 0.02);
+    if (isNormal) {
+      // Clean zero-latency bypass path
+      cleanPath.gain.setTargetAtTime(1.0, now, 0.015);
+      pitchPath.gain.setTargetAtTime(0.0, now, 0.015);
       return;
     }
 
-    if (!isPitchEngineStarted) {
-      startPitchEngine();
-    }
+    if (!isPitchRunning) {
+      startPitchEngine(pitch);
+    } else {
+      const speed = pitch - 1.0;
+      const rate = Math.max(0.005, Math.abs(speed));
+      const sign = speed >= 0 ? 1 : -1;
 
-    // Granular pitch shift path
-    cleanPath.gain.setTargetAtTime(0.0, now, 0.02);
-    pitchPath.gain.setTargetAtTime(1.0, now, 0.02);
-
-    const speed = pitch - 1.0;
-    const lfoRate = Math.max(0.001, Math.abs(speed));
-    const modSign = speed >= 0 ? 1 : -1;
-
-    for (let i = 0; i < NUM_GRAINS; i++) {
-      if (delayLFOs[i]) {
-        delayLFOs[i].playbackRate.setTargetAtTime(lfoRate, now, 0.015);
-        fadeLFOs[i].playbackRate.setTargetAtTime(lfoRate, now, 0.015);
-        lfoGains[i].gain.setTargetAtTime(modSign * BASE_GRAIN_TIME, now, 0.015);
+      try {
+        rampSource1.playbackRate.setTargetAtTime(rate, now, 0.015);
+        rampSource2.playbackRate.setTargetAtTime(rate, now, 0.015);
+        winSource1.playbackRate.setTargetAtTime(rate, now, 0.015);
+        winSource2.playbackRate.setTargetAtTime(rate, now, 0.015);
+        modGain1.gain.setTargetAtTime(sign * GRAIN_SIZE, now, 0.015);
+        modGain2.gain.setTargetAtTime(sign * GRAIN_SIZE, now, 0.015);
+      } catch {
+        startPitchEngine(pitch);
       }
     }
+
+    cleanPath.gain.setTargetAtTime(0.0, now, 0.015);
+    pitchPath.gain.setTargetAtTime(1.0, now, 0.015);
   }
 
   function setReverb(amount) {
@@ -211,8 +222,8 @@ export function createPitchShifter(audioContext) {
     currentReverb = amt;
     const now = audioContext.currentTime;
 
-    reverbWet.gain.setTargetAtTime(amt * 0.85, now, 0.03);
-    reverbDry.gain.setTargetAtTime(1.0 - amt * 0.3, now, 0.03);
+    reverbWet.gain.setTargetAtTime(amt * 0.8, now, 0.03);
+    reverbDry.gain.setTargetAtTime(1.0 - amt * 0.25, now, 0.03);
   }
 
   function setEffectPreset(presetName) {
@@ -221,21 +232,21 @@ export function createPitchShifter(audioContext) {
 
     switch (presetName) {
       case "slowed_reverb":
-        setReverb(0.45);
-        bassShelf.gain.setTargetAtTime(5.5, now, 0.03);
+        setReverb(0.42);
+        bassShelf.gain.setTargetAtTime(5.0, now, 0.03);
         midPeak.gain.setTargetAtTime(-1.0, now, 0.03);
         trebleShelf.gain.setTargetAtTime(-2.5, now, 0.03);
         break;
 
       case "nightcore":
-        setReverb(0.12);
+        setReverb(0.10);
         bassShelf.gain.setTargetAtTime(1.5, now, 0.03);
         midPeak.gain.setTargetAtTime(2.0, now, 0.03);
-        trebleShelf.gain.setTargetAtTime(4.0, now, 0.03);
+        trebleShelf.gain.setTargetAtTime(3.5, now, 0.03);
         break;
 
       case "concert":
-        setReverb(0.58);
+        setReverb(0.55);
         bassShelf.gain.setTargetAtTime(3.0, now, 0.03);
         midPeak.gain.setTargetAtTime(1.5, now, 0.03);
         trebleShelf.gain.setTargetAtTime(2.0, now, 0.03);
@@ -243,16 +254,16 @@ export function createPitchShifter(audioContext) {
 
       case "bass_boost":
         setReverb(0.0);
-        bassShelf.gain.setTargetAtTime(8.5, now, 0.03); // +8.5 dB Punchy Sub-Bass!
+        bassShelf.gain.setTargetAtTime(8.0, now, 0.03);
         midPeak.gain.setTargetAtTime(0.0, now, 0.03);
         trebleShelf.gain.setTargetAtTime(0.5, now, 0.03);
         break;
 
       case "vocal":
-        setReverb(0.12);
-        bassShelf.gain.setTargetAtTime(-2.5, now, 0.03);
-        midPeak.gain.setTargetAtTime(4.5, now, 0.03); // +4.5 dB Vocal Clarity!
-        trebleShelf.gain.setTargetAtTime(3.5, now, 0.03);
+        setReverb(0.10);
+        bassShelf.gain.setTargetAtTime(-2.0, now, 0.03);
+        midPeak.gain.setTargetAtTime(4.0, now, 0.03);
+        trebleShelf.gain.setTargetAtTime(3.0, now, 0.03);
         break;
 
       case "clean":
@@ -265,7 +276,7 @@ export function createPitchShifter(audioContext) {
     }
   }
 
-  // Initialize defaults
+  // Initialize
   setEffectPreset("clean");
   setPitch(1.0);
   setReverb(0.0);
