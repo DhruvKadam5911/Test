@@ -219,21 +219,9 @@ function applyRates(engine, tempo, pitch) {
   }
 }
 
-function getStreamUrl(track) {
+function sourceOf(track) {
   if (!track) return "";
-  if (track.streamUrl) return track.streamUrl;
-  const id = track.sourceId || track.id;
-  if (!id) return "";
-  const base = import.meta.env.VITE_API_URL || "http://localhost:5000";
-  return `${base}/music/stream/${encodeURIComponent(id)}`;
-}
-
-function sourceOf(track, mode = "song") {
-  if (!track) return "";
-  if (mode === "video") {
-    return track.sourceId || track.id || "";
-  }
-  return getStreamUrl(track);
+  return track.streamUrl || track.sourceId || track.id || "";
 }
 
 const STAGE_MS = 340;
@@ -260,7 +248,7 @@ const SHORTCUTS = [
   ["New releases", Sparkles, "new songs 2026"],
   ["Charts", TrendingUp, "top songs india"],
   ["Moods & Genres", Music, "lofi chill songs"],
-  ["Podcasts", Library, "podcast hindi"],
+  ["Podcasts", Radio, "podcast hindi"],
 ];
 
 function readStorage(key, fallback = []) {
@@ -295,28 +283,28 @@ function channelLabel(name) {
 
 export default function MusicPage() {
   const [view, setView] = useState("home");
-  const [tracks, setTracks] = useState(null);
-  const [albums, setAlbums] = useState(null);
-  const [recent, setRecent] = useState(() => readStorage(RECENT_KEY));
-  const [likedList, setLikedList] = useState(() => readStorage(LIKED_KEY));
-  const [forYou, setForYou] = useState([]);
-  const [explore, setExplore] = useState({ albums: [], top: [] });
-  const [error, setError] = useState(null);
-
   const [query, setQuery] = useState("");
-  const [searching, setSearching] = useState(false);
   const [searchMode, setSearchMode] = useState("songs");
-
+  const [searching, setSearching] = useState(false);
+  const [tracks, setTracks] = useState(null);
+  const [albums, setAlbums] = useState([]);
+  const [explore, setExplore] = useState({ albums: [], top: [] });
+  const [forYou, setForYou] = useState([]);
   const [nowPlaying, setNowPlaying] = useState(null);
   const [queue, setQueue] = useState([]);
-  const [autoplay, setAutoplay] = useState(false);
+  const [recent, setRecent] = useState(() => readStorage(RECENT_KEY));
+  const [likedList, setLikedList] = useState(() => readStorage(LIKED_KEY));
+  const [error, setError] = useState(null);
+
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [muted, setMuted] = useState(false);
+  const [scrubbing, setScrubbing] = useState(null);
   const [volume, setVolume] = useState(1);
-  const [displayMode, setDisplayMode] = useState("song"); // "song" | "video"
+  const [muted, setMuted] = useState(false);
+  const [autoplay, setAutoplay] = useState(false);
+  const [displayMode, setDisplayMode] = useState("song");
 
   const [tempo, setTempo] = useState(1);
   const [pitch, setPitch] = useState(1);
@@ -369,35 +357,18 @@ export default function MusicPage() {
   const isYouTubeTrack = !track?.streamUrl;
   const canPitch = true;
 
-  const selectEngine = (currentTrack = track, mode = displayMode) => {
-    if (mode === "video") {
-      if (youtubeEngineRef.current) audioRef.current = youtubeEngineRef.current;
-    } else {
+  const selectEngine = (currentTrack = track) => {
+    if (currentTrack?.streamUrl) {
       if (mediaEngineRef.current) audioRef.current = mediaEngineRef.current;
+    } else {
+      if (youtubeEngineRef.current) audioRef.current = youtubeEngineRef.current;
+      else if (mediaEngineRef.current) audioRef.current = mediaEngineRef.current;
     }
     return audioRef.current;
   };
 
   const switchDisplayMode = (newMode) => {
-    if (newMode === displayMode) return;
-    const oldEngine = audioRef.current;
-    const curTime = oldEngine?.currentTime || 0;
-    const wasPlaying = playing;
-    oldEngine?.pause();
-
     setDisplayMode(newMode);
-    setTimeout(() => {
-      const nextEngine = selectEngine(track, newMode);
-      if (nextEngine && track) {
-        const src = sourceOf(track, newMode);
-        nextEngine.dataset.sourceId = String(src);
-        nextEngine.setSource(src, { autoplay: wasPlaying });
-        if (curTime > 0) nextEngine.currentTime = curTime;
-        if (!sameRate(tempo, 1) || !sameRate(pitch, 1)) {
-          applyRates(nextEngine, tempo, pitch);
-        }
-      }
-    }, 40);
   };
 
   /* Initialize HTML5 Media Engine */
@@ -833,8 +804,6 @@ export default function MusicPage() {
   actionsRef.current = { toggle, skip, resume, ended: onEnded };
 
   /* Scrubbing */
-  const [scrubbing, setScrubbing] = useState(null);
-
   const ratioFrom = (event, element) => {
     const r = element.getBoundingClientRect();
     return Math.min(1, Math.max(0, (event.clientX - r.left) / r.width));
