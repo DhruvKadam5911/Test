@@ -697,6 +697,7 @@ export default function MusicPage() {
   const [isFastForward, setIsFastForward] = useState(false);
   const prevTempoRef = useRef(1.0);
   const isHoldingRef = useRef(false);
+  const touchStartYRef = useRef(0);
 
   useEffect(() => {
     const q = window.matchMedia?.(NARROW);
@@ -2245,7 +2246,14 @@ export default function MusicPage() {
 
           {/* Main Stage Content */}
           {narrow ? (
-            <div className="relative flex-1 min-h-0 flex flex-col justify-between px-5 pb-3 overflow-hidden select-none">
+            <div
+              onTouchStart={(e) => { touchStartYRef.current = e.touches[0].clientY; }}
+              onTouchEnd={(e) => {
+                const deltaY = touchStartYRef.current - e.changedTouches[0].clientY;
+                if (deltaY > 35) setMobileQueueOpen(true);
+              }}
+              className="relative flex-1 min-h-0 flex flex-col justify-between px-5 pb-3 overflow-hidden select-none"
+            >
               {/* Artwork or Lyrics Container */}
               <div className="flex-1 min-h-0 flex items-center justify-center py-2 relative">
                 {displayMode === "song" ? (
@@ -2257,9 +2265,9 @@ export default function MusicPage() {
                     onClick={() => {
                       if (!isHoldingRef.current) toggle();
                     }}
-                    className="rounded-full cursor-pointer overflow-hidden border-[5px] border-neutral-900 shadow-[0_16px_50px_rgba(0,0,0,0.95),0_0_30px_rgba(168,85,247,0.2)] relative flex items-center justify-center select-none active:scale-95 transition-transform"
+                    className="rounded-full cursor-pointer overflow-hidden border-[6px] border-neutral-900 shadow-[0_20px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(168,85,247,0.25)] relative flex items-center justify-center select-none active:scale-95 transition-transform"
                     style={{
-                      width: "min(210px, 45vw)",
+                      width: "min(270px, 64vw)",
                       aspectRatio: "1 / 1",
                       animation: playing ? `vinyl-spin ${Math.max(0.8, (20 / (isFastForward ? 2.0 : tempo)))}s linear infinite` : "none",
                       background: track?.artworkUrl
@@ -2277,10 +2285,10 @@ export default function MusicPage() {
                     />
 
                     {/* Center Vinyl Label */}
-                    <div className="relative w-16 h-16 rounded-full bg-neutral-950/90 backdrop-blur-md border-2 border-white/25 flex items-center justify-center shadow-2xl">
-                      <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center bg-black/40">
-                        <div className="w-4 h-4 rounded-full bg-neutral-900 border border-neutral-600 shadow-inner flex items-center justify-center">
-                          <div className="w-1.5 h-1.5 rounded-full bg-white/90" />
+                    <div className="relative w-20 h-20 rounded-full bg-neutral-950/90 backdrop-blur-md border-2 border-white/25 flex items-center justify-center shadow-2xl">
+                      <div className="w-14 h-14 rounded-full border border-white/10 flex items-center justify-center bg-black/40">
+                        <div className="w-6 h-6 rounded-full bg-neutral-900 border-2 border-neutral-600 shadow-inner flex items-center justify-center">
+                          <div className="w-2 h-2 rounded-full bg-white/90" />
                         </div>
                       </div>
                     </div>
@@ -2288,16 +2296,16 @@ export default function MusicPage() {
                     {/* 2X Speed Overlay when Holding Disc */}
                     {isFastForward && (
                       <div className="absolute inset-0 rounded-full bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20">
-                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-600 text-white font-black text-xs tracking-wider shadow-lg shadow-purple-600/60">
-                          <Zap size={14} className="animate-pulse" /> 2X
+                        <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-purple-600 text-white font-black text-xs tracking-wider shadow-lg shadow-purple-600/60">
+                          <Zap size={15} className="animate-pulse" /> 2X SPEED
                         </div>
-                        <span className="text-[10px] text-white/80 font-medium mt-1">Holding</span>
+                        <span className="text-[11px] text-white/80 font-medium mt-1">Holding</span>
                       </div>
                     )}
                   </div>
                 ) : (
                   /* Lyrics Mode */
-                  <div className="w-full h-full max-h-[42vh] overflow-y-auto px-2 py-2 flex flex-col gap-3 text-center no-scrollbar">
+                  <div className="w-full h-full max-h-[44vh] overflow-y-auto px-2 py-2 flex flex-col gap-3 text-center no-scrollbar">
                     {lyricsData.loading ? (
                       <div className="flex flex-col items-center justify-center py-10 text-neutral-400 gap-2">
                         <Sparkles size={24} className="animate-spin text-purple-400" />
@@ -2410,6 +2418,11 @@ export default function MusicPage() {
               <div className="mt-2.5 pt-2 border-t border-white/10">
                 <button
                   onClick={() => setMobileQueueOpen(true)}
+                  onTouchStart={(e) => { touchStartYRef.current = e.touches[0].clientY; }}
+                  onTouchEnd={(e) => {
+                    const deltaY = touchStartYRef.current - e.changedTouches[0].clientY;
+                    if (deltaY > 20) setMobileQueueOpen(true);
+                  }}
                   className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.06] active:bg-white/15 border border-white/10 text-left transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -2434,6 +2447,11 @@ export default function MusicPage() {
                 />
               )}
               <div
+                onTouchStart={(e) => { touchStartYRef.current = e.touches[0].clientY; }}
+                onTouchEnd={(e) => {
+                  const deltaY = touchStartYRef.current - e.changedTouches[0].clientY;
+                  if (deltaY < -35) setMobileQueueOpen(false);
+                }}
                 className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-neutral-950/95 backdrop-blur-2xl border-t border-white/20 shadow-[0_-20px_60px_rgba(0,0,0,0.95)] flex flex-col transition-transform duration-300 ease-out"
                 style={{
                   height: "72vh",
