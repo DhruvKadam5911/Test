@@ -88,8 +88,16 @@ let globalAudioCtx = null;
 let globalPitchShifter = null;
 const elementAudioNodes = new WeakMap();
 
-function getPitchShifter(el) {
+function getPitchShifter(el, createIfMissing = false) {
   if (!el || typeof window === "undefined") return null;
+  let shifter = elementAudioNodes.get(el);
+  if (shifter) {
+    if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+      globalAudioCtx.resume().catch(() => {});
+    }
+    return shifter;
+  }
+  if (!createIfMissing) return null;
 
   if (!globalAudioCtx) {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -99,32 +107,22 @@ function getPitchShifter(el) {
   }
   if (!globalAudioCtx) return null;
 
-  let shifter = elementAudioNodes.get(el);
-  if (!shifter) {
-    try {
-      let sourceNode = el._audioSourceNode;
-      if (!sourceNode) {
-        sourceNode = globalAudioCtx.createMediaElementSource(el);
-        el._audioSourceNode = sourceNode;
-      }
-      shifter = createPitchShifter(globalAudioCtx);
-      sourceNode.connect(shifter.input);
-      shifter.output.connect(globalAudioCtx.destination);
-      elementAudioNodes.set(el, shifter);
-      globalPitchShifter = shifter;
-    } catch (e) {
-      console.warn("Web Audio pitch shifter note:", e.message);
-      if (!globalPitchShifter) {
-        try {
-          globalPitchShifter = createPitchShifter(globalAudioCtx);
-          globalPitchShifter.output.connect(globalAudioCtx.destination);
-        } catch {}
-      }
-      shifter = globalPitchShifter;
+  try {
+    let sourceNode = el._audioSourceNode;
+    if (!sourceNode) {
+      sourceNode = globalAudioCtx.createMediaElementSource(el);
+      el._audioSourceNode = sourceNode;
     }
+    shifter = createPitchShifter(globalAudioCtx);
+    sourceNode.connect(shifter.input);
+    shifter.output.connect(globalAudioCtx.destination);
+    elementAudioNodes.set(el, shifter);
+    globalPitchShifter = shifter;
+  } catch (e) {
+    console.warn("Web Audio pitch shifter note:", e.message);
   }
 
-  if (globalAudioCtx.state === "suspended") {
+  if (globalAudioCtx && globalAudioCtx.state === "suspended") {
     globalAudioCtx.resume().catch(() => {});
   }
   return shifter || globalPitchShifter;
@@ -211,11 +209,13 @@ function mediaEngine(el) {
     },
     setRates(tempo, pitch, effectName, reverbVal, isUnhooked) {
       try {
-        const shifter = getPitchShifter(el);
-        if (shifter) {
-          if (effectName !== undefined) shifter.setEffectPreset(effectName);
-          if (reverbVal !== undefined) shifter.setReverb(reverbVal);
-          if (pitch !== undefined) shifter.setPitch(pitch);
+        const needsFx = (effectName && effectName !== "clean") || (reverbVal && reverbVal > 0);
+        if (needsFx) {
+          const shifter = getPitchShifter(el, true);
+          if (shifter) {
+            if (effectName !== undefined) shifter.setEffectPreset(effectName);
+            if (reverbVal !== undefined) shifter.setReverb(reverbVal);
+          }
         }
 
         const wantTempo = Number(tempo) || 1.0;
@@ -224,30 +224,30 @@ function mediaEngine(el) {
 
         if (isLocked) {
           // Locked / Turntable Mode: Speed and Pitch change together naturally
-          el.playbackRate = wantTempo;
           el.preservesPitch = false;
           if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
           if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
+          el.playbackRate = wantTempo;
         } else if (isUnhooked) {
           // Unhooked Mode:
           if (!sameRate(wantTempo, 1.0) && sameRate(wantPitch, 1.0)) {
             // Speed (Tempo) changed while Pitch is 1.0 -> preserve natural key
-            el.playbackRate = wantTempo;
             el.preservesPitch = true;
             if ("mozPreservesPitch" in el) el.mozPreservesPitch = true;
             if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = true;
+            el.playbackRate = wantTempo;
           } else {
             // Pitch changed:
-            el.playbackRate = wantPitch;
             el.preservesPitch = false;
             if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
             if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
+            el.playbackRate = wantPitch;
           }
         } else {
-          el.playbackRate = wantTempo;
           el.preservesPitch = false;
           if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
           if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
+          el.playbackRate = wantTempo;
         }
       } catch (err) {
         console.warn("setRates error:", err);
