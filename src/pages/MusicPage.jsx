@@ -534,6 +534,7 @@ export default function MusicPage() {
     }
     return CURATED_DEFAULT_TRACKS[0];
   });
+  const [queue, setQueue] = useState([]);
   const [likedList, setLikedList] = useState(() => readStorage(LIKED_KEY));
   const [error, setError] = useState(null);
 
@@ -644,11 +645,7 @@ export default function MusicPage() {
   useEffect(() => {
     const el = mediaElRef.current;
     if (!el) return;
-    const shifter = getPitchShifter(el);
-    if (shifter) {
-      shifter.setEffectPreset(soundEffect);
-      shifter.setReverb(reverb);
-    }
+    getPitchShifter(el);
     const engine = mediaEngine(el);
     mediaEngineRef.current = engine;
     if (nowPlaying?.streamUrl) {
@@ -668,7 +665,15 @@ export default function MusicPage() {
     return () => {
       for (const [event, handler] of handlers) el.removeEventListener(event, handler);
     };
-  }, [nowPlaying?.streamUrl, soundEffect, reverb]);
+  }, [nowPlaying?.streamUrl]);
+
+  /* Synchronize DSP Preset & Reverb with active PitchShifter */
+  useEffect(() => {
+    if (globalPitchShifter) {
+      globalPitchShifter.setEffectPreset(soundEffect);
+      globalPitchShifter.setReverb(reverb);
+    }
+  }, [soundEffect, reverb]);
 
   /* Initialize YouTube Iframe Player */
   useEffect(() => {
