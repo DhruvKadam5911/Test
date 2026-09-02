@@ -25,22 +25,27 @@ const emptyIfNoTable = (error, res) => {
 };
 
 async function storeTracks(tracks) {
-  if (!tracks.length) return;
+  if (!tracks || !tracks.length) return;
 
-  const params = [];
-  const tuples = tracks.map((t) => {
-    const start = params.length;
-    params.push(t.title, t.artist, t.audioUrl, t.artworkUrl, t.durationSeconds, t.genre, t.source, t.sourceId);
-    const p = (n) => `$${start + n}`;
-    return `(gen_random_uuid()::text, ${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)}, ${p(6)}, ${p(7)}, ${p(8)}, NOW())`;
-  });
+  try {
+    const params = [];
+    const tuples = tracks.map((t) => {
+      const start = params.length;
+      params.push(t.title, t.artist, t.audioUrl, t.artworkUrl, t.durationSeconds, t.genre, t.source, t.sourceId);
+      const p = (n) => `$${start + n}`;
+      return `(gen_random_uuid()::text, ${p(1)}, ${p(2)}, ${p(3)}, ${p(4)}, ${p(5)}, ${p(6)}, ${p(7)}, ${p(8)}, NOW())`;
+    });
 
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "Track" (id, title, artist, "audioUrl", "artworkUrl", "durationSeconds", genre, source, "sourceId", "createdAt")
-     VALUES ${tuples.join(", ")}
-     ON CONFLICT (source, "sourceId") DO NOTHING`,
-    ...params
-  );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "Track" (id, title, artist, "audioUrl", "artworkUrl", "durationSeconds", genre, source, "sourceId", "createdAt")
+       VALUES ${tuples.join(", ")}
+       ON CONFLICT (source, "sourceId") DO NOTHING`,
+      ...params
+    );
+  } catch (err) {
+    // Database caching error shouldn't crash the live network response
+    console.warn("storeTracks cache notice:", err?.message || err);
+  }
 }
 
 // GET /music/tracks — what the network is publishing and watching right now.

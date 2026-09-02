@@ -164,8 +164,12 @@ function pickThumb(item) {
  * controller.
  */
 function toTrack(item) {
-  const sourceId = item?.id || item?.video_id;
-  if (!sourceId) return null;
+  const sourceId = item?.video_id || item?.id;
+  if (!sourceId || typeof sourceId !== "string") return null;
+  // Exclude playlist and browse IDs (e.g. VL..., PL..., MPRE..., RD..., OLAK...) or IDs > 20 chars
+  if (/^(VL|PL|MPRE|OLAK|RDCLAK)/.test(sourceId) || sourceId.length > 20) {
+    return null;
+  }
 
   const artists = Array.isArray(item?.artists) ? item.artists : [];
   const artist =
@@ -189,8 +193,8 @@ function toTrack(item) {
 }
 
 function toAlbum(item) {
-  const sourceId = item?.id || item?.playlist_id;
-  if (!sourceId) return null;
+  const sourceId = item?.playlist_id || item?.id || item?.browse_id;
+  if (!sourceId || typeof sourceId !== "string") return null;
   const artists = Array.isArray(item?.artists) ? item.artists : [];
   return {
     source: "youtube",
