@@ -83,6 +83,7 @@ export async function getTracks(req, res) {
     const tracks = await prisma.$queryRaw`
       SELECT id, title, artist, "audioUrl" as "streamUrl", "artworkUrl", "durationSeconds" as "durationSec", genre, source, "sourceId"
       FROM "Track"
+      WHERE source != 'peertube' AND (source = 'saavn' OR source = 'youtube')
       ORDER BY "createdAt" DESC LIMIT ${limit}`;
     return res.status(200).json(tracks);
   } catch (error) {
@@ -123,13 +124,13 @@ export async function searchTracks(req, res) {
       console.warn("YouTube search error:", err.message);
     }
 
-    // 3. Fallback to cached tracks
-    const cached = await prisma.$queryRaw`
+    // 3. Fallback to database
+    const tracks = await prisma.$queryRaw`
       SELECT id, title, artist, "audioUrl" as "streamUrl", "artworkUrl", "durationSeconds" as "durationSec", genre, source, "sourceId"
       FROM "Track"
-      WHERE (title ILIKE ${`%${query}%`} OR artist ILIKE ${`%${query}%`})
+      WHERE source != 'peertube' AND (source = 'saavn' OR source = 'youtube') AND (lower(title) LIKE ${`%${query.toLowerCase()}%`} OR lower(artist) LIKE ${`%${query.toLowerCase()}%`})
       ORDER BY "createdAt" DESC LIMIT ${limit}`;
-    return res.status(200).json(cached);
+    return res.status(200).json(tracks);
   } catch (error) {
     console.error("searchTracks error:", error);
     return res.status(500).json({ error: error.message || "Failed to search music." });

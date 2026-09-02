@@ -1487,35 +1487,18 @@ export default function MusicPage() {
                 overflow: "hidden",
                 boxShadow: "0 25px 70px rgba(0,0,0,0.95), 0 0 40px rgba(123,38,133,0.35)",
                 border: "1px solid rgba(255,255,255,0.2)",
-              }
-            : expanded && displayMode === "song"
-            ? {
-                bottom: narrow ? NAV_HEIGHT + 75 : BAR_HEIGHT + 24,
-                right: 24,
-                width: narrow ? 140 : 200,
-                height: narrow ? 80 : 112,
-                zIndex: 60,
-                opacity: 0.95,
-                pointerEvents: "auto",
-                borderRadius: 10,
-                overflow: "hidden",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.9)",
-                border: "1px solid rgba(255,255,255,0.2)",
+                background: "#000",
               }
             : {
-                bottom: narrow ? NAV_HEIGHT + 8 : BAR_HEIGHT + 12,
-                right: 16,
-                width: narrow ? 130 : 220,
-                height: narrow ? 74 : 124,
-                zIndex: 48,
-                opacity: nowPlaying ? 1 : 0,
-                pointerEvents: nowPlaying ? "auto" : "none",
-                borderRadius: 10,
-                overflow: "hidden",
-                boxShadow: "0 10px 30px rgba(0,0,0,0.85)",
-                border: "1px solid rgba(255,255,255,0.15)",
+                bottom: -9999,
+                right: -9999,
+                width: 1,
+                height: 1,
+                zIndex: -1,
+                opacity: 0,
+                pointerEvents: "none",
+                background: "transparent",
               }),
-          background: "#000",
         }}
       >
         <div id="onion-yt-player-slot" style={{ width: "100%", height: "100%" }} />
