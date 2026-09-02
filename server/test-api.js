@@ -117,6 +117,94 @@ async function runTests() {
     }
     console.log("✅ Admin dedupe refuses unauthenticated calls (401).");
 
+
+    /*
+     * Music.
+     *
+     * Which catalogue answers depends on MUSIC_SOURCE, so these assert the
+     * contract every source must meet rather than any one source's data: a
+     * JSON array, and tracks carrying the fields the Music page reads.
+     */
+    console.log("\nTesting GET /music/tracks ...");
+    const tracksRes = await fetch(`${BASE_URL}/music/tracks?limit=10`);
+    if (!tracksRes.ok) throw new Error(`Music tracks failed with status: ${tracksRes.status}`);
+    const tracks = await tracksRes.json();
+    if (!Array.isArray(tracks)) throw new Error("Music tracks did not return an array.");
+    console.log(`\u2705 /music/tracks returned ${tracks.length} track(s).`);
+
+    if (tracks.length) {
+      for (const field of ["sourceId", "title", "artist"]) {
+        if (!tracks[0][field]) throw new Error(`First track is missing "${field}"`);
+      }
+      console.log(`\ud83d\udc49 First track: "${tracks[0].title}" — ${tracks[0].artist} (${tracks[0].source})`);
+    }
+
+    // Under two characters must be an empty array, not a search.
+    console.log("\nTesting GET /music/search ...");
+    const shortRes = await fetch(`${BASE_URL}/music/search?q=a`);
+    const shortBody = await shortRes.json();
+    if (!Array.isArray(shortBody) || shortBody.length !== 0) {
+      throw new Error("A one-character query should return an empty array.");
+    }
+    const songsRes = await fetch(`${BASE_URL}/music/search?q=kesariya`);
+    if (!songsRes.ok) throw new Error(`Music search failed with status: ${songsRes.status}`);
+    const songs = await songsRes.json();
+    if (!Array.isArray(songs)) throw new Error("Music search did not return an array.");
+    console.log(`\u2705 /music/search returned ${songs.length} song(s).`);
+
+    console.log("\nTesting GET /music/albums ...");
+    const albumsRes = await fetch(`${BASE_URL}/music/albums?q=brahmastra`);
+    if (!albumsRes.ok) throw new Error(`Music albums failed with status: ${albumsRes.status}`);
+    if (!Array.isArray(await albumsRes.json())) throw new Error("Music albums did not return an array.");
+    console.log("\u2705 /music/albums returned an array.");
+
+    // The queue must never hand back the song that is already playing.
+    console.log("\nTesting GET /music/related ...");
+    const seed = songs[0] || tracks[0];
+    if (seed) {
+      const params = new URLSearchParams({
+        title: seed.title, artist: seed.artist || "", exclude: seed.sourceId, limit: "10",
+      });
+      const relRes = await fetch(`${BASE_URL}/music/related?${params}`);
+      if (!relRes.ok) throw new Error(`Music related failed with status: ${relRes.status}`);
+      const related = await relRes.json();
+      if (!Array.isArray(related)) throw new Error("Music related did not return an array.");
+      if (related.some((t) => t.sourceId === seed.sourceId)) {
+        throw new Error("Related tracks contain the excluded track.");
+      }
+      console.log(`\u2705 /music/related returned ${related.length} track(s), excluding the seed.`);
+    } else {
+      console.log("\u26a0\ufe0f No tracks to seed /music/related with — skipped.");
+    }
+
+    /*
+     * The stream endpoint's refusals, which are the part worth asserting here.
+     * A real play needs a resolvable file and a live upstream; what must hold
+     * unconditionally is that an unknown id 404s, and that a YouTube row is
+     * refused with 409 unless the local-development proxy flag is on. That 409
+     * is the rule in streamController.js — if this test starts failing on a
+     * deployment, the gate has been widened and that is the bug.
+     */
+    console.log("\nTesting GET /music/stream/:id with an unknown id ...");
+    const missingRes = await fetch(`${BASE_URL}/music/stream/definitely-not-a-real-track-id`);
+    if (missingRes.status !== 404) {
+      throw new Error(`Unknown track should 404, got ${missingRes.status}`);
+    }
+    const missingBody = await missingRes.json();
+    if (!missingBody.error) throw new Error("Stream 404 dropped the `error` key.");
+    console.log("\u2705 /music/stream/:id 404s an unknown id, with an `error` key.");
+
+    const ytTrack = tracks.find((t) => t.source === "youtube");
+    if (ytTrack && process.env.YOUTUBE_STREAM_PROXY !== "1") {
+      const refusedRes = await fetch(`${BASE_URL}/music/stream/${ytTrack.sourceId}`);
+      if (refusedRes.status !== 409) {
+        throw new Error(
+          `A YouTube track must be refused with 409 while YOUTUBE_STREAM_PROXY is off, got ${refusedRes.status}`
+        );
+      }
+      console.log("\u2705 /music/stream/:id refuses YouTube audio (409) with the proxy off.");
+    }
+
     console.log("\n🎉 All tests passed successfully!");
   } catch (error) {
     console.error("\n❌ Test failed with error:", error.message);

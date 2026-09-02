@@ -1059,6 +1059,15 @@ export default function MusicPage() {
     </div>
   );
 
+  /*
+   * An album row is not a track. `/music/albums` returns albums now that the
+   * source has them, and an album's id is a playlist — handing it to the
+   * player would ask the stream endpoint for a file that does not exist. So
+   * opening one searches it instead, which is what tapping an album on a music
+   * app does anyway.
+   */
+  const openTrack = (t) => (t.kind === "album" ? setQuery(t.title) : play(t));
+
   const cardRow = (title, items) =>
     items.length > 0 && (
       <div className="mb-10">
@@ -1069,7 +1078,7 @@ export default function MusicPage() {
           {items.map((t) => (
             <button
               key={t.sourceId}
-              onClick={() => play(t)}
+              onClick={() => openTrack(t)}
               className="flex-shrink-0 text-left"
               style={{ width: 168, background: "none", border: "none", cursor: "pointer", padding: 0 }}
             >
@@ -1106,7 +1115,7 @@ export default function MusicPage() {
     return (
       <button
         key={t.sourceId || t.id}
-        onClick={() => play(t)}
+        onClick={() => openTrack(t)}
         className="w-full flex items-center gap-3 text-left rounded"
         style={{
           background: active ? "rgba(255,255,255,0.07)" : "none",

@@ -1,5 +1,6 @@
 import prisma from "../config/db.js";
-import { resolveFileUrl } from "../services/peertube.js";
+import { resolveFileUrl } from "../services/musicSource.js";
+import { isStreamProxyEnabled, streamProxyRefusal } from "../services/youtube.js";
 
 /*
  * Streaming a track's audio.
@@ -13,10 +14,18 @@ import { resolveFileUrl } from "../services/peertube.js";
  * That keeps the source out of the client, so storage can move, URLs can be
  * signed, and none of it reaches the browser.
  *
- * What this is not, and must not become: a way to pull audio out of YouTube.
- * Rows imported from YouTube carry no `audioUrl` and are refused below. Serving
- * their audio from here would be redistributing music nobody licensed, and the
- * proxy would be the thing doing it.
+ * What this is not, and must not become: a public way to pull audio out of
+ * YouTube. Serving those bytes from a deployed instance is redistributing music
+ * nobody licensed, and this proxy would be the thing doing it. That has been
+ * the rule here since this file was written and it still is.
+ *
+ * What changed, and exactly how far: a YouTube row can now resolve a file on a
+ * developer's own machine, behind YOUTUBE_STREAM_PROXY=1, and never when
+ * NODE_ENV=production — enough to run and demonstrate the project locally,
+ * refused everywhere it would be a service. The gate is one function,
+ * `isStreamProxyEnabled()` in services/youtube.js; if you are about to widen
+ * it, read its header first. A deployed instance still answers 409 for YouTube
+ * rows, which is what it did before.
  *
  * Two details the element depends on, either of which silently breaks playback:
  *
@@ -53,16 +62,27 @@ export async function streamTrack(req, res) {
   if (!track) return res.status(404).json({ error: "Track not found." });
 
   /*
-   * A PeerTube row is stored without a file URL: finding it costs a request per
-   * video, and a page of results would spend thirty of them on files nobody has
-   * asked to hear. It is resolved on the first play and written back, so the
-   * second play is a lookup.
+   * A row is stored without a file URL: finding it costs a request per video,
+   * and a page of results would spend thirty of them on files nobody has asked
+   * to hear. It is resolved on the first play instead.
+   *
+   * Only a PeerTube URL is written back. A YouTube one is signed and expires
+   * within hours, so persisting it would leave the row holding a URL that is
+   * dead the next day and never resolved again — the track would play once and
+   * be broken from then on. Those are held in memory by services/youtube.js
+   * for well under their own lifetime instead.
    */
-  if (!track.audioUrl && track.source === "peertube") {
+  if (!track.audioUrl && track.source === "youtube" && !isStreamProxyEnabled()) {
+    return res.status(409).json({ error: streamProxyRefusal() });
+  }
+
+  if (!track.audioUrl && (track.source === "peertube" || track.source === "youtube")) {
     try {
-      const resolved = await resolveFileUrl(track.sourceId);
+      const resolved = await resolveFileUrl(track.source, track.sourceId);
       if (resolved) {
-        await prisma.$executeRaw`UPDATE "Track" SET "audioUrl" = ${resolved} WHERE id = ${track.id}`;
+        if (track.source === "peertube") {
+          await prisma.$executeRaw`UPDATE "Track" SET "audioUrl" = ${resolved} WHERE id = ${track.id}`;
+        }
         track = { ...track, audioUrl: resolved };
       }
     } catch (error) {

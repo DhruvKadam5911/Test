@@ -211,27 +211,31 @@ be a view count.
 
 ### Music
 
-Tracks are YouTube videos. YouTube Music's catalogue *is* YouTube's — the Indian labels put
-everything on it — and the embedded player is the licensed way to reach it: YouTube serves the ads,
-the rights holders get paid. Nothing in the API touches audio; `sourceId` is a video id and the
-browser plays it through YouTube's own player, which stays visible because hiding it is against the
-terms it is allowed under.
+**The catalogue is pluggable, and the choice is not cosmetic.** `MUSIC_SOURCE` picks which service
+answers `/music/*` — `peertube` (the default) or `youtube` — and both implement the same four
+functions and return the same track shape, so the controllers never branch. The selector is
+`services/musicSource.js`; the sources are `services/peertube.js` and `services/youtube.js`.
+
+| | PeerTube | YouTube |
+|---|---|---|
+| Metadata | Whatever the network happens to host | The catalogue the labels publish to: real artists, real albums, square cover art |
+| Albums | None — playlists and channels are not wired up, so it falls back to songs | A real album search |
+| Audio | The instance hands out the media file, and means it to be played | Deployed: **refused**. Locally: behind a flag. See below |
+
+That last row is the trade, and it is why the default is PeerTube: it is the source whose audio this
+project can serve.
 
 | Route | What it does |
 |-------|--------------|
-| `GET /music/tracks` | What is charting in a region. `limit`, `region` (default `IN`) |
-| `GET /music/search?q=` | Songs, ranked so the original comes first. Under two characters returns `[]` |
-| `GET /music/albums?q=` | Albums and playlists. Its own 100 units — playlists do not come back from a video search however wide it is asked to be, which was tested |
-| `GET /music/related?title=&artist=&exclude=` | Songs like this one — not other copies of it |
+| `GET /music/tracks` | The home row. `limit` (max 50) |
+| `GET /music/search?q=` | Songs. Under two characters returns `[]` |
+| `GET /music/albums?q=` | Albums where the source has them, songs where it does not. Under two characters returns `[]`. Album rows are **not** written to `Track` — an album id is not a playable track |
+| `GET /music/related?title=&artist=&exclude=` | Songs like this one, never this one. An `exclude` alone is enough for YouTube; PeerTube needs a `title` |
 | `GET /music/stream/:id` | The audio itself, proxied from the track's `audioUrl`. GET and HEAD |
 | `GET /music/genres` | Counts, for a client that wants to group |
 
-**Putting the original first.** A YouTube search for a song returns the label's upload, a lyric
-video, three reuploads, a slowed-and-reverbed edit and a dance cover, in whatever order YouTube
-likes. There is no "official" flag in the API, so `rankByOriginality` reads the two things that do
-carry the signal: a VEVO or label channel scores up, a title saying "lyrics", "cover", "slowed" or
-"remix" scores down, and YouTube's own relevance stays as the tiebreak rather than being thrown
-away. Cached rows are ranked again on the way out, because the table returns them in insert order.
+All four list routes return
+`{ source, sourceId, title, artist, artworkUrl, durationSeconds, genre, audioUrl }`.
 
 **Why there is a streaming proxy.** The player is a plain `<audio>` element, because that is the
 only thing that keeps playing when a phone's screen goes off — a player inside an iframe is
@@ -244,29 +248,49 @@ answered with **206** and a correct `Content-Range` (iOS opens with `Range: byte
 to play on a 200, and a framework will normalise that away if the status is not set explicitly),
 and the upstream `Content-Type` is passed through rather than invented.
 
-It is not a way to pull audio out of YouTube. Rows imported from YouTube carry no `audioUrl` and
-are refused with a message saying so.
+**It is not a public way to pull audio out of YouTube, and that has not changed.** Serving those
+bytes from a deployment is redistributing music nobody licensed, and this proxy would be the thing
+doing it. A YouTube row resolves a file only when `YOUTUBE_STREAM_PROXY=1` **and**
+`NODE_ENV` is not `production` — enough to run and demonstrate the project on a developer's own
+machine, refused everywhere it would be a service. Deployed, a YouTube track is searchable and
+browsable and answers `409` with a message saying why. The gate is one function,
+`isStreamProxyEnabled()` in `services/youtube.js`; `test-api.js` asserts the 409, so widening the
+gate fails the smoke test rather than passing quietly.
 
-**Recommendations, without a recommendations API.** YouTube withdrew
-`relatedToVideoId` in 2023, so "related" is built from what is left. The channel is the strongest
-signal available: a label or artist channel holds work by the same people in the same idiom. Then
-every version of the seed is dropped — the lyric video, the slowed edit, the audio reupload — by
-comparing `titleCore`, the part of a title before the first dash, pipe or bracket, which is where
-the credits start. Someone who just picked a song does not want it back five more times.
+**A resolved URL is cached, but only PeerTube's is stored.** A YouTube media URL is signed and
+expires within hours; writing it to `Track.audioUrl` would leave the row holding a dead URL that is
+never resolved again, so the track would play once and be broken from the next day on. Those live
+in an in-process memo for well under their own lifetime instead.
 
-**Quota is what shapes this.** The free allowance is 10,000 units a day and a search costs 100 of
-them — a hundred searches. So the charts come from `videos.list`, which costs 1 and can run on every
-visit, and every search result is written to `Track`; a query the catalog can already answer with
-eight rows or more is never sent to YouTube. When the quota does run out the charts fall back to
-what is stored rather than showing an empty page.
+**How the YouTube source works.** Not the public Data API — that is metadata-only for music, it
+costs 100 units a search against a 10,000-unit day, and it withdrew `relatedToVideoId` in 2023.
+YouTube's own apps talk to an internal JSON API, **InnerTube**: no key and no quota, but a request
+has to look like a real client's and media URLs come back with scrambled signatures.
+NewPipeExtractor implements that protocol by hand in Java; `youtubei.js` is the same protocol in
+JavaScript, and `services/youtube.js` is a thin layer over it. Queries go to YouTube *Music* rather
+than plain YouTube, which is what separates the artist, album and square art out — a normal video
+search returns uploads whose "artist" is a channel name and whose art is a 16:9 frame.
 
-Needs `YOUTUBE_API_KEY` on the deployment. Without it the charts fall back to the table and search
-returns 503 saying so. `GET /admin/clear-music` empties the table; dry run unless `?apply=true`.
+Reading an interface YouTube does not publish is against their terms of service. It is what NewPipe
+does too, and it is a defensible thing to build and study; it is not a defensible thing to operate
+publicly, which is the line drawn above.
+
+**Recommendations.** YouTube's own radio queue (`getUpNext`) is the good answer and needs only the
+video id the front end already sends as `exclude`. When it is unavailable, or on PeerTube, the
+fallback searches the artist and the part of the title before the first dash, pipe or bracket —
+where the credits start — and drops the seed. Someone who just picked a song does not want it back
+five more times.
+
+**Caching.** Two layers, doing different jobs. `Track` is the catalog the front end reads and the
+stream endpoint looks tracks up in. The in-process memo inside each source stops a burst of
+identical requests from becoming a burst of identical upstream requests, which is what earns a 429
+mid-demo: searches six hours, the home row thirty minutes, resolved URLs ninety. An empty result is
+never cached — it is almost always a bad minute upstream, and caching it would keep the app broken
+for six hours over a blip. `GET /admin/clear-music` empties the table; dry run unless `?apply=true`.
 
 **Ruled out, and why.** Spotify serves metadata only — audio needs their SDK and each listener's own
 Premium account, and the thirty-second preview was withdrawn from new apps in 2024. JioSaavn's
-catalogue is licensed to JioSaavn; serving their CDN from here is redistribution. The GitHub
-projects that appear to solve either work by ripping audio out of those services. Audius and the
+catalogue is licensed to JioSaavn; serving their CDN from here is redistribution. Audius and the
 Internet Archive were tried first and dropped: both serve whole tracks legally, but not the music
 anyone asked for.
 
