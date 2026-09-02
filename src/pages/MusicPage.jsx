@@ -1749,7 +1749,7 @@ export default function MusicPage() {
                 </button>
               ))}
               <span style={{ fontSize: 13, color: colors.textMuted, marginLeft: 8 }}>
-                {searching ? "Searching YouTube…" : `Results for "${query.trim()}"`}
+                {searching ? "Searching songs…" : `Results for "${query.trim()}"`}
               </span>
             </div>
           )}
@@ -1810,7 +1810,7 @@ export default function MusicPage() {
           ) : list.length === 0 ? (
             <div style={{ color: colors.textMuted, fontSize: 14.5, paddingTop: 40, textAlign: "center" }}>
               <Music size={36} className="mx-auto mb-3 opacity-60" />
-              <p className="max-w-md mx-auto mb-4">{error || "Search for a song, artist, or album on YouTube."}</p>
+              <p className="max-w-md mx-auto mb-4">{error || "Search for a song, artist, or album."}</p>
               {error && (
                 <button
                   onClick={loadTracks}
