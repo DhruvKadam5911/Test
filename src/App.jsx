@@ -8,11 +8,24 @@ import GenrePage from './pages/GenrePage';
 import SplashIntro from './components/SplashIntro';
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window !== "undefined") {
+      if (window.location.pathname === "/music") return false;
+      return !sessionStorage.getItem("onion_splash_shown");
+    }
+    return true;
+  });
+
+  const handleSplashDone = () => {
+    setShowSplash(false);
+    try {
+      sessionStorage.setItem("onion_splash_shown", "1");
+    } catch {}
+  };
 
   return (
     <>
-      {showSplash && <SplashIntro onDone={() => setShowSplash(false)} />}
+      {showSplash && <SplashIntro onDone={handleSplashDone} />}
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/watch/:videoId" element={<WatchPage />} />

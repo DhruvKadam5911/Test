@@ -308,6 +308,73 @@ const SHORTCUTS = [
   ["Podcasts", Radio, "podcast hindi"],
 ];
 
+const CURATED_DEFAULT_TRACKS = [
+  {
+    id: "yt-NJAv_7lHUIU",
+    sourceId: "NJAv_7lHUIU",
+    title: "Toxic",
+    artist: "AP Dhillon",
+    artworkUrl: "https://i.ytimg.com/vi/NJAv_7lHUIU/hqdefault.jpg",
+    durationSeconds: 195,
+  },
+  {
+    id: "yt-BddP6PYo2gs",
+    sourceId: "BddP6PYo2gs",
+    title: "Kesariya",
+    artist: "Arijit Singh, Pritam",
+    artworkUrl: "https://i.ytimg.com/vi/BddP6PYo2gs/hqdefault.jpg",
+    durationSeconds: 268,
+  },
+  {
+    id: "yt-6xVyZpGq6xY",
+    sourceId: "6xVyZpGq6xY",
+    title: "Shararat",
+    artist: "Badshah, Hiten",
+    artworkUrl: "https://i.ytimg.com/vi/6xVyZpGq6xY/hqdefault.jpg",
+    durationSeconds: 180,
+  },
+  {
+    id: "yt-V7LwfY5U5WI",
+    sourceId: "V7LwfY5U5WI",
+    title: "Chaleya",
+    artist: "Anirudh Ravichander, Arijit Singh",
+    artworkUrl: "https://i.ytimg.com/vi/V7LwfY5U5WI/hqdefault.jpg",
+    durationSeconds: 200,
+  },
+  {
+    id: "yt-kJQP7kiw5Fk",
+    sourceId: "kJQP7kiw5Fk",
+    title: "Despacito",
+    artist: "Luis Fonsi ft. Daddy Yankee",
+    artworkUrl: "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg",
+    durationSeconds: 282,
+  },
+  {
+    id: "yt-JGwWNGJdvx8",
+    sourceId: "JGwWNGJdvx8",
+    title: "Shape of You",
+    artist: "Ed Sheeran",
+    artworkUrl: "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg",
+    durationSeconds: 234,
+  },
+  {
+    id: "yt-fJ9rUzIMcZQ",
+    sourceId: "fJ9rUzIMcZQ",
+    title: "Bohemian Rhapsody",
+    artist: "Queen",
+    artworkUrl: "https://i.ytimg.com/vi/fJ9rUzIMcZQ/hqdefault.jpg",
+    durationSeconds: 360,
+  },
+  {
+    id: "yt-L3wKzyIN1yk",
+    sourceId: "L3wKzyIN1yk",
+    title: "Starboy",
+    artist: "The Weeknd ft. Daft Punk",
+    artworkUrl: "https://i.ytimg.com/vi/L3wKzyIN1yk/hqdefault.jpg",
+    durationSeconds: 230,
+  },
+];
+
 function readStorage(key, fallback = []) {
   try {
     return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
@@ -343,11 +410,11 @@ export default function MusicPage() {
   const [query, setQuery] = useState("");
   const [searchMode, setSearchMode] = useState("songs");
   const [searching, setSearching] = useState(false);
-  const [tracks, setTracks] = useState(null);
+  const [tracks, setTracks] = useState(CURATED_DEFAULT_TRACKS);
   const [albums, setAlbums] = useState([]);
   const [explore, setExplore] = useState({ albums: [], top: [] });
   const [forYou, setForYou] = useState([]);
-  const [nowPlaying, setNowPlaying] = useState(null);
+  const [nowPlaying, setNowPlaying] = useState(() => readStorage(RECENT_KEY)[0] || CURATED_DEFAULT_TRACKS[0]);
   const [queue, setQueue] = useState([]);
   const [recent, setRecent] = useState(() => readStorage(RECENT_KEY));
   const [likedList, setLikedList] = useState(() => readStorage(LIKED_KEY));
@@ -486,19 +553,27 @@ export default function MusicPage() {
   /* Fetch initial tracks */
   const loadTracks = () => {
     setError(null);
-    setTracks(null);
     api
       .get("/music/tracks?limit=50")
       .then((data) => {
-        setTracks(data);
-        const last = readStorage(RECENT_KEY)[0];
-        setNowPlaying(last || data[0] || null);
-        setQueue(last ? [last, ...data] : data);
+        if (data && data.length) {
+          setTracks(data);
+          const last = readStorage(RECENT_KEY)[0];
+          setNowPlaying(last || data[0] || null);
+          setQueue(last ? [last, ...data] : data);
+        } else {
+          setTracks(CURATED_DEFAULT_TRACKS);
+          const last = readStorage(RECENT_KEY)[0];
+          setNowPlaying(last || CURATED_DEFAULT_TRACKS[0]);
+          setQueue(last ? [last, ...CURATED_DEFAULT_TRACKS] : CURATED_DEFAULT_TRACKS);
+        }
       })
       .catch((err) => {
-        console.error("fetchTracks error:", err);
-        setError(err.message || "Unable to connect to backend server. Please verify port 5000 is active.");
-        setTracks([]);
+        console.warn("fetchTracks fallback to curated songs:", err.message);
+        setTracks(CURATED_DEFAULT_TRACKS);
+        const last = readStorage(RECENT_KEY)[0];
+        setNowPlaying(last || CURATED_DEFAULT_TRACKS[0]);
+        setQueue(last ? [last, ...CURATED_DEFAULT_TRACKS] : CURATED_DEFAULT_TRACKS);
       });
   };
 
