@@ -2346,195 +2346,158 @@ export default function MusicPage() {
         </div>
       )}
 
-      {/* Sleek Minimalist Slide-Up Audio Controls & FX Drawer */}
+      {/* Premium Glassmorphic FX Drawer — right-bottom anchored, slide-up */}
       {ratesOpen && (
         <>
           <div
             onClick={() => setRatesOpen(false)}
-            className="fixed inset-0 bg-black/60 z-[70] backdrop-blur-sm transition-opacity duration-300"
+            className="fixed inset-0 z-[70]"
+            style={{ background: "transparent" }}
           />
           <div
-            className="fixed rounded-t-3xl md:rounded-3xl p-5 md:p-6 no-scrollbar"
             style={{
-              left: "50%",
-              bottom: narrow ? NAV_HEIGHT : BAR_HEIGHT + 10,
-              transform: "translateX(-50%)",
-              width: "min(500px, 95vw)",
-              background: "rgba(18, 14, 28, 0.96)",
-              backdropFilter: "blur(24px)",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.9), 0 0 35px rgba(168,85,247,0.18)",
+              position: "fixed",
+              right: narrow ? 12 : 20,
+              bottom: narrow ? NAV_HEIGHT + 8 : BAR_HEIGHT + 12,
+              width: narrow ? "calc(100vw - 24px)" : 340,
+              maxWidth: 360,
+              background: "rgba(12, 12, 18, 0.72)",
+              backdropFilter: "blur(32px) saturate(180%)",
+              WebkitBackdropFilter: "blur(32px) saturate(180%)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              borderRadius: 18,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)",
               zIndex: 71,
-              animation: "onionDrawerUp 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
+              padding: "14px 16px 16px",
+              animation: "onionDrawerUp 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
             }}
           >
-            {/* Header: Title + Reset & Close */}
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal size={17} className="text-purple-400" />
-                <span style={{ fontFamily: displayFont, fontSize: 16, fontWeight: 700, color: "#fff" }}>
-                  Speed &amp; Sound FX
+            {/* Header */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5">
+                <SlidersHorizontal size={13} style={{ color: "rgba(255,255,255,0.5)" }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  Sound FX
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={resetRates}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-full bg-white/10 hover:bg-white/20 text-neutral-300 hover:text-white border-none cursor-pointer transition-all flex items-center gap-1"
+                  style={{ padding: "3px 8px", fontSize: 11, fontWeight: 500, borderRadius: 8, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, transition: "all 0.15s" }}
                 >
-                  <RotateCcw size={11} /> Reset
+                  <RotateCcw size={10} /> Reset
                 </button>
                 <button
                   onClick={() => setRatesOpen(false)}
-                  className="p-1 rounded-full text-neutral-400 hover:text-white hover:bg-white/10 border-none cursor-pointer flex items-center justify-center transition-colors"
+                  style={{ padding: 4, borderRadius: 8, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", transition: "all 0.15s" }}
                 >
-                  <X size={18} />
+                  <X size={14} />
                 </button>
               </div>
             </div>
 
-            {/* Sound FX Modes (6 Compact Single-Line Chips) */}
-            <div className="pt-3 pb-2.5">
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: "clean", label: "Studio (1.0x)", tempo: 1.0, pitch: 1.0, reverb: 0.0, unhook: false },
-                  { id: "slowed_reverb", label: "🌙 Slowed", tempo: 0.88, pitch: pitchFromSemitones(-2.5), reverb: 0.45, unhook: true },
-                  { id: "nightcore", label: "⚡ Nightcore", tempo: 1.15, pitch: pitchFromSemitones(3.5), reverb: 0.12, unhook: true },
-                  { id: "concert", label: "🏟️ Concert 8D", tempo: 1.0, pitch: 1.0, reverb: 0.55, unhook: false },
-                  { id: "bass_boost", label: "🔊 Bass Boost", tempo: 1.0, pitch: 1.0, reverb: 0.0, unhook: false },
-                  { id: "vocal", label: "🎤 Vocal Boost", tempo: 1.0, pitch: 1.0, reverb: 0.15, unhook: false },
-                ].map((preset) => {
-                  const isSelected = soundEffect === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      onClick={() => {
-                        setUnhook(preset.unhook);
-                        commitRates(preset.tempo, preset.pitch, preset.id, preset.reverb);
-                      }}
-                      className="py-2 px-1.5 rounded-xl text-center border-none cursor-pointer transition-all truncate text-xs font-semibold tracking-wide"
-                      style={{
-                        background: isSelected
-                          ? "linear-gradient(135deg, #a855f7, #ec4899)"
-                          : "rgba(255,255,255,0.06)",
-                        color: isSelected ? "#fff" : "rgba(255,255,255,0.8)",
-                        border: isSelected ? "1px solid rgba(255,255,255,0.4)" : "1px solid rgba(255,255,255,0.06)",
-                        boxShadow: isSelected ? "0 4px 14px rgba(168,85,247,0.35)" : "none",
-                      }}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
+            {/* Sound FX Presets */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 12 }}>
+              {[
+                { id: "clean", label: "Studio", tempo: 1.0, pitch: 1.0, reverb: 0.0, unhook: false },
+                { id: "slowed_reverb", label: "🌙 Slowed", tempo: 0.88, pitch: pitchFromSemitones(-2.5), reverb: 0.45, unhook: true },
+                { id: "nightcore", label: "⚡ Nightcore", tempo: 1.15, pitch: pitchFromSemitones(3.5), reverb: 0.12, unhook: true },
+                { id: "concert", label: "🏟️ 8D", tempo: 1.0, pitch: 1.0, reverb: 0.55, unhook: false },
+                { id: "bass_boost", label: "🔊 Bass", tempo: 1.0, pitch: 1.0, reverb: 0.0, unhook: false },
+                { id: "vocal", label: "🎤 Vocal", tempo: 1.0, pitch: 1.0, reverb: 0.15, unhook: false },
+              ].map((preset) => {
+                const isSelected = soundEffect === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => {
+                      setUnhook(preset.unhook);
+                      commitRates(preset.tempo, preset.pitch, preset.id, preset.reverb);
+                    }}
+                    style={{
+                      padding: "6px 4px",
+                      borderRadius: 10,
+                      fontSize: 11,
+                      fontWeight: isSelected ? 600 : 500,
+                      cursor: "pointer",
+                      border: "none",
+                      transition: "all 0.15s",
+                      background: isSelected ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.06)",
+                      color: isSelected ? "#0a0a0f" : "rgba(255,255,255,0.65)",
+                      boxShadow: isSelected ? "0 2px 8px rgba(0,0,0,0.3)" : "none",
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Compact Sliders Container */}
-            <div className="space-y-3 pt-1">
-              {/* Tempo / Speed */}
+            {/* Sliders */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Tempo */}
               <div>
-                <div className="flex items-center justify-between text-xs font-medium text-neutral-400 mb-1">
-                  <span className="font-semibold text-neutral-300">Tempo / Speed</span>
-                  <span className="text-white font-mono font-bold text-sm">{tempo.toFixed(2)}x</span>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>Tempo</span>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{tempo.toFixed(2)}x</span>
                 </div>
-                <div className="flex items-center gap-2.5">
-                  <button
-                    onClick={() => onTempoChange(tempo - rateStep)}
-                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer flex items-center justify-center transition-colors flex-shrink-0"
-                  >
-                    <Minus size={14} />
-                  </button>
-                  <input
-                    type="range"
-                    min={RATE_MIN}
-                    max={RATE_MAX}
-                    step={0.01}
-                    value={tempo}
-                    onChange={(e) => onTempoChange(Number(e.target.value))}
-                    className="onion-rate flex-1"
-                  />
-                  <button
-                    onClick={() => onTempoChange(tempo + rateStep)}
-                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer flex items-center justify-center transition-colors flex-shrink-0"
-                  >
-                    <Plus size={14} />
-                  </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button onClick={() => onTempoChange(tempo - rateStep)} style={{ width: 24, height: 24, borderRadius: 7, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Minus size={12} /></button>
+                  <input type="range" min={RATE_MIN} max={RATE_MAX} step={0.01} value={tempo} onChange={(e) => onTempoChange(Number(e.target.value))} className="onion-rate flex-1" />
+                  <button onClick={() => onTempoChange(tempo + rateStep)} style={{ width: 24, height: 24, borderRadius: 7, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Plus size={12} /></button>
                 </div>
               </div>
 
-              {/* Pitch / Key */}
+              {/* Pitch */}
               <div>
-                <div className="flex items-center justify-between text-xs font-medium text-neutral-400 mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-neutral-300">Pitch / Key</span>
-                    <span className="text-[11px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono">
-                      {semitonesFromPitch(pitch)}
-                    </span>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>Pitch</span>
+                    <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 5, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.45)", fontVariantNumeric: "tabular-nums" }}>{semitonesFromPitch(pitch)}</span>
                   </div>
-                  <span className="text-white font-mono font-bold text-sm">{Math.round(pitch * 100)}%</span>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{Math.round(pitch * 100)}%</span>
                 </div>
-                <div className="flex items-center gap-2.5">
-                  <button
-                    onClick={() => onPitchChange(pitch - rateStep)}
-                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer flex items-center justify-center transition-colors flex-shrink-0"
-                  >
-                    <Minus size={14} />
-                  </button>
-                  <input
-                    type="range"
-                    min={RATE_MIN}
-                    max={RATE_MAX}
-                    step={0.01}
-                    value={pitch}
-                    onChange={(e) => onPitchChange(Number(e.target.value))}
-                    className="onion-rate flex-1"
-                  />
-                  <button
-                    onClick={() => onPitchChange(pitch + rateStep)}
-                    className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 text-white border-none cursor-pointer flex items-center justify-center transition-colors flex-shrink-0"
-                  >
-                    <Plus size={14} />
-                  </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button onClick={() => onPitchChange(pitch - rateStep)} style={{ width: 24, height: 24, borderRadius: 7, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Minus size={12} /></button>
+                  <input type="range" min={RATE_MIN} max={RATE_MAX} step={0.01} value={pitch} onChange={(e) => onPitchChange(Number(e.target.value))} className="onion-rate flex-1" />
+                  <button onClick={() => onPitchChange(pitch + rateStep)} style={{ width: 24, height: 24, borderRadius: 7, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Plus size={12} /></button>
                 </div>
               </div>
 
-              {/* Reverb Slider */}
+              {/* Reverb */}
               <div>
-                <div className="flex items-center justify-between text-xs font-medium text-neutral-400 mb-1">
-                  <span className="font-semibold text-neutral-300">3D Spatial Reverb</span>
-                  <span className="text-white font-mono font-bold text-sm">{Math.round(reverb * 100)}%</span>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>Reverb</span>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.8)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{Math.round(reverb * 100)}%</span>
                 </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={Math.round(reverb * 100)}
-                  onChange={(e) => {
-                    const val = Number(e.target.value) / 100;
-                    setReverb(val);
-                    if (globalPitchShifter) globalPitchShifter.setReverb(val);
-                  }}
-                  className="onion-rate w-full"
-                />
+                <input type="range" min="0" max="100" value={Math.round(reverb * 100)} onChange={(e) => { const val = Number(e.target.value) / 100; setReverb(val); if (globalPitchShifter) globalPitchShifter.setReverb(val); }} className="onion-rate w-full" />
               </div>
 
-              {/* Unhook Pitch ON/OFF Toggle Button */}
-              <div className="flex items-center justify-between pt-2.5 border-t border-white/10">
-                <div className="flex items-center gap-2">
-                  {unhook ? <Unlink size={15} className="text-purple-400" /> : <Link2 size={15} className="text-neutral-400" />}
-                  <span className="text-xs font-semibold text-neutral-200">
-                    Unhook Pitch from Speed
-                  </span>
+              {/* Unhook Toggle */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {unhook ? <Unlink size={12} style={{ color: "rgba(255,255,255,0.5)" }} /> : <Link2 size={12} style={{ color: "rgba(255,255,255,0.3)" }} />}
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>Unhook Pitch</span>
                 </div>
                 <button
                   onClick={() => onUnhookChange(!unhook)}
-                  className="px-3 py-1 rounded-full text-xs font-bold border-none cursor-pointer transition-all flex items-center gap-1.5"
                   style={{
-                    background: unhook ? "#a855f7" : "rgba(255,255,255,0.1)",
-                    color: unhook ? "#fff" : "rgba(255,255,255,0.6)",
-                    border: unhook ? "1px solid rgba(255,255,255,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                    padding: "4px 10px",
+                    borderRadius: 20,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    border: "none",
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    background: unhook ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+                    color: unhook ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    letterSpacing: "0.06em",
                   }}
                 >
-                  <span className={`w-2 h-2 rounded-full ${unhook ? "bg-white animate-pulse" : "bg-neutral-500"}`} />
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: unhook ? "#e2e8f0" : "rgba(255,255,255,0.2)", display: "inline-block" }} />
                   {unhook ? "ON" : "OFF"}
                 </button>
               </div>
