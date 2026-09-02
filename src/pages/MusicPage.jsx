@@ -2039,14 +2039,6 @@ export default function MusicPage() {
       )}
 
       {/* Persistent Audio & Video Players */}
-      {/*
-        crossOrigin is not optional. Without it the element loads the stream as
-        a no-cors request, and Chrome's Opaque Response Blocking drops it: the
-        first Range answer is two bytes, too few to sniff as audio, so ORB
-        refuses a response it cannot identify and the element reports "no
-        supported sources". Asking for CORS instead makes it a checked response
-        — the API already echoes the origin back — and ORB does not apply.
-      */}
       <audio
         ref={mediaElRef}
         crossOrigin="anonymous"
@@ -2054,56 +2046,78 @@ export default function MusicPage() {
         playsInline
         style={{ position: "fixed", bottom: -9999, left: -9999, opacity: 0, pointerEvents: "none" }}
       />
-      <div
-        id="onion-yt-global-wrapper"
-        style={{
-          position: "fixed",
-          ...(displayMode === "video" && expanded
-            ? {
-                top: 64,
-                left: "50%",
-                transform: "translateX(-50%)",
-                width: narrow ? "min(92vw, 480px)" : "min(800px, 60vw)",
-                height: narrow ? "260px" : "min(460px, 50vh)",
-                zIndex: 65,
-                opacity: 1,
-                pointerEvents: "auto",
-                borderRadius: "16px",
-                overflow: "hidden",
-                boxShadow: "0 25px 60px rgba(0,0,0,0.9)",
-              }
-            : {
-                bottom: 12,
-                right: 12,
-                width: "160px",
-                height: "90px",
-                opacity: 0.01,
-                pointerEvents: "none",
-                zIndex: -10,
-                borderRadius: "8px",
-                overflow: "hidden",
-              }),
-          background: "#000",
-        }}
-      >
-        <iframe
-          ref={iframeRef}
-          id="onion-yt-player-iframe"
-          title="Onion Player"
-          src={
-            nowPlaying?.sourceId
-              ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(
-                  extractVideoId(nowPlaying.sourceId)
-                )}?autoplay=1&enablejsapi=1&origin=${encodeURIComponent(
-                  typeof window !== "undefined" ? window.location.origin : ""
-                )}&playsinline=1&controls=1&rel=0`
-              : ""
-          }
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          style={{ width: "100%", height: "100%", border: "none" }}
-        />
-      </div>
+
+      {/* Visible Floating & Stage Player */}
+      {nowPlaying && (
+        <div
+          id="onion-yt-global-wrapper"
+          style={{
+            position: "fixed",
+            transition: "all 0.3s ease",
+            ...(displayMode === "video" && expanded
+              ? {
+                  top: 70,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  width: narrow ? "min(92vw, 480px)" : "min(800px, 60vw)",
+                  height: narrow ? "240px" : "min(460px, 48vh)",
+                  zIndex: 65,
+                  opacity: 1,
+                  pointerEvents: "auto",
+                  borderRadius: "16px",
+                  overflow: "hidden",
+                  boxShadow: "0 25px 60px rgba(0,0,0,0.95)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                }
+              : expanded && displayMode === "song"
+              ? {
+                  bottom: narrow ? NAV_HEIGHT + 70 : BAR_HEIGHT + 20,
+                  right: 20,
+                  width: narrow ? "140px" : "200px",
+                  height: narrow ? "80px" : "112px",
+                  zIndex: 60,
+                  opacity: 0.92,
+                  pointerEvents: "auto",
+                  borderRadius: "10px",
+                  overflow: "hidden",
+                  boxShadow: "0 10px 30px rgba(0,0,0,0.9)",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                }
+              : {
+                  bottom: narrow ? NAV_HEIGHT + 6 : BAR_HEIGHT + 10,
+                  right: 14,
+                  width: narrow ? "130px" : "220px",
+                  height: narrow ? "74px" : "124px",
+                  zIndex: 48,
+                  opacity: 1,
+                  pointerEvents: "auto",
+                  borderRadius: "10px",
+                  overflow: "hidden",
+                  boxShadow: "0 10px 30px rgba(0,0,0,0.85)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                }),
+            background: "#000",
+          }}
+        >
+          <iframe
+            ref={iframeRef}
+            id="onion-yt-player-iframe"
+            title="Onion Player"
+            src={
+              nowPlaying?.sourceId
+                ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(
+                    extractVideoId(nowPlaying.sourceId)
+                  )}?autoplay=1&enablejsapi=1&origin=${encodeURIComponent(
+                    typeof window !== "undefined" ? window.location.origin : ""
+                  )}&playsinline=1&controls=1&rel=0`
+                : ""
+            }
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+            style={{ width: "100%", height: "100%", border: "none" }}
+          />
+        </div>
+      )}
     </div>
   );
 }
