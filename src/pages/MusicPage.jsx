@@ -796,23 +796,37 @@ export default function MusicPage() {
       .get("/music/tracks?limit=50")
       .then((data) => {
         if (data && data.length) {
-          setTracks(data);
-          const last = readStorage(RECENT_KEY)[0];
-          setNowPlaying(last || data[0] || null);
-          setQueue(last ? [last, ...data] : data);
+          const saavnTracks = data.filter((t) => t && t.source !== "peertube" && !t.streamUrl?.includes("peertube"));
+          const finalTracks = saavnTracks.length ? saavnTracks : CURATED_DEFAULT_TRACKS;
+          setTracks(finalTracks);
+          const rawRecent = readStorage(RECENT_KEY).filter(
+            (t) => t && t.source !== "peertube" && t.streamUrl && !t.streamUrl.includes("peertube")
+          );
+          writeStorage(RECENT_KEY, rawRecent);
+          const first = rawRecent[0] || finalTracks[0] || CURATED_DEFAULT_TRACKS[0];
+          setNowPlaying(first);
+          setQueue(rawRecent.length ? [first, ...finalTracks] : finalTracks);
         } else {
           setTracks(CURATED_DEFAULT_TRACKS);
-          const last = readStorage(RECENT_KEY)[0];
-          setNowPlaying(last || CURATED_DEFAULT_TRACKS[0]);
-          setQueue(last ? [last, ...CURATED_DEFAULT_TRACKS] : CURATED_DEFAULT_TRACKS);
+          const rawRecent = readStorage(RECENT_KEY).filter(
+            (t) => t && t.source !== "peertube" && t.streamUrl && !t.streamUrl.includes("peertube")
+          );
+          writeStorage(RECENT_KEY, rawRecent);
+          const first = rawRecent[0] || CURATED_DEFAULT_TRACKS[0];
+          setNowPlaying(first);
+          setQueue(rawRecent.length ? [first, ...CURATED_DEFAULT_TRACKS] : CURATED_DEFAULT_TRACKS);
         }
       })
       .catch((err) => {
         console.warn("fetchTracks fallback to curated songs:", err.message);
         setTracks(CURATED_DEFAULT_TRACKS);
-        const last = readStorage(RECENT_KEY)[0];
-        setNowPlaying(last || CURATED_DEFAULT_TRACKS[0]);
-        setQueue(last ? [last, ...CURATED_DEFAULT_TRACKS] : CURATED_DEFAULT_TRACKS);
+        const rawRecent = readStorage(RECENT_KEY).filter(
+          (t) => t && t.source !== "peertube" && t.streamUrl && !t.streamUrl.includes("peertube")
+        );
+        writeStorage(RECENT_KEY, rawRecent);
+        const first = rawRecent[0] || CURATED_DEFAULT_TRACKS[0];
+        setNowPlaying(first);
+        setQueue(rawRecent.length ? [first, ...CURATED_DEFAULT_TRACKS] : CURATED_DEFAULT_TRACKS);
       });
   };
 
