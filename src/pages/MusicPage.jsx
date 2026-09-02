@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   Play, Pause, SkipBack, SkipForward, Search, X, Music, Home, Compass,
   Library, Shuffle, Repeat, Volume2, VolumeX, ChevronDown, ChevronUp,
+  ChevronLeft, ChevronRight,
   Film, History, ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
   ThumbsUp, Gauge, Link2, Unlink, Minus, Plus, Video, Disc3, Radio, Mic2,
   SlidersHorizontal, RotateCcw,
@@ -1383,47 +1384,105 @@ export default function MusicPage() {
     }
   }, [activeLyricIndex, displayMode]);
 
-  const cardRow = (title, items) =>
-    items && items.length > 0 && (
-      <div className="mb-10">
+  const cardRow = (title, items) => {
+    if (!items || items.length === 0) return null;
+    const rowRef = React.useRef(null);
+    const [canScrollLeft, setCanScrollLeft] = React.useState(false);
+    const [canScrollRight, setCanScrollRight] = React.useState(true);
+
+    const updateScrollState = () => {
+      const el = rowRef.current;
+      if (!el) return;
+      setCanScrollLeft(el.scrollLeft > 8);
+      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+    };
+
+    const scrollBy = (dir) => {
+      const el = rowRef.current;
+      if (!el) return;
+      el.scrollBy({ left: dir * 180 * 3, behavior: "smooth" });
+    };
+
+    return (
+      <div className="mb-10" style={{ position: "relative" }}>
         <div style={{ fontFamily: displayFont, fontSize: 22, fontWeight: 600, color: colors.text, marginBottom: 14 }}>
           {title}
         </div>
-        <div className="flex gap-4 overflow-x-auto pb-3" style={{ scrollbarWidth: "none" }}>
-          {items.map((t) => (
+        <div style={{ position: "relative" }}>
+          {/* Left Arrow */}
+          {canScrollLeft && (
             <button
-              key={t.sourceId || t.id}
-              onClick={() => openTrack(t)}
-              className="flex-shrink-0 text-left group"
-              style={{ width: 170, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              onClick={() => scrollBy(-1)}
+              aria-label="Scroll left"
+              style={{
+                position: "absolute", left: -16, top: "50%", transform: "translateY(-50%)",
+                zIndex: 5, width: 40, height: 40, borderRadius: "50%",
+                background: "rgba(18,12,28,0.92)", border: "1px solid rgba(255,255,255,0.15)",
+                color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+                transition: "opacity 0.2s",
+              }}
             >
-              <div
-                className="relative rounded-lg overflow-hidden shadow-lg"
-                style={{
-                  width: 170, height: 170,
-                  background: t.artworkUrl ? `url(${t.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
-                  border: `1px solid ${colors.ring}`,
-                }}
-              >
-                <span
-                  className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                >
-                  <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition-transform">
-                    <Play size={22} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
-                  </div>
-                </span>
-              </div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: colors.text, marginTop: 10 }} className="line-clamp-2">
-                {t.title}
-              </div>
-              <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 3 }} className="truncate">
-                {t.artist}
-              </div>
+              <ChevronLeft size={20} />
             </button>
-          ))}
+          )}
+          {/* Right Arrow */}
+          {canScrollRight && (
+            <button
+              onClick={() => scrollBy(1)}
+              aria-label="Scroll right"
+              style={{
+                position: "absolute", right: -16, top: "50%", transform: "translateY(-50%)",
+                zIndex: 5, width: 40, height: 40, borderRadius: "50%",
+                background: "rgba(18,12,28,0.92)", border: "1px solid rgba(255,255,255,0.15)",
+                color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+                transition: "opacity 0.2s",
+              }}
+            >
+              <ChevronRight size={20} />
+            </button>
+          )}
+          <div
+            ref={rowRef}
+            onScroll={updateScrollState}
+            className="flex gap-4 pb-3"
+            style={{ overflowX: "auto", scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {items.map((t) => (
+              <button
+                key={t.sourceId || t.id}
+                onClick={() => openTrack(t)}
+                className="flex-shrink-0 text-left group"
+                style={{ width: 170, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >
+                <div
+                  className="relative rounded-lg overflow-hidden shadow-lg"
+                  style={{
+                    width: 170, height: 170,
+                    background: t.artworkUrl ? `url(${t.artworkUrl}) center/cover no-repeat` : colors.bgElevated,
+                    border: `1px solid ${colors.ring}`,
+                  }}
+                >
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition-transform">
+                      <Play size={22} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
+                    </div>
+                  </span>
+                </div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: colors.text, marginTop: 10 }} className="line-clamp-2">
+                  {t.title}
+                </div>
+                <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 3 }} className="truncate">
+                  {t.artist}
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     );
+  };
 
   const trackRow = (t, i) => {
     const active = (t.sourceId || t.id) === (nowPlaying?.sourceId || nowPlaying?.id);
@@ -1606,7 +1665,7 @@ export default function MusicPage() {
         className="hidden md:flex flex-col gap-1.5 fixed left-0 top-0 bottom-0 px-3 pt-5"
         style={{ width: RAIL_WIDTH, borderRight: `1px solid ${colors.ring}`, zIndex: 30, background: colors.bg }}
       >
-        <Link to="/music" className="flex items-center gap-1.5" style={{ textDecoration: "none", marginBottom: 16, paddingLeft: 4 }}>
+        <Link to="/music" onClick={() => setView("home")} className="flex items-center gap-1.5" style={{ textDecoration: "none", marginBottom: 16, paddingLeft: 4 }}>
           <OnionMark height={80} />
           <BrandWord word="music" height={20} />
         </Link>
