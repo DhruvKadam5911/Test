@@ -392,7 +392,7 @@ const RAIL_WIDTH = 232;
 const BAR_HEIGHT = 76;
 const NAV_HEIGHT = 58;
 const NARROW = "(max-width: 767px)";
-const SEEK_STEP = 10;
+const SEEK_STEP = 5;
 
 const MOODS = [
   "Trending", "New releases", "Bollywood", "Punjabi", "Pop",
@@ -731,6 +731,31 @@ export default function MusicPage() {
       active = false;
     };
   }, [nowPlaying?.title, nowPlaying?.artist, nowPlaying?.durationSec, nowPlaying?.durationSeconds]);
+
+  /* Keyboard shortcuts: Left/Right arrow keys skip 5 seconds backward/forward */
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
+
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const cur = audioRef.current?.currentTime ?? position;
+        const to = Math.min(duration || 999999, cur + 5);
+        setPosition(to);
+        if (audioRef.current) audioRef.current.currentTime = to;
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const cur = audioRef.current?.currentTime ?? position;
+        const to = Math.max(0, cur - 5);
+        setPosition(to);
+        if (audioRef.current) audioRef.current.currentTime = to;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [duration, position]);
 
   const audioRef = useRef(null);
   const mediaEngineRef = useRef(null);
@@ -2099,11 +2124,11 @@ export default function MusicPage() {
               <ChevronDown size={28} />
             </button>
 
-            {/* Mode Switcher: Song | Lyrics | Video */}
+            {/* Mode Switcher: Song | Lyrics */}
             <div className="flex items-center rounded-full p-1 bg-white/10 border border-white/10">
               <button
                 onClick={() => switchDisplayMode("song")}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
                 style={{
                   background: displayMode === "song" ? colors.accent : "transparent",
                   color: "#fff",
@@ -2113,23 +2138,13 @@ export default function MusicPage() {
               </button>
               <button
                 onClick={() => switchDisplayMode("lyrics")}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
                 style={{
                   background: displayMode === "lyrics" ? colors.accent : "transparent",
                   color: "#fff",
                 }}
               >
                 <Mic2 size={15} /> Lyrics
-              </button>
-              <button
-                onClick={() => switchDisplayMode("video")}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border-none cursor-pointer transition-all"
-                style={{
-                  background: displayMode === "video" ? colors.accent : "transparent",
-                  color: "#fff",
-                }}
-              >
-                <Video size={15} /> Video
               </button>
             </div>
 
