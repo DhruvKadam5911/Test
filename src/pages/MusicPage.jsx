@@ -505,30 +505,6 @@ export default function MusicPage() {
     };
   }, [nowPlaying?.title, nowPlaying?.artist, nowPlaying?.durationSec, nowPlaying?.durationSeconds]);
 
-  const activeLyricIndex = React.useMemo(() => {
-    if (!lyricsData.synced?.length) return -1;
-    let idx = -1;
-    for (let i = 0; i < lyricsData.synced.length; i++) {
-      if (lyricsData.synced[i].time <= shownPosition) {
-        idx = i;
-      } else {
-        break;
-      }
-    }
-    return idx;
-  }, [lyricsData.synced, shownPosition]);
-
-  const activeLyricRef = useRef(null);
-
-  useEffect(() => {
-    if (displayMode === "lyrics" && activeLyricRef.current) {
-      activeLyricRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }
-  }, [activeLyricIndex, displayMode]);
-
   const audioRef = useRef(null);
   const mediaEngineRef = useRef(null);
   const ytEngineRef = useRef(null);
@@ -1227,6 +1203,30 @@ export default function MusicPage() {
   const progress = duration > 0 ? (shownPosition / duration) * 100 : 0;
   const list = searchActive && searchMode === "albums" ? albums : tracks;
   const ratesTouched = !sameRate(tempo, 1) || !sameRate(pitch, 1);
+
+  const activeLyricIndex = React.useMemo(() => {
+    if (!lyricsData.synced?.length) return -1;
+    let idx = -1;
+    for (let i = 0; i < lyricsData.synced.length; i++) {
+      if (lyricsData.synced[i].time <= shownPosition) {
+        idx = i;
+      } else {
+        break;
+      }
+    }
+    return idx;
+  }, [lyricsData.synced, shownPosition]);
+
+  const activeLyricRef = useRef(null);
+
+  useEffect(() => {
+    if (displayMode === "lyrics" && activeLyricRef.current) {
+      activeLyricRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [activeLyricIndex, displayMode]);
 
   const cardRow = (title, items) =>
     items && items.length > 0 && (
