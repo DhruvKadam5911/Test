@@ -595,6 +595,7 @@ export default function MusicPage() {
   useEffect(() => {
     const el = mediaElRef.current;
     if (!el) return;
+    getPitchShifter(el);
     const engine = mediaEngine(el);
     mediaEngineRef.current = engine;
     if (nowPlaying?.streamUrl) {
@@ -2510,6 +2511,9 @@ export default function MusicPage() {
           </div>
         </>
       )}
+
+      {/* Hidden HTML5 Audio Element for Direct 320kbps Streams */}
+      <audio ref={mediaElRef} crossOrigin="anonymous" preload="auto" className="hidden" />
     </div>
   );
 }
