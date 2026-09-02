@@ -126,7 +126,15 @@ export async function searchSongs(query, { limit = 20, page = 1 } = {}) {
  * Fetch top trending hits
  */
 export async function fetchTrending({ limit = 20 } = {}) {
-  const queries = ["Trending Hits", "Global Top 50", "Latest Hindi Hits", "Pop Hits"];
+  const queries = [
+    "Arijit Singh",
+    "Top Bollywood 2026",
+    "AP Dhillon",
+    "English Pop Hits",
+    "Badshah",
+    "Anirudh Ravichander",
+    "Trending India Hits",
+  ];
   const randomQuery = queries[Math.floor(Math.random() * queries.length)];
   try {
     const data = await fetchSaavn({

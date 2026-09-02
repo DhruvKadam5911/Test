@@ -90,31 +90,48 @@ function loadYoutubeApi() {
 
 let globalAudioCtx = null;
 let globalPitchShifter = null;
-let globalSourceNode = null;
+const elementAudioNodes = new WeakMap();
 
 function getPitchShifter(el) {
-  if (!globalAudioCtx && typeof window !== "undefined") {
+  if (!el || typeof window === "undefined") return null;
+
+  if (!globalAudioCtx) {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (AudioCtx) {
       globalAudioCtx = new AudioCtx();
     }
   }
-  if (globalAudioCtx && !globalPitchShifter && el) {
+  if (!globalAudioCtx) return null;
+
+  let shifter = elementAudioNodes.get(el);
+  if (!shifter) {
     try {
-      if (!globalSourceNode) {
-        globalSourceNode = globalAudioCtx.createMediaElementSource(el);
+      let sourceNode = el._audioSourceNode;
+      if (!sourceNode) {
+        sourceNode = globalAudioCtx.createMediaElementSource(el);
+        el._audioSourceNode = sourceNode;
       }
-      globalPitchShifter = createPitchShifter(globalAudioCtx);
-      globalSourceNode.connect(globalPitchShifter.input);
-      globalPitchShifter.output.connect(globalAudioCtx.destination);
+      shifter = createPitchShifter(globalAudioCtx);
+      sourceNode.connect(shifter.input);
+      shifter.output.connect(globalAudioCtx.destination);
+      elementAudioNodes.set(el, shifter);
+      globalPitchShifter = shifter;
     } catch (e) {
       console.warn("Web Audio pitch shifter note:", e.message);
+      if (!globalPitchShifter) {
+        try {
+          globalPitchShifter = createPitchShifter(globalAudioCtx);
+          globalPitchShifter.output.connect(globalAudioCtx.destination);
+        } catch {}
+      }
+      shifter = globalPitchShifter;
     }
   }
-  if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+
+  if (globalAudioCtx.state === "suspended") {
     globalAudioCtx.resume().catch(() => {});
   }
-  return globalPitchShifter;
+  return shifter || globalPitchShifter;
 }
 
 function semitonesFromPitch(pitch) {
@@ -506,30 +523,27 @@ export default function MusicPage() {
   const [forYou, setForYou] = useState([]);
   const [recent, setRecent] = useState(() => {
     const raw = readStorage(RECENT_KEY);
-    return raw.map((item) => {
-      if (item && !item.streamUrl) {
-        const found = CURATED_DEFAULT_TRACKS.find(
-          (t) =>
-            t.title?.toLowerCase() === item.title?.toLowerCase() ||
-            (t.sourceId || t.id) === (item.sourceId || item.id)
-        );
-        if (found) return { ...item, streamUrl: found.streamUrl };
-      }
-      return item;
-    });
+    const valid = raw
+      .filter((item) => item && item.source !== "peertube" && !item.streamUrl?.includes("peertube"))
+      .map((item) => {
+        if (item && !item.streamUrl) {
+          const found = CURATED_DEFAULT_TRACKS.find(
+            (t) =>
+              t.title?.toLowerCase() === item.title?.toLowerCase() ||
+              (t.sourceId || t.id) === (item.sourceId || item.id)
+          );
+          if (found) return { ...item, streamUrl: found.streamUrl };
+        }
+        return item;
+      })
+      .filter((item) => item && item.streamUrl);
+    writeStorage(RECENT_KEY, valid);
+    return valid;
   });
 
   const [nowPlaying, setNowPlaying] = useState(() => {
     const cached = readStorage(RECENT_KEY)[0];
-    if (cached) {
-      if (!cached.streamUrl) {
-        const found = CURATED_DEFAULT_TRACKS.find(
-          (t) =>
-            t.title?.toLowerCase() === cached.title?.toLowerCase() ||
-            (t.sourceId || t.id) === (cached.sourceId || cached.id)
-        );
-        if (found) return { ...cached, streamUrl: found.streamUrl };
-      }
+    if (cached && cached.source !== "peertube" && !cached.streamUrl?.includes("peertube") && cached.streamUrl) {
       return cached;
     }
     return CURATED_DEFAULT_TRACKS[0];
