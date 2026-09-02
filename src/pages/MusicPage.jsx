@@ -2048,76 +2048,74 @@ export default function MusicPage() {
       />
 
       {/* Visible Floating & Stage Player */}
-      {nowPlaying && (
-        <div
-          id="onion-yt-global-wrapper"
-          style={{
-            position: "fixed",
-            transition: "all 0.3s ease",
-            ...(displayMode === "video" && expanded
-              ? {
-                  top: 70,
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  width: narrow ? "min(92vw, 480px)" : "min(800px, 60vw)",
-                  height: narrow ? "240px" : "min(460px, 48vh)",
-                  zIndex: 65,
-                  opacity: 1,
-                  pointerEvents: "auto",
-                  borderRadius: "16px",
-                  overflow: "hidden",
-                  boxShadow: "0 25px 60px rgba(0,0,0,0.95)",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                }
-              : expanded && displayMode === "song"
-              ? {
-                  bottom: narrow ? NAV_HEIGHT + 70 : BAR_HEIGHT + 20,
-                  right: 20,
-                  width: narrow ? "140px" : "200px",
-                  height: narrow ? "80px" : "112px",
-                  zIndex: 60,
-                  opacity: 0.92,
-                  pointerEvents: "auto",
-                  borderRadius: "10px",
-                  overflow: "hidden",
-                  boxShadow: "0 10px 30px rgba(0,0,0,0.9)",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                }
-              : {
-                  bottom: narrow ? NAV_HEIGHT + 6 : BAR_HEIGHT + 10,
-                  right: 14,
-                  width: narrow ? "130px" : "220px",
-                  height: narrow ? "74px" : "124px",
-                  zIndex: 48,
-                  opacity: 1,
-                  pointerEvents: "auto",
-                  borderRadius: "10px",
-                  overflow: "hidden",
-                  boxShadow: "0 10px 30px rgba(0,0,0,0.85)",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                }),
-            background: "#000",
-          }}
-        >
-          <iframe
-            ref={iframeRef}
-            id="onion-yt-player-iframe"
-            title="Onion Player"
-            src={
-              nowPlaying?.sourceId
-                ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(
-                    extractVideoId(nowPlaying.sourceId)
-                  )}?autoplay=1&enablejsapi=1&origin=${encodeURIComponent(
-                    typeof window !== "undefined" ? window.location.origin : ""
-                  )}&playsinline=1&controls=1&rel=0`
-                : ""
-            }
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            style={{ width: "100%", height: "100%", border: "none" }}
-          />
-        </div>
-      )}
+      <div
+        id="onion-yt-global-wrapper"
+        style={{
+          position: "fixed",
+          transition: "all 0.3s ease",
+          ...(displayMode === "video" && expanded
+            ? {
+                top: 70,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: narrow ? "min(92vw, 480px)" : "min(800px, 60vw)",
+                height: narrow ? "240px" : "min(460px, 48vh)",
+                zIndex: 65,
+                opacity: nowPlaying ? 1 : 0,
+                pointerEvents: nowPlaying ? "auto" : "none",
+                borderRadius: "16px",
+                overflow: "hidden",
+                boxShadow: "0 25px 60px rgba(0,0,0,0.95)",
+                border: "1px solid rgba(255,255,255,0.15)",
+              }
+            : expanded && displayMode === "song"
+            ? {
+                bottom: narrow ? NAV_HEIGHT + 70 : BAR_HEIGHT + 20,
+                right: 20,
+                width: narrow ? "140px" : "200px",
+                height: narrow ? "80px" : "112px",
+                zIndex: 60,
+                opacity: nowPlaying ? 0.92 : 0,
+                pointerEvents: nowPlaying ? "auto" : "none",
+                borderRadius: "10px",
+                overflow: "hidden",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.9)",
+                border: "1px solid rgba(255,255,255,0.2)",
+              }
+            : {
+                bottom: narrow ? NAV_HEIGHT + 6 : BAR_HEIGHT + 10,
+                right: 14,
+                width: narrow ? "130px" : "220px",
+                height: narrow ? "74px" : "124px",
+                zIndex: 48,
+                opacity: nowPlaying ? 1 : 0,
+                pointerEvents: nowPlaying ? "auto" : "none",
+                borderRadius: "10px",
+                overflow: "hidden",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.85)",
+                border: "1px solid rgba(255,255,255,0.15)",
+              }),
+          background: "#000",
+        }}
+      >
+        <iframe
+          ref={iframeRef}
+          id="onion-yt-player-iframe"
+          title="Onion Player"
+          src={
+            nowPlaying?.sourceId
+              ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(
+                  extractVideoId(nowPlaying.sourceId)
+                )}?autoplay=1&enablejsapi=1&origin=${encodeURIComponent(
+                  typeof window !== "undefined" ? window.location.origin : ""
+                )}&playsinline=1&controls=1&rel=0`
+              : ""
+          }
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          style={{ width: "100%", height: "100%", border: "none" }}
+        />
+      </div>
     </div>
   );
 }
