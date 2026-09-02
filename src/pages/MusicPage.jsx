@@ -730,23 +730,24 @@ export default function MusicPage() {
   /* Related songs for seed */
   const seedTrack = recent[0];
   const seedId = seedTrack?.sourceId || seedTrack?.id;
+  const seedTitle = seedTrack?.title;
+  const seedArtist = seedTrack?.artist;
   useEffect(() => {
-    const seed = seedTrack;
-    if (!seed?.artist && !seed?.sourceId) return;
+    if (!seedId) return;
     let cancelled = false;
     api
       .get(
-        `/music/related?title=${encodeURIComponent(seed.title || "")}` +
-          `&artist=${encodeURIComponent(seed.artist || "")}&exclude=${encodeURIComponent(seed.sourceId || seed.id || "")}&limit=12`
+        `/music/related?title=${encodeURIComponent(seedTitle || "")}` +
+          `&artist=${encodeURIComponent(seedArtist || "")}&exclude=${encodeURIComponent(seedId)}&limit=12`
       )
       .then((data) => {
-        if (!cancelled && data.length) setForYou(data);
+        if (!cancelled && data?.length) setForYou(data);
       })
-      .catch((err) => console.error("forYou error:", err));
+      .catch((err) => console.warn("forYou notice:", err.message));
     return () => {
       cancelled = true;
     };
-  }, [seedId, seedTrack]);
+  }, [seedId, seedTitle, seedArtist]);
 
   /* Debounced Search */
   useEffect(() => {
@@ -763,9 +764,11 @@ export default function MusicPage() {
         else setTracks(data);
         setError(data.length ? null : `Nothing found for "${q}".`);
         if (data.length) {
-          const updated = [q, ...searches.filter((t) => t.toLowerCase() !== q.toLowerCase())].slice(0, 8);
-          setSearches(updated);
-          writeStorage(SEARCHES_KEY, updated);
+          setSearches((prev) => {
+            const updated = [q, ...prev.filter((t) => t.toLowerCase() !== q.toLowerCase())].slice(0, 8);
+            writeStorage(SEARCHES_KEY, updated);
+            return updated;
+          });
         }
       } catch (err) {
         console.error("music search error:", err);
@@ -778,15 +781,20 @@ export default function MusicPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, searchMode, searches]);
+  }, [query, searchMode]);
 
   /* Record history */
+  const currentTrackId = track?.sourceId || track?.id;
   useEffect(() => {
-    if (!track || !autoplay) return;
-    const filtered = [track, ...recent.filter((t) => (t.sourceId || t.id) !== (track.sourceId || track.id))].slice(0, 20);
-    setRecent(filtered);
-    writeStorage(RECENT_KEY, filtered);
-  }, [track, autoplay, recent]);
+    if (!track || !autoplay || !currentTrackId) return;
+    setRecent((prev) => {
+      const isFirst = (prev[0]?.sourceId || prev[0]?.id) === currentTrackId;
+      if (isFirst) return prev;
+      const filtered = [track, ...prev.filter((t) => (t.sourceId || t.id) !== currentTrackId)].slice(0, 20);
+      writeStorage(RECENT_KEY, filtered);
+      return filtered;
+    });
+  }, [track, autoplay, currentTrackId]);
 
   /* Loop */
   useEffect(() => {
