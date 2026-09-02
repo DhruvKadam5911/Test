@@ -2179,7 +2179,7 @@ export default function MusicPage() {
           style={{
             background: colors.bg,
             zIndex: 55,
-            paddingBottom: narrow ? NAV_HEIGHT + SHEET_PEEK : BAR_HEIGHT,
+            paddingBottom: 0,
             transform: stageIn ? "translateY(0)" : "translateY(100%)",
             transition: `transform ${STAGE_MS}ms cubic-bezier(.32,.72,0,1)`,
           }}
@@ -2201,7 +2201,7 @@ export default function MusicPage() {
           <div className="absolute inset-0 pointer-events-none" style={{ background: "rgba(12,8,18,0.7)" }} />
 
           {/* Top Stage Bar */}
-          <div className="relative flex items-center justify-between px-6 pt-5 pb-3">
+          <div className="relative flex items-center justify-between px-6 pt-5 pb-2">
             <button
               onClick={() => setExpanded(false)}
               aria-label="Collapse"
@@ -2248,15 +2248,20 @@ export default function MusicPage() {
           {narrow ? (
             <div
               onTouchStart={(e) => { touchStartYRef.current = e.touches[0].clientY; }}
-              onTouchEnd={(e) => {
-                const deltaY = touchStartYRef.current - e.changedTouches[0].clientY;
-                if (deltaY > 35) setMobileQueueOpen(true);
+              onTouchMove={(e) => {
+                if (!touchStartYRef.current) return;
+                const deltaY = touchStartYRef.current - e.touches[0].clientY;
+                if (deltaY > 25) {
+                  setMobileQueueOpen(true);
+                  touchStartYRef.current = 0;
+                }
               }}
               className="relative flex-1 min-h-0 flex flex-col justify-between px-5 pb-3 overflow-hidden select-none"
             >
               {/* Artwork or Lyrics Container */}
               <div className="flex-1 min-h-0 flex items-center justify-center py-2 relative">
                 {displayMode === "song" ? (
+                  /* YouTube Music Style Square Poster Artwork */
                   <div
                     onPointerDown={startFastForward}
                     onPointerUp={stopFastForward}
@@ -2265,41 +2270,40 @@ export default function MusicPage() {
                     onClick={() => {
                       if (!isHoldingRef.current) toggle();
                     }}
-                    className="rounded-full cursor-pointer overflow-hidden border-[6px] border-neutral-900 shadow-[0_20px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(168,85,247,0.25)] relative flex items-center justify-center select-none active:scale-95 transition-transform"
+                    className="rounded-2xl cursor-pointer overflow-hidden border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.95)] relative flex items-center justify-center select-none active:scale-98 transition-transform"
                     style={{
-                      width: "min(270px, 64vw)",
+                      width: "min(290px, 76vw)",
                       aspectRatio: "1 / 1",
-                      animation: playing ? `vinyl-spin ${Math.max(0.8, (20 / (isFastForward ? 2.0 : tempo)))}s linear infinite` : "none",
-                      background: track?.artworkUrl
-                        ? `radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.3) 100%), url(${track.artworkUrl}) center/cover no-repeat`
-                        : colors.bgElevated,
+                      background: colors.bgElevated,
                     }}
                   >
-                    {/* Concentric Vinyl Grooves Effect */}
+                    {track?.artworkUrl ? (
+                      <img
+                        src={track.artworkUrl}
+                        alt=""
+                        className="w-full h-full object-cover select-none pointer-events-none"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-neutral-900">
+                        <Music size={52} color={colors.textMuted} />
+                      </div>
+                    )}
+
+                    {/* Subtle Gloss Reflection */}
                     <div
-                      className="absolute inset-0 rounded-full pointer-events-none"
+                      className="absolute inset-0 pointer-events-none"
                       style={{
-                        background: `repeating-radial-gradient(circle at center, transparent 0px, transparent 4px, rgba(255,255,255,0.035) 5px, transparent 6px)`,
-                        mixBlendMode: "overlay",
+                        background: `linear-gradient(180deg, rgba(255,255,255,0.1) 0%, transparent 40%, rgba(0,0,0,0.35) 100%)`,
                       }}
                     />
 
-                    {/* Center Vinyl Label */}
-                    <div className="relative w-20 h-20 rounded-full bg-neutral-950/90 backdrop-blur-md border-2 border-white/25 flex items-center justify-center shadow-2xl">
-                      <div className="w-14 h-14 rounded-full border border-white/10 flex items-center justify-center bg-black/40">
-                        <div className="w-6 h-6 rounded-full bg-neutral-900 border-2 border-neutral-600 shadow-inner flex items-center justify-center">
-                          <div className="w-2 h-2 rounded-full bg-white/90" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 2X Speed Overlay when Holding Disc */}
+                    {/* 2X Speed Overlay when Holding Poster */}
                     {isFastForward && (
-                      <div className="absolute inset-0 rounded-full bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20">
-                        <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-purple-600 text-white font-black text-xs tracking-wider shadow-lg shadow-purple-600/60">
-                          <Zap size={15} className="animate-pulse" /> 2X SPEED
+                      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20">
+                        <div className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-purple-600 text-white font-black text-sm tracking-wider shadow-xl shadow-purple-600/70">
+                          <Zap size={18} className="animate-pulse" /> 2X SPEED
                         </div>
-                        <span className="text-[11px] text-white/80 font-medium mt-1">Holding</span>
+                        <span className="text-xs text-white/80 font-semibold mt-1.5">Holding to speed up</span>
                       </div>
                     )}
                   </div>
@@ -2419,9 +2423,13 @@ export default function MusicPage() {
                 <button
                   onClick={() => setMobileQueueOpen(true)}
                   onTouchStart={(e) => { touchStartYRef.current = e.touches[0].clientY; }}
-                  onTouchEnd={(e) => {
-                    const deltaY = touchStartYRef.current - e.changedTouches[0].clientY;
-                    if (deltaY > 20) setMobileQueueOpen(true);
+                  onTouchMove={(e) => {
+                    if (!touchStartYRef.current) return;
+                    const deltaY = touchStartYRef.current - e.touches[0].clientY;
+                    if (deltaY > 15) {
+                      setMobileQueueOpen(true);
+                      touchStartYRef.current = 0;
+                    }
                   }}
                   className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.06] active:bg-white/15 border border-white/10 text-left transition-all cursor-pointer"
                 >
@@ -2448,9 +2456,13 @@ export default function MusicPage() {
               )}
               <div
                 onTouchStart={(e) => { touchStartYRef.current = e.touches[0].clientY; }}
-                onTouchEnd={(e) => {
-                  const deltaY = touchStartYRef.current - e.changedTouches[0].clientY;
-                  if (deltaY < -35) setMobileQueueOpen(false);
+                onTouchMove={(e) => {
+                  if (!touchStartYRef.current) return;
+                  const deltaY = touchStartYRef.current - e.touches[0].clientY;
+                  if (deltaY < -25) {
+                    setMobileQueueOpen(false);
+                    touchStartYRef.current = 0;
+                  }
                 }}
                 className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl bg-neutral-950/95 backdrop-blur-2xl border-t border-white/20 shadow-[0_-20px_60px_rgba(0,0,0,0.95)] flex flex-col transition-transform duration-300 ease-out"
                 style={{
