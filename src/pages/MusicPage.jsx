@@ -217,7 +217,9 @@ function mediaEngine(el) {
           if (effectName !== undefined) shifter.setEffectPreset(effectName);
           if (reverbVal !== undefined) shifter.setReverb(reverbVal);
         }
-        if (hooked && (!effectName || effectName === "clean") && (!reverbVal || reverbVal === 0)) {
+        const hasEffect = effectName && effectName !== "clean";
+        const hasReverb = reverbVal && reverbVal > 0;
+        if (hooked && !hasEffect && !hasReverb) {
           // Vinyl Turntable Mode: Hardware resampling shifts both tempo and pitch naturally!
           el.playbackRate = tempo;
           el.preservesPitch = false;
@@ -660,73 +662,6 @@ export default function MusicPage() {
   const [ratesBefore, setRatesBefore] = useState(null);
   const [drawerClosing, setDrawerClosing] = useState(false);
 
-  const applyRatesToEngine = useCallback((newTempo, newPitch, newEffect, newReverb) => {
-    const t = newTempo !== undefined ? newTempo : tempoRef.current;
-    const p = newPitch !== undefined ? newPitch : pitchRef.current;
-    const eff = newEffect !== undefined ? newEffect : soundEffect;
-    const rev = newReverb !== undefined ? newReverb : reverb;
-
-    if (mediaElRef.current) {
-      try {
-        const shifter = getPitchShifter(mediaElRef.current);
-        if (shifter) {
-          shifter.setEffectPreset(eff);
-          shifter.setReverb(rev);
-          shifter.setPitch(p);
-        }
-        mediaElRef.current.playbackRate = t;
-      } catch (err) {
-        console.warn("applyRatesToEngine HTML5 error:", err);
-      }
-    }
-
-    if (ytPlayerRef.current?.setPlaybackRate) {
-      try {
-        const ytRate = nearestRate(YT_RATES, t);
-        ytPlayerRef.current.setPlaybackRate(ytRate);
-      } catch {}
-    }
-  }, [soundEffect, reverb]);
-
-  const commitRates = useCallback((newTempo, newPitch, newEffect = "clean", newReverb = 0) => {
-    setTempo(newTempo);
-    setPitch(newPitch);
-    setSoundEffect(newEffect);
-    setReverb(newReverb);
-    tempoRef.current = newTempo;
-    pitchRef.current = newPitch;
-    applyRatesToEngine(newTempo, newPitch, newEffect, newReverb);
-  }, [applyRatesToEngine]);
-
-  const onTempoChange = useCallback((val) => {
-    const clamped = Math.max(RATE_MIN, Math.min(RATE_MAX, Number(val.toFixed(2))));
-    setTempo(clamped);
-    tempoRef.current = clamped;
-    applyRatesToEngine(clamped, pitchRef.current, soundEffect, reverb);
-  }, [applyRatesToEngine, soundEffect, reverb]);
-
-  const onPitchChange = useCallback((val) => {
-    const clamped = Math.max(RATE_MIN, Math.min(RATE_MAX, Number(val.toFixed(2))));
-    setPitch(clamped);
-    pitchRef.current = clamped;
-    applyRatesToEngine(tempoRef.current, clamped, soundEffect, reverb);
-  }, [applyRatesToEngine, soundEffect, reverb]);
-
-  const onReverbChange = useCallback((val) => {
-    const clamped = Math.max(0, Math.min(1.0, Number(val.toFixed(2))));
-    setReverb(clamped);
-    applyRatesToEngine(tempoRef.current, pitchRef.current, soundEffect, clamped);
-  }, [applyRatesToEngine, soundEffect]);
-
-  const openRates = useCallback(() => {
-    setRatesBefore({ tempo, pitch, soundEffect, reverb });
-    setRatesOpen(true);
-  }, [tempo, pitch, soundEffect, reverb]);
-
-  const resetRates = useCallback(() => {
-    commitRates(1.0, 1.0, "clean", 0.0);
-  }, [commitRates]);
-
   const closeDrawer = useCallback(() => {
     setDrawerClosing(true);
     setTimeout(() => {
@@ -734,8 +669,6 @@ export default function MusicPage() {
       setDrawerClosing(false);
     }, 200);
   }, []);
-
-  const ratesTouched = tempo !== 1.0 || pitch !== 1.0 || soundEffect !== "clean" || reverb !== 0.0;
 
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
@@ -1132,16 +1065,34 @@ export default function MusicPage() {
           const saavnTracks = data.filter((t) => t && t.source !== "peertube" && !t.streamUrl?.includes("peertube"));
           const finalTracks = saavnTracks.length ? saavnTracks : CURATED_DEFAULT_TRACKS;
           setTracks(finalTracks);
-          setQueue(finalTracks);
+          const rawRecent = readStorage(RECENT_KEY).filter(
+            (t) => t && t.source !== "peertube" && t.streamUrl && !t.streamUrl.includes("peertube")
+          );
+          writeStorage(RECENT_KEY, rawRecent);
+          const first = rawRecent[0] || finalTracks[0] || CURATED_DEFAULT_TRACKS[0];
+          setNowPlaying(first);
+          setQueue(rawRecent.length ? [first, ...finalTracks] : finalTracks);
         } else {
           setTracks(CURATED_DEFAULT_TRACKS);
-          setQueue(CURATED_DEFAULT_TRACKS);
+          const rawRecent = readStorage(RECENT_KEY).filter(
+            (t) => t && t.source !== "peertube" && t.streamUrl && !t.streamUrl.includes("peertube")
+          );
+          writeStorage(RECENT_KEY, rawRecent);
+          const first = rawRecent[0] || CURATED_DEFAULT_TRACKS[0];
+          setNowPlaying(first);
+          setQueue(rawRecent.length ? [first, ...CURATED_DEFAULT_TRACKS] : CURATED_DEFAULT_TRACKS);
         }
       })
       .catch((err) => {
         console.warn("fetchTracks fallback to curated songs:", err.message);
         setTracks(CURATED_DEFAULT_TRACKS);
-        setQueue(CURATED_DEFAULT_TRACKS);
+        const rawRecent = readStorage(RECENT_KEY).filter(
+          (t) => t && t.source !== "peertube" && t.streamUrl && !t.streamUrl.includes("peertube")
+        );
+        writeStorage(RECENT_KEY, rawRecent);
+        const first = rawRecent[0] || CURATED_DEFAULT_TRACKS[0];
+        setNowPlaying(first);
+        setQueue(rawRecent.length ? [first, ...CURATED_DEFAULT_TRACKS] : CURATED_DEFAULT_TRACKS);
       });
   };
 
@@ -1531,6 +1482,74 @@ export default function MusicPage() {
     onPointerCancel: scrubEnd,
   };
 
+  /* Tempo / Pitch / Listener FX */
+  const commitRates = (nextTempo, nextPitch, effectName, reverbVal) => {
+    const wantTempo = clampRate(nextTempo);
+    const wantPitch = clampRate(nextPitch);
+
+    const fxName = effectName !== undefined ? effectName : soundEffect;
+    const fxReverb = reverbVal !== undefined ? reverbVal : reverb;
+
+    setTempo(wantTempo);
+    setPitch(wantPitch);
+    tempoRef.current = wantTempo;
+    pitchRef.current = wantPitch;
+
+    if (effectName !== undefined) setSoundEffect(effectName);
+    if (reverbVal !== undefined) setReverb(reverbVal);
+
+    if (audioRef.current) {
+      applyRates(audioRef.current, wantTempo, wantPitch, fxName, fxReverb);
+    }
+    if (ytPlayerRef.current?.setPlaybackRate) {
+      try {
+        const applied = nearestRate(YT_RATES, wantTempo);
+        ytPlayerRef.current.setPlaybackRate(applied);
+      } catch {}
+    }
+  };
+
+  const onTempoChange = (value) => {
+    const nextVal = clampRate(value);
+    if (!unhook) {
+      return commitRates(nextVal, nextVal);
+    }
+    return commitRates(nextVal, pitch);
+  };
+
+  const onPitchChange = (value) => {
+    const nextVal = clampRate(value);
+    if (!unhook) {
+      return commitRates(nextVal, nextVal);
+    }
+    return commitRates(tempo, nextVal);
+  };
+
+  const onUnhookChange = (on) => {
+    setUnhook(on);
+    if (!on) {
+      commitRates(tempo, tempo);
+    }
+  };
+
+  const openRates = () => {
+    setRatesBefore({ tempo, pitch, unhook, soundEffect, reverb });
+    setRatesOpen(true);
+  };
+
+  const cancelRates = () => {
+    if (ratesBefore) {
+      setUnhook(ratesBefore.unhook);
+      commitRates(ratesBefore.tempo, ratesBefore.pitch, ratesBefore.soundEffect, ratesBefore.reverb);
+    }
+    closeDrawer();
+  };
+
+  const resetRates = () => {
+    setUnhook(false);
+    commitRates(1.0, 1.0, "clean", 0.0);
+  };
+
   const setVolumeLevel = (level) => {
     const val = Math.max(0, Math.min(1, level));
     setVolume(val);
@@ -1580,6 +1599,7 @@ export default function MusicPage() {
   const shownPosition = scrubbing ?? position;
   const progress = duration > 0 ? (shownPosition / duration) * 100 : 0;
   const list = searchActive && searchMode === "albums" ? albums : tracks;
+  const ratesTouched = !sameRate(tempo, 1) || !sameRate(pitch, 1);
 
   const activeLyricIndex = React.useMemo(() => {
     if (!lyricsData.synced?.length) return -1;
@@ -3095,9 +3115,6 @@ export default function MusicPage() {
           </div>
         </>
       )}
-
-      {/* Hidden HTML5 Audio Element for Direct 320kbps Streams */}
-      <audio ref={mediaElRef} crossOrigin="anonymous" preload="auto" className="hidden" />
     </div>
   );
 }
