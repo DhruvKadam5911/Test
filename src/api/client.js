@@ -8,7 +8,12 @@ const API_BASE_URL =
     : "http://localhost:5000";
 
 export async function request(endpoint, options = {}) {
-  const url = `${API_BASE_URL}${endpoint}`;
+  const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  let path = cleanEndpoint;
+  if (!API_BASE_URL && !path.startsWith("/api/")) {
+    path = `/api${path}`;
+  }
+  const url = `${API_BASE_URL}${path}`;
 
   const config = {
     ...options,
