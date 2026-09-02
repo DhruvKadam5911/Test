@@ -1085,7 +1085,12 @@ export default function MusicPage() {
       } catch {}
       if (engine) {
         engine.setSource(t.streamUrl, { autoplay: true });
+        // Always apply current user settings to every new track
         applyRates(engine, tempo, engine.canPitch ? pitch : 1, soundEffect, reverb);
+        if (globalPitchShifter) {
+          globalPitchShifter.setEffectPreset(soundEffect);
+          globalPitchShifter.setReverb(reverb);
+        }
       }
     } else {
       // Pause HTML5 audio if playing
@@ -1096,9 +1101,8 @@ export default function MusicPage() {
       if (id) {
         if (ytEngineRef.current) {
           ytEngineRef.current.setSource(id, { autoplay: true });
-          if (!sameRate(tempo, 1)) {
-            applyRates(ytEngineRef.current, tempo, pitch);
-          }
+          // Always apply current tempo settings to every new track
+          applyRates(ytEngineRef.current, tempo, pitch);
         } else if (ytPlayerRef.current?.loadVideoById) {
           try {
             ytPlayerRef.current.loadVideoById(id);
@@ -2343,7 +2347,7 @@ export default function MusicPage() {
       {ratesOpen && (
         <>
           <div
-            onClick={cancelRates}
+            onClick={() => setRatesOpen(false)}
             className="fixed inset-0 bg-black/60 z-[70] backdrop-blur-sm transition-opacity duration-300"
           />
           <div
@@ -2377,7 +2381,7 @@ export default function MusicPage() {
                   <RotateCcw size={11} /> Reset
                 </button>
                 <button
-                  onClick={cancelRates}
+                  onClick={() => setRatesOpen(false)}
                   className="p-1 rounded-full text-neutral-400 hover:text-white hover:bg-white/10 border-none cursor-pointer flex items-center justify-center transition-colors"
                 >
                   <X size={18} />
