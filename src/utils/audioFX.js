@@ -155,90 +155,96 @@ function ensureAudioGraph(el) {
  * Apply the full sound FX state to HTML5 <audio> and YouTube engines.
  */
 export function applySoundFX(mediaEl, ytPlayer, fx) {
-  const tempo = clampFXRate(fx?.tempo ?? 1.0);
-  const pitch = clampFXRate(fx?.pitch ?? 1.0);
-  const unhook = Boolean(fx?.unhook);
-  const reverb = Math.max(0, Math.min(1, Number(fx?.reverb) || 0));
-  const preset = fx?.preset || "studio";
+  try {
+    const tempo = clampFXRate(fx?.tempo ?? 1.0);
+    const pitch = clampFXRate(fx?.pitch ?? 1.0);
+    const unhook = Boolean(fx?.unhook);
+    const reverb = Math.max(0, Math.min(1, Number(fx?.reverb) || 0));
+    const preset = fx?.preset || "studio";
 
-  // 1. Apply to HTML5 Media Element
-  if (mediaEl) {
-    try {
-      const activePlaybackRate = unhook
-        ? (!Math.abs(tempo - 1.0) < 0.005 && Math.abs(pitch - 1.0) < 0.005 ? tempo : pitch)
-        : pitch;
+    // 1. Apply to HTML5 Media Element
+    if (mediaEl) {
+      try {
+        const activePlaybackRate = unhook
+          ? (Math.abs(tempo - 1.0) >= 0.005 && Math.abs(pitch - 1.0) < 0.005 ? tempo : pitch)
+          : pitch;
 
-      const shouldPreservePitch = unhook && Math.abs(pitch - 1.0) < 0.005 && Math.abs(tempo - 1.0) >= 0.005;
+        const shouldPreservePitch = unhook && Math.abs(pitch - 1.0) < 0.005 && Math.abs(tempo - 1.0) >= 0.005;
 
-      mediaEl.preservesPitch = shouldPreservePitch;
-      if ("mozPreservesPitch" in mediaEl) mediaEl.mozPreservesPitch = shouldPreservePitch;
-      if ("webkitPreservesPitch" in mediaEl) mediaEl.webkitPreservesPitch = shouldPreservePitch;
+        mediaEl.preservesPitch = shouldPreservePitch;
+        if ("mozPreservesPitch" in mediaEl) mediaEl.mozPreservesPitch = shouldPreservePitch;
+        if ("webkitPreservesPitch" in mediaEl) mediaEl.webkitPreservesPitch = shouldPreservePitch;
 
-      mediaEl.playbackRate = activePlaybackRate;
-      mediaEl.defaultPlaybackRate = activePlaybackRate;
+        mediaEl.playbackRate = activePlaybackRate;
+        mediaEl.defaultPlaybackRate = activePlaybackRate;
 
-      // Lazy-init DSP graph when presets or reverb are used
-      if (reverb > 0 || preset !== "studio") {
-        ensureAudioGraph(mediaEl);
-        if (audioCtx) {
-          const now = audioCtx.currentTime;
-          if (reverbWet && reverbDry) {
-            reverbWet.gain.setTargetAtTime(reverb * 0.85, now, 0.03);
-            reverbDry.gain.setTargetAtTime(1.0 - reverb * 0.3, now, 0.03);
-          }
+        // Lazy-init DSP graph when presets or reverb are used
+        if (reverb > 0 || preset !== "studio") {
+          ensureAudioGraph(mediaEl);
+          if (audioCtx) {
+            const now = audioCtx.currentTime;
+            if (reverbWet && reverbDry) {
+              reverbWet.gain.setTargetAtTime(reverb * 0.85, now, 0.03);
+              reverbDry.gain.setTargetAtTime(1.0 - reverb * 0.3, now, 0.03);
+            }
 
-          if (bassFilter && midFilter && trebleFilter) {
-            switch (preset) {
-              case "slowed_reverb":
-                bassFilter.gain.setTargetAtTime(6.0, now, 0.03);
-                midFilter.gain.setTargetAtTime(-1.0, now, 0.03);
-                trebleFilter.gain.setTargetAtTime(-3.0, now, 0.03);
-                break;
-              case "nightcore":
-                bassFilter.gain.setTargetAtTime(1.5, now, 0.03);
-                midFilter.gain.setTargetAtTime(2.5, now, 0.03);
-                trebleFilter.gain.setTargetAtTime(4.5, now, 0.03);
-                break;
-              case "concert":
-                bassFilter.gain.setTargetAtTime(3.0, now, 0.03);
-                midFilter.gain.setTargetAtTime(1.5, now, 0.03);
-                trebleFilter.gain.setTargetAtTime(2.0, now, 0.03);
-                break;
-              case "bass_boost":
-                bassFilter.gain.setTargetAtTime(9.0, now, 0.03);
-                midFilter.gain.setTargetAtTime(0.0, now, 0.03);
-                trebleFilter.gain.setTargetAtTime(0.5, now, 0.03);
-                break;
-              case "vocal":
-                bassFilter.gain.setTargetAtTime(-2.5, now, 0.03);
-                midFilter.gain.setTargetAtTime(5.0, now, 0.03);
-                trebleFilter.gain.setTargetAtTime(3.5, now, 0.03);
-                break;
-              default:
-                bassFilter.gain.setTargetAtTime(0, now, 0.03);
-                midFilter.gain.setTargetAtTime(0, now, 0.03);
-                trebleFilter.gain.setTargetAtTime(0, now, 0.03);
-                break;
+            if (bassFilter && midFilter && trebleFilter) {
+              switch (preset) {
+                case "slowed_reverb":
+                  bassFilter.gain.setTargetAtTime(6.0, now, 0.03);
+                  midFilter.gain.setTargetAtTime(-1.0, now, 0.03);
+                  trebleFilter.gain.setTargetAtTime(-3.0, now, 0.03);
+                  break;
+                case "nightcore":
+                  bassFilter.gain.setTargetAtTime(1.5, now, 0.03);
+                  midFilter.gain.setTargetAtTime(2.5, now, 0.03);
+                  trebleFilter.gain.setTargetAtTime(4.5, now, 0.03);
+                  break;
+                case "concert":
+                  bassFilter.gain.setTargetAtTime(3.0, now, 0.03);
+                  midFilter.gain.setTargetAtTime(1.5, now, 0.03);
+                  trebleFilter.gain.setTargetAtTime(2.0, now, 0.03);
+                  break;
+                case "bass_boost":
+                  bassFilter.gain.setTargetAtTime(9.0, now, 0.03);
+                  midFilter.gain.setTargetAtTime(0.0, now, 0.03);
+                  trebleFilter.gain.setTargetAtTime(0.5, now, 0.03);
+                  break;
+                case "vocal":
+                  bassFilter.gain.setTargetAtTime(-2.5, now, 0.03);
+                  midFilter.gain.setTargetAtTime(5.0, now, 0.03);
+                  trebleFilter.gain.setTargetAtTime(3.5, now, 0.03);
+                  break;
+                default:
+                  bassFilter.gain.setTargetAtTime(0, now, 0.03);
+                  midFilter.gain.setTargetAtTime(0, now, 0.03);
+                  trebleFilter.gain.setTargetAtTime(0, now, 0.03);
+                  break;
+              }
             }
           }
         }
+      } catch (err) {
+        console.warn("applySoundFX media error:", err);
       }
-    } catch (err) {
-      console.warn("applySoundFX media error:", err);
     }
-  }
 
-  // 2. Apply to YouTube Player Engine
-  if (ytPlayer && typeof ytPlayer.setPlaybackRate === "function") {
-    try {
-      const applied = nearestYTRate(tempo);
-      ytPlayer.setPlaybackRate(applied);
-    } catch {}
+    // 2. Apply to YouTube Player Engine
+    if (ytPlayer && typeof ytPlayer.setPlaybackRate === "function") {
+      try {
+        const applied = nearestYTRate(tempo);
+        ytPlayer.setPlaybackRate(applied);
+      } catch {}
+    }
+  } catch (err) {
+    console.warn("applySoundFX overall error:", err);
   }
 }
 
 export function resumeAudioFXContext() {
-  if (audioCtx && audioCtx.state === "suspended") {
-    audioCtx.resume().catch(() => {});
-  }
+  try {
+    if (audioCtx && audioCtx.state === "suspended") {
+      audioCtx.resume().catch(() => {});
+    }
+  } catch {}
 }

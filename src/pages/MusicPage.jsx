@@ -2796,7 +2796,7 @@ export default function MusicPage() {
               </div>
               <div className="flex items-center gap-1.5">
                 <button
-                  onClick={resetRates}
+                  onClick={resetFX}
                   style={{ padding: "3px 8px", fontSize: 11, fontWeight: 500, borderRadius: 8, background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, transition: "all 0.15s" }}
                 >
                   <RotateCcw size={10} /> Reset
