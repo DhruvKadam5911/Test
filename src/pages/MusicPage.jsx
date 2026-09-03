@@ -1124,11 +1124,39 @@ export default function MusicPage() {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [playing]);
 
+  /* Auto-hide Player Bar on Scroll Down / Reveal on Scroll Up */
+  useEffect(() => {
+    let lastScrollY = typeof window !== "undefined" ? window.scrollY : 0;
+    let ticking = false;
+
+    const onScroll = () => {
+      if (expanded) return;
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentScrollY = window.scrollY;
+          if (currentScrollY > lastScrollY + 10 && currentScrollY > 70) {
+            // Scrolling down -> auto hide player bar
+            setBarVisible(false);
+          } else if (currentScrollY < lastScrollY - 6 || currentScrollY <= 25) {
+            // Scrolling up or at top -> reveal player bar
+            setBarVisible(true);
+          }
+          lastScrollY = currentScrollY;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [expanded]);
+
   /* Stage animation & overflow lock */
   useEffect(() => {
     if (expanded) {
       setStageMounted(true);
-      setBarVisible(!narrow);
+      setBarVisible(false);
       const timer = setTimeout(() => setStageIn(true), 20);
       return () => clearTimeout(timer);
     }
@@ -1136,7 +1164,7 @@ export default function MusicPage() {
     setBarVisible(true);
     const timer = setTimeout(() => setStageMounted(false), STAGE_MS);
     return () => clearTimeout(timer);
-  }, [expanded, narrow]);
+  }, [expanded]);
 
   useEffect(() => {
     if (!stageMounted) return;
@@ -1146,11 +1174,6 @@ export default function MusicPage() {
       document.body.style.overflow = prev;
     };
   }, [stageMounted]);
-
-  const onStageScroll = (e) => {
-    if (!narrow) return;
-    setBarVisible(e.currentTarget.scrollTop > BAR_REVEAL_AT);
-  };
 
   /* Playback handlers */
   const play = useCallback((t) => {
@@ -2550,11 +2573,14 @@ export default function MusicPage() {
           className="fixed left-0 right-0 flex items-center gap-4 px-4 md:px-8"
           style={{
             bottom: narrow ? NAV_HEIGHT : 0,
-            transform: !narrow || barVisible ? "translateY(0)" : `translateY(${BAR_HEIGHT + 10}px)`,
-            transition: narrow ? "transform 260ms cubic-bezier(.32,.72,0,1)" : "none",
+            transform: !expanded && barVisible ? "translateY(0)" : `translateY(${BAR_HEIGHT + (narrow ? NAV_HEIGHT + 10 : 20)}px)`,
+            opacity: !expanded && barVisible ? 1 : 0,
+            pointerEvents: !expanded && barVisible ? "auto" : "none",
+            transition: "transform 280ms cubic-bezier(0.16, 1, 0.3, 1), opacity 220ms ease",
             height: BAR_HEIGHT,
             background: "rgba(18,12,28,0.94)",
             backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
             borderTop: `1px solid ${colors.ring}`,
             zIndex: 58,
           }}
