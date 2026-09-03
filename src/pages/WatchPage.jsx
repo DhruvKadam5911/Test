@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Play, Pause, Volume2, VolumeX, Maximize2, ThumbsUp, ListVideo, X, RefreshCw, Download } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize2, ThumbsUp, ListVideo, X, RefreshCw, Download, Users } from "lucide-react";
 import { colors, bodyFont, displayFont, resolveBackground } from "../theme";
 import SmallRing from "../components/shared/SmallRing";
 import OnionLogo from "../components/shared/OnionLogo";
@@ -569,6 +569,14 @@ export default function WatchPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => alert("Watch Together coming soon!")}
+                      style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}
+                      aria-label="Watch Together"
+                      title="Watch Together (Party)"
+                    >
+                      <Users size={16} color={colors.textMuted} />
+                    </button>
                     <button onClick={toggleMute} style={{ background: "none", border: "none", cursor: "pointer" }}>
                       {isMuted ? <VolumeX size={16} color={colors.textMuted} /> : <Volume2 size={16} color={colors.text} />}
                     </button>
@@ -621,8 +629,25 @@ export default function WatchPage() {
                 <button
                   onClick={() => setLiked(!liked)}
                   style={{ padding: 9, borderRadius: "50%", background: liked ? "rgba(123,38,133,0.3)" : "rgba(255,255,255,0.06)", border: `1px solid ${colors.ring}`, color: liked ? colors.accentLight : colors.text, cursor: "pointer" }}
+                  aria-label="Like"
+                  title="Like"
                 >
                   <ThumbsUp size={16} fill={liked ? colors.accent : "none"} />
+                </button>
+
+                <button
+                  onClick={() => alert("Watch Together coming soon!")}
+                  title="Watch Together (Coming Soon)"
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-semibold transition-colors duration-150 hover:bg-white/10"
+                  style={{
+                    background: "rgba(255,255,255,0.06)",
+                    border: `1px solid ${colors.ring}`,
+                    color: colors.text,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Users size={15} color={colors.accentLight} />
+                  <span>Watch Together</span>
                 </button>
               </div>
 

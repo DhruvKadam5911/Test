@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Play, Info } from "lucide-react";
+import { Play, Info, Users } from "lucide-react";
 import { colors, bodyFont, displayFont, resolveBackgroundImage } from "../theme";
 import RingMotif from "../components/shared/RingMotif";
 import OnionLogo from "../components/shared/OnionLogo";
@@ -282,6 +282,15 @@ export default function OnionHome() {
                       style={{ fontFamily: bodyFont, fontSize: 14, fontWeight: 600, color: colors.text, background: "rgba(255,255,255,0.08)", border: `1px solid ${colors.ring}`, borderRadius: 4, padding: "11px 22px", cursor: "pointer" }}
                     >
                       <Info size={16} color={colors.text} /> More Info
+                    </button>
+
+                    <button
+                      onClick={() => navigate(`/watch/${featuredTitle.id}`)}
+                      title="Watch Together (Coming Soon)"
+                      className="flex items-center gap-2 transition-transform duration-180 hover:scale-105"
+                      style={{ fontFamily: bodyFont, fontSize: 14, fontWeight: 600, color: colors.text, background: "rgba(255,255,255,0.06)", border: `1px solid ${colors.ring}`, borderRadius: 4, padding: "11px 18px", cursor: "pointer" }}
+                    >
+                      <Users size={16} color={colors.accentLight} /> Watch Together
                     </button>
                   </div>
                 </div>

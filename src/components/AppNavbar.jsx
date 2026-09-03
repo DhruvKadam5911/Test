@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Search, Bell, X, Music2, ChevronDown, LayoutGrid } from "lucide-react";
+import { Search, Bell, X, Music2, ChevronDown, LayoutGrid, Users } from "lucide-react";
 import { colors } from "../theme";
 import OnionLogo from "./shared/OnionLogo";
 import api from "../api/client";
@@ -145,6 +145,16 @@ export default function AppNavbar({ value, onSearchChange }) {
             <Music2 size={15} color={colors.textMuted} />
             Music
           </Link>
+
+          <button
+            onClick={() => alert("Watch Together coming soon!")}
+            className="flex items-center gap-1.5 bg-transparent border-none cursor-pointer hover:text-white transition-colors"
+            style={{ fontSize: 14, fontWeight: 500, color: colors.textMuted, fontFamily: "inherit", padding: 0 }}
+            title="Watch Together (Coming Soon)"
+          >
+            <Users size={15} color={colors.accentLight} />
+            Watch Together
+          </button>
         </div>
       </div>
 
@@ -179,6 +189,15 @@ export default function AppNavbar({ value, onSearchChange }) {
             </button>
           )}
         </div>
+
+        <button
+          onClick={() => alert("Watch Together coming soon!")}
+          className="md:hidden flex bg-transparent border-none cursor-pointer p-0"
+          aria-label="Watch Together"
+          title="Watch Together (Coming Soon)"
+        >
+          <Users size={18} color={colors.accentLight} />
+        </button>
 
         <Link to="/music" className="md:hidden flex" aria-label="Music">
           <Music2 size={18} color={colors.textMuted} />

@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, Menu, Zap, ListMusic,
   Film, History, ArrowLeft, Clock, TrendingUp, Sparkles, ArrowUpLeft,
   ThumbsUp, Gauge, Link2, Unlink, Minus, Plus, Video, Disc3, Radio, Mic2,
-  SlidersHorizontal, RotateCcw,
+  SlidersHorizontal, RotateCcw, Users,
 } from "lucide-react";
 import { colors, bodyFont, displayFont } from "../theme";
 import OnionMark from "../components/shared/OnionMark";
@@ -1731,6 +1731,34 @@ export default function MusicPage() {
           {railItem("history", "History", History)}
           {railItem("library", "Library", Library)}
 
+          {/* Listen Together button */}
+          <button
+            onClick={() => alert("Listen Together feature coming soon!")}
+            title={!railExpanded ? "Listen Together" : undefined}
+            style={{
+              display: "flex",
+              flexDirection: railExpanded ? "row" : "column",
+              alignItems: "center",
+              justifyContent: railExpanded ? "flex-start" : "center",
+              gap: railExpanded ? 16 : 4,
+              width: "100%",
+              borderRadius: 10,
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: railExpanded ? "12px 16px" : "10px 0",
+              color: colors.textMuted,
+              fontFamily: bodyFont,
+              fontSize: railExpanded ? 14.5 : 10,
+              fontWeight: 500,
+              transition: "background 0.15s, color 0.15s",
+            }}
+            className="hover:bg-white/10 hover:text-white"
+          >
+            <Users size={railExpanded ? 20 : 22} color={colors.textMuted} />
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden" }}>Together</span>
+          </button>
+
           {/* Movies link directly in primary rail */}
           <Link
             to="/"
@@ -1816,13 +1844,23 @@ export default function MusicPage() {
                 <OnionMark height={58} />
                 <BrandWord word="music" height={15} />
               </Link>
-              <button
-                onClick={() => setMobileSearch(true)}
-                aria-label="Search"
-                className="ml-auto p-2 text-neutral-400 bg-transparent border-none cursor-pointer"
-              >
-                <Search size={22} />
-              </button>
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  onClick={() => alert("Listen Together feature coming soon!")}
+                  aria-label="Listen Together"
+                  title="Listen Together (Coming Soon)"
+                  className="p-2 text-neutral-300 bg-transparent border-none cursor-pointer flex items-center"
+                >
+                  <Users size={20} color={colors.accentLight} />
+                </button>
+                <button
+                  onClick={() => setMobileSearch(true)}
+                  aria-label="Search"
+                  className="p-2 text-neutral-400 bg-transparent border-none cursor-pointer"
+                >
+                  <Search size={22} />
+                </button>
+              </div>
             </>
           )}
 
@@ -1865,6 +1903,24 @@ export default function MusicPage() {
                 </button>
               )}
             </div>
+          )}
+
+          {!narrow && (
+            <button
+              onClick={() => alert("Listen Together feature coming soon!")}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-150 hover:bg-white/10"
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                border: `1px solid ${colors.ring}`,
+                color: colors.text,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+              title="Listen Together (Coming Soon)"
+            >
+              <Users size={15} color={colors.accentLight} />
+              <span>Listen Together</span>
+            </button>
           )}
         </div>
 
@@ -2715,6 +2771,15 @@ export default function MusicPage() {
                   <ThumbsUp size={18} fill={isLiked(track) ? colors.accentLight : "none"} />
                 </button>
 
+                <button
+                  onClick={() => alert("Listen Together feature coming soon!")}
+                  aria-label="Listen Together"
+                  title="Listen Together (Coming Soon)"
+                  className="hidden sm:flex bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white transition-colors p-1"
+                >
+                  <Users size={18} />
+                </button>
+
                 {/* Auto-collapsing / Hover-expand volume slider */}
                 <div
                   className="hidden sm:flex items-center"
@@ -2828,6 +2893,17 @@ export default function MusicPage() {
               {label}
             </button>
           ))}
+          <button
+            onClick={() => alert("Listen Together feature coming soon!")}
+            className="flex-1 flex flex-col items-center justify-center gap-1 bg-transparent border-none cursor-pointer"
+            style={{
+              color: colors.textMuted,
+              fontFamily: bodyFont, fontSize: 10.5, fontWeight: 500,
+            }}
+          >
+            <Users size={19} color={colors.accentLight} />
+            Together
+          </button>
           <Link
             to="/"
             onClick={() => setExpanded(false)}
