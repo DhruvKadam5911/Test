@@ -1108,16 +1108,10 @@ export default function MusicPage() {
   /* Background audio keepalive on screen lock / tab switch */
   useEffect(() => {
     const handleVisibilityChange = () => {
+      resumeAudioFXContext();
       if (document.visibilityState === "hidden") {
-        if (globalAudioCtx && globalAudioCtx.state === "suspended") {
-          globalAudioCtx.resume().catch(() => {});
-        }
         if (mediaElRef.current && playing && mediaElRef.current.paused) {
           mediaElRef.current.play().catch(() => {});
-        }
-      } else {
-        if (globalAudioCtx && globalAudioCtx.state === "suspended") {
-          globalAudioCtx.resume().catch(() => {});
         }
       }
     };

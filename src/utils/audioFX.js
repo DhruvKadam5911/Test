@@ -51,18 +51,39 @@ export function nearestYTRate(value) {
   );
 }
 
-function generateImpulseResponse(ctx, duration = 1.8, decay = 2.4) {
-  const sampleRate = ctx.sampleRate;
+function generateImpulseResponse(ctx, duration = 2.4, decay = 2.0) {
+  const sampleRate = ctx.sampleRate || 44100;
   const length = Math.round(sampleRate * duration);
   const impulse = ctx.createBuffer(2, length, sampleRate);
   const left = impulse.getChannelData(0);
   const right = impulse.getChannelData(1);
 
+  // Early reflections (simulating 3D room boundaries)
+  const earlyReflections = [
+    { delayMs: 15, gain: 0.7, pan: -0.5 },
+    { delayMs: 27, gain: 0.65, pan: 0.6 },
+    { delayMs: 41, gain: 0.55, pan: -0.4 },
+    { delayMs: 59, gain: 0.45, pan: 0.5 },
+    { delayMs: 79, gain: 0.38, pan: -0.7 },
+    { delayMs: 107, gain: 0.32, pan: 0.7 },
+  ];
+
+  for (const ref of earlyReflections) {
+    const idx = Math.round((ref.delayMs / 1000) * sampleRate);
+    if (idx < length) {
+      left[idx] += ref.gain * (1 - ref.pan) * 0.5;
+      right[idx] += ref.gain * (1 + ref.pan) * 0.5;
+    }
+  }
+
+  // Smooth stereo diffused tail with warm low-frequency bloom
   for (let i = 0; i < length; i++) {
     const t = i / sampleRate;
     const envelope = Math.exp(-t * decay);
-    left[i] = (Math.random() * 2 - 1) * envelope;
-    right[i] = (Math.random() * 2 - 1) * envelope;
+    const noiseL = (Math.random() * 2 - 1) * envelope;
+    const noiseR = (Math.random() * 2 - 1) * envelope;
+    left[i] += noiseL * 0.85;
+    right[i] += noiseR * 0.85;
   }
   return impulse;
 }
@@ -74,6 +95,7 @@ let currentMediaEl = null;
 let bassFilter = null;
 let midFilter = null;
 let trebleFilter = null;
+let reverbDampFilter = null;
 let reverbNode = null;
 let reverbDry = null;
 let reverbWet = null;
@@ -81,19 +103,19 @@ let reverbWet = null;
 function ensureAudioGraph(el) {
   if (typeof window === "undefined" || !el) return;
 
-  if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return;
-    audioCtx = new AudioContextClass();
-  }
+  try {
+    if (!audioCtx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      audioCtx = new AudioContextClass();
+    }
 
-  if (audioCtx.state === "suspended") {
-    audioCtx.resume().catch(() => {});
-  }
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume().catch(() => {});
+    }
 
-  if (currentMediaEl !== el) {
-    currentMediaEl = el;
-    try {
+    if (currentMediaEl !== el) {
+      currentMediaEl = el;
       if (!el._fxSourceNode) {
         sourceNode = audioCtx.createMediaElementSource(el);
         el._fxSourceNode = sourceNode;
@@ -123,9 +145,15 @@ function ensureAudioGraph(el) {
         midFilter.connect(trebleFilter);
         trebleFilter.connect(postFilter);
 
+        // Warm high-cut damping filter for lush reverb body
+        reverbDampFilter = audioCtx.createBiquadFilter();
+        reverbDampFilter.type = "lowpass";
+        reverbDampFilter.frequency.value = 4500;
+        reverbDampFilter.Q.value = 0.7;
+
         reverbNode = audioCtx.createConvolver();
         try {
-          reverbNode.buffer = generateImpulseResponse(audioCtx, 1.8, 2.2);
+          reverbNode.buffer = generateImpulseResponse(audioCtx, 2.4, 2.0);
         } catch {}
 
         reverbDry = audioCtx.createGain();
@@ -133,11 +161,14 @@ function ensureAudioGraph(el) {
         reverbDry.gain.value = 1.0;
         reverbWet.gain.value = 0.0;
 
+        // Dry path
         postFilter.connect(reverbDry);
-        postFilter.connect(reverbNode);
-        reverbNode.connect(reverbWet);
-
         reverbDry.connect(audioCtx.destination);
+
+        // Wet reverb path (PostFilter -> DampFilter -> Convolver -> ReverbWet -> Destination)
+        postFilter.connect(reverbDampFilter);
+        reverbDampFilter.connect(reverbNode);
+        reverbNode.connect(reverbWet);
         reverbWet.connect(audioCtx.destination);
       }
 
@@ -145,9 +176,9 @@ function ensureAudioGraph(el) {
         sourceNode.disconnect();
       } catch {}
       sourceNode.connect(bassFilter);
-    } catch (err) {
-      console.warn("AudioFX node init notice:", err.message);
     }
+  } catch (err) {
+    console.warn("AudioFX node init notice:", err.message);
   }
 }
 
@@ -192,49 +223,54 @@ export function applySoundFX(mediaEl, ytPlayer, fx) {
         mediaEl.playbackRate = activeRate;
         mediaEl.defaultPlaybackRate = activeRate;
 
-        // Lazy-init DSP graph when presets or reverb are used
-        if (reverb > 0 || preset !== "studio") {
-          ensureAudioGraph(mediaEl);
-          if (audioCtx) {
-            const now = audioCtx.currentTime;
-            if (reverbWet && reverbDry) {
-              reverbWet.gain.setTargetAtTime(reverb * 0.85, now, 0.03);
-              reverbDry.gain.setTargetAtTime(1.0 - reverb * 0.3, now, 0.03);
-            }
+        // Ensure DSP audio graph is active
+        ensureAudioGraph(mediaEl);
+        if (audioCtx) {
+          if (audioCtx.state === "suspended") {
+            audioCtx.resume().catch(() => {});
+          }
 
-            if (bassFilter && midFilter && trebleFilter) {
-              switch (preset) {
-                case "slowed_reverb":
-                  bassFilter.gain.setTargetAtTime(6.0, now, 0.03);
-                  midFilter.gain.setTargetAtTime(-1.0, now, 0.03);
-                  trebleFilter.gain.setTargetAtTime(-3.0, now, 0.03);
-                  break;
-                case "nightcore":
-                  bassFilter.gain.setTargetAtTime(1.5, now, 0.03);
-                  midFilter.gain.setTargetAtTime(2.5, now, 0.03);
-                  trebleFilter.gain.setTargetAtTime(4.5, now, 0.03);
-                  break;
-                case "concert":
-                  bassFilter.gain.setTargetAtTime(3.0, now, 0.03);
-                  midFilter.gain.setTargetAtTime(1.5, now, 0.03);
-                  trebleFilter.gain.setTargetAtTime(2.0, now, 0.03);
-                  break;
-                case "bass_boost":
-                  bassFilter.gain.setTargetAtTime(9.0, now, 0.03);
-                  midFilter.gain.setTargetAtTime(0.0, now, 0.03);
-                  trebleFilter.gain.setTargetAtTime(0.5, now, 0.03);
-                  break;
-                case "vocal":
-                  bassFilter.gain.setTargetAtTime(-2.5, now, 0.03);
-                  midFilter.gain.setTargetAtTime(5.0, now, 0.03);
-                  trebleFilter.gain.setTargetAtTime(3.5, now, 0.03);
-                  break;
-                default:
-                  bassFilter.gain.setTargetAtTime(0, now, 0.03);
-                  midFilter.gain.setTargetAtTime(0, now, 0.03);
-                  trebleFilter.gain.setTargetAtTime(0, now, 0.03);
-                  break;
-              }
+          const now = audioCtx.currentTime;
+          if (reverbWet && reverbDry) {
+            // Rich, audible, musical reverb gain response
+            const wetGain = Math.min(1.8, Math.pow(reverb, 0.75) * 1.5);
+            const dryGain = Math.max(0.65, 1.0 - reverb * 0.25);
+            reverbWet.gain.setTargetAtTime(wetGain, now, 0.02);
+            reverbDry.gain.setTargetAtTime(dryGain, now, 0.02);
+          }
+
+          if (bassFilter && midFilter && trebleFilter) {
+            switch (preset) {
+              case "slowed_reverb":
+                bassFilter.gain.setTargetAtTime(6.0, now, 0.02);
+                midFilter.gain.setTargetAtTime(-1.0, now, 0.02);
+                trebleFilter.gain.setTargetAtTime(-3.0, now, 0.02);
+                break;
+              case "nightcore":
+                bassFilter.gain.setTargetAtTime(1.5, now, 0.02);
+                midFilter.gain.setTargetAtTime(2.5, now, 0.02);
+                trebleFilter.gain.setTargetAtTime(4.5, now, 0.02);
+                break;
+              case "concert":
+                bassFilter.gain.setTargetAtTime(3.0, now, 0.02);
+                midFilter.gain.setTargetAtTime(1.5, now, 0.02);
+                trebleFilter.gain.setTargetAtTime(2.0, now, 0.02);
+                break;
+              case "bass_boost":
+                bassFilter.gain.setTargetAtTime(9.0, now, 0.02);
+                midFilter.gain.setTargetAtTime(0.0, now, 0.02);
+                trebleFilter.gain.setTargetAtTime(0.5, now, 0.02);
+                break;
+              case "vocal":
+                bassFilter.gain.setTargetAtTime(-2.5, now, 0.02);
+                midFilter.gain.setTargetAtTime(5.0, now, 0.02);
+                trebleFilter.gain.setTargetAtTime(3.5, now, 0.02);
+                break;
+              default:
+                bassFilter.gain.setTargetAtTime(0, now, 0.02);
+                midFilter.gain.setTargetAtTime(0, now, 0.02);
+                trebleFilter.gain.setTargetAtTime(0, now, 0.02);
+                break;
             }
           }
         }
