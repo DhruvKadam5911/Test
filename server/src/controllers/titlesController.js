@@ -28,7 +28,6 @@ const MAX_LIMIT = 100;
 // explicit ?genre=Uncategorised request.
 const PLACEHOLDER_GENRE = "Uncategorised";
 
-
 /*
  * What the home page's rows are, in order terms. TMDB's own numbers stand in
  * for numbers this catalog does not have: nobody has watched anything here, so
@@ -54,6 +53,14 @@ const SORTS = {
   },
   newest: { orderBy: { createdAt: "desc" }, where: {} },
 };
+
+function getRequestBaseUrl(req) {
+  const host = req.get("x-forwarded-host") || req.get("host");
+  const proto = String(req.get("x-forwarded-proto") || req.protocol || "http")
+    .split(",")[0]
+    .trim();
+  return host ? `${proto}://${host}` : "";
+}
 
 // GET /titles
 export async function getTitles(req, res) {
@@ -197,11 +204,12 @@ export async function getTitleById(req, res) {
   }
 }
 
-// GET /titles/:id/playback (Requires Auth)
+// GET /titles/:id/playback
 export async function getPlaybackUrl(req, res) {
   try {
     const { id } = req.params;
     const { episodeId } = req.query;
+    const baseUrl = getRequestBaseUrl(req);
 
     const title = await prisma.title.findUnique({
       where: { id },
@@ -212,7 +220,7 @@ export async function getPlaybackUrl(req, res) {
     }
 
     if (title.contentType === "movie") {
-      const playbackUrl = await resolvePlaybackUrl(title.playbackUrl);
+      const playbackUrl = await resolvePlaybackUrl(title.playbackUrl, { baseUrl });
       return res.status(200).json({ playbackUrl });
     }
 
@@ -229,10 +237,10 @@ export async function getPlaybackUrl(req, res) {
       return res.status(404).json({ error: "Episode not found." });
     }
 
-    const playbackUrl = await resolvePlaybackUrl(episode.playbackUrl);
+    const playbackUrl = await resolvePlaybackUrl(episode.playbackUrl, { baseUrl });
     return res.status(200).json({ playbackUrl });
   } catch (error) {
     console.error("getPlaybackUrl error:", error);
-    return res.status(500).json({ error: "Failed to fetch playback stream URL." });
+    return res.status(500).json({ error: error.message || "Failed to fetch playback stream URL." });
   }
 }

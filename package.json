@@ -25,6 +25,7 @@
     "react-router-dom": "^7.18.2",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3",
+    "webtorrent": "^3.0.21",
     "youtubei.js": "^13.4.0"
   },
   "devDependencies": {

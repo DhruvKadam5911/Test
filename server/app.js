@@ -18,8 +18,10 @@ import prisma from "./src/config/db.js";
 import titlesRoutes from "./src/routes/titles.js";
 import adminRoutes from "./src/routes/admin.js";
 import musicRoutes from "./src/routes/music.js";
+import torrentRoutes from "./src/routes/torrent.js";
 
 const app = express();
+app.set("trust proxy", 1);
 
 // CORS origins. Deployment domains are supplied through CORS_ORIGINS (comma
 // separated) rather than hardcoded, so putting the API behind a new host does
@@ -78,6 +80,7 @@ app.get("/", (req, res) => {
     frontendUrl: "http://localhost:5173",
     endpoints: {
       titles: "/titles",
+      torrent: "/api/torrent/health",
     },
   });
 });
@@ -99,6 +102,8 @@ app.use("/admin", adminRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/music", musicRoutes);
 app.use("/api/music", musicRoutes);
+app.use("/torrent", torrentRoutes);
+app.use("/api/torrent", torrentRoutes);
 
 // Global 404 Handler
 app.use((req, res) => {
