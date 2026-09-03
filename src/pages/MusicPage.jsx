@@ -13,7 +13,17 @@ import OnionMark from "../components/shared/OnionMark";
 import BrandWord from "../components/shared/BrandWord";
 import ExploreView from "../components/music/ExploreView";
 import api from "../api/client";
-import { createPitchShifter } from "../utils/pitchShifter";
+import {
+  DEFAULT_FX,
+  FX_PRESETS,
+  FX_RATE_MIN,
+  FX_RATE_MAX,
+  FX_RATE_STEP,
+  clampFXRate,
+  semitonesFromPitch,
+  applySoundFX,
+  resumeAudioFXContext,
+} from "../utils/audioFX";
 
 /*
  * Onion Music.
@@ -29,23 +39,6 @@ import { createPitchShifter } from "../utils/pitchShifter";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const IFRAME_API = "https://www.youtube.com/iframe_api";
-
-// Rate controls
-const RATE_MIN = 0.1;
-const RATE_MAX = 3.0;
-const RATE_STEP_DEFAULT = 0.05;
-
-const YT_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-
-const clampRate = (v) =>
-  Math.min(RATE_MAX, Math.max(RATE_MIN, Math.round(Number(v) * 100) / 100));
-
-const nearestRate = (list, value) => {
-  const valid = Array.isArray(list) && list.length > 0 ? list : YT_RATES;
-  return valid.reduce((best, r) => (Math.abs(r - value) < Math.abs(best - value) ? r : best), valid[0]);
-};
-
-const sameRate = (a, b) => Math.abs(a - b) < 0.005;
 
 /* Load YouTube Iframe API once */
 let apiPromise = null;
@@ -84,59 +77,6 @@ function loadYoutubeApi() {
   return apiPromise;
 }
 
-let globalAudioCtx = null;
-let globalPitchShifter = null;
-const elementAudioNodes = new WeakMap();
-
-function getPitchShifter(el, createIfMissing = false) {
-  if (!el || typeof window === "undefined") return null;
-  let shifter = elementAudioNodes.get(el);
-  if (shifter) {
-    if (globalAudioCtx && globalAudioCtx.state === "suspended") {
-      globalAudioCtx.resume().catch(() => {});
-    }
-    return shifter;
-  }
-  if (!createIfMissing) return null;
-
-  if (!globalAudioCtx) {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (AudioCtx) {
-      globalAudioCtx = new AudioCtx();
-    }
-  }
-  if (!globalAudioCtx) return null;
-
-  try {
-    let sourceNode = el._audioSourceNode;
-    if (!sourceNode) {
-      sourceNode = globalAudioCtx.createMediaElementSource(el);
-      el._audioSourceNode = sourceNode;
-    }
-    shifter = createPitchShifter(globalAudioCtx);
-    sourceNode.connect(shifter.input);
-    shifter.output.connect(globalAudioCtx.destination);
-    elementAudioNodes.set(el, shifter);
-    globalPitchShifter = shifter;
-  } catch (e) {
-    console.warn("Web Audio pitch shifter note:", e.message);
-  }
-
-  if (globalAudioCtx && globalAudioCtx.state === "suspended") {
-    globalAudioCtx.resume().catch(() => {});
-  }
-  return shifter || globalPitchShifter;
-}
-
-function semitonesFromPitch(pitch) {
-  const semitones = Math.round(12 * Math.log2(pitch || 1.0));
-  return semitones > 0 ? `+${semitones} st` : semitones < 0 ? `${semitones} st` : "Normal Key (0 st)";
-}
-
-function pitchFromSemitones(semitones) {
-  return Math.pow(2, semitones / 12);
-}
-
 /* HTML5 Media Engine */
 function mediaEngine(el) {
   return {
@@ -152,11 +92,7 @@ function mediaEngine(el) {
       el.loop = value;
     },
     play: async () => {
-      try {
-        if (globalAudioCtx && globalAudioCtx.state === "suspended") {
-          await globalAudioCtx.resume();
-        }
-      } catch {}
+      resumeAudioFXContext();
       try {
         return await el.play();
       } catch (err) {
@@ -169,11 +105,7 @@ function mediaEngine(el) {
       el.src = url;
       el.load();
       if (autoplay) {
-        try {
-          if (globalAudioCtx && globalAudioCtx.state === "suspended") {
-            globalAudioCtx.resume().catch(() => {});
-          }
-        } catch {}
+        resumeAudioFXContext();
         const p = el.play();
         if (p && typeof p.catch === "function") {
           p.catch((err) => console.warn("setSource autoplay notice:", err.message));
@@ -206,53 +138,6 @@ function mediaEngine(el) {
     },
     get playbackRate() {
       return el.playbackRate;
-    },
-    setRates(tempo, pitch, effectName, reverbVal, isUnhooked) {
-      try {
-        const needsFx = (effectName && effectName !== "clean") || (reverbVal && reverbVal > 0);
-        if (needsFx) {
-          const shifter = getPitchShifter(el, true);
-          if (shifter) {
-            if (effectName !== undefined) shifter.setEffectPreset(effectName);
-            if (reverbVal !== undefined) shifter.setReverb(reverbVal);
-          }
-        }
-
-        const wantTempo = Number(tempo) || 1.0;
-        const wantPitch = Number(pitch) || 1.0;
-        const isLocked = !isUnhooked && sameRate(wantPitch, wantTempo);
-
-        if (isLocked) {
-          // Locked / Turntable Mode: Speed and Pitch change together naturally
-          el.preservesPitch = false;
-          if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
-          if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
-          el.playbackRate = wantTempo;
-        } else if (isUnhooked) {
-          // Unhooked Mode:
-          if (!sameRate(wantTempo, 1.0) && sameRate(wantPitch, 1.0)) {
-            // Speed (Tempo) changed while Pitch is 1.0 -> preserve natural key
-            el.preservesPitch = true;
-            if ("mozPreservesPitch" in el) el.mozPreservesPitch = true;
-            if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = true;
-            el.playbackRate = wantTempo;
-          } else {
-            // Pitch changed:
-            el.preservesPitch = false;
-            if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
-            if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
-            el.playbackRate = wantPitch;
-          }
-        } else {
-          el.preservesPitch = false;
-          if ("mozPreservesPitch" in el) el.mozPreservesPitch = false;
-          if ("webkitPreservesPitch" in el) el.webkitPreservesPitch = false;
-          el.playbackRate = wantTempo;
-        }
-      } catch (err) {
-        console.warn("setRates error:", err);
-      }
-      return { tempo, pitch };
     },
   };
 }
@@ -372,28 +257,7 @@ function youtubeEngine(player) {
         player?.setVolume?.(Math.round(value * 100));
       } catch {}
     },
-    setRates(tempo, pitch) {
-      const applied = nearestRate(YT_RATES, tempo);
-      try {
-        if (player && typeof player.setPlaybackRate === "function") {
-          player.setPlaybackRate(applied);
-        }
-      } catch (e) {
-        console.warn("yt setRates error:", e);
-      }
-      return { tempo: applied, pitch };
-    },
   };
-}
-
-function applyRates(engine, tempo, pitch, effectName, reverbVal, isUnhooked) {
-  if (!engine?.setRates) return null;
-  try {
-    return engine.setRates(tempo, pitch, effectName, reverbVal, isUnhooked);
-  } catch (err) {
-    console.warn("setRates failed:", err);
-    return null;
-  }
 }
 
 function sourceOf(track) {
@@ -667,14 +531,8 @@ export default function MusicPage() {
   const [autoplay, setAutoplay] = useState(false);
   const [displayMode, setDisplayMode] = useState("song");
 
-  const [tempo, setTempo] = useState(1);
-  const [pitch, setPitch] = useState(1);
-  const [unhook, setUnhook] = useState(false);
-  const [soundEffect, setSoundEffect] = useState("clean");
-  const [reverb, setReverb] = useState(0);
-  const rateStep = RATE_STEP_DEFAULT;
+  const [fx, setFx] = useState(DEFAULT_FX);
   const [ratesOpen, setRatesOpen] = useState(false);
-  const [ratesBefore, setRatesBefore] = useState(null);
   const [drawerClosing, setDrawerClosing] = useState(false);
 
   const closeDrawer = useCallback(() => {
@@ -705,13 +563,9 @@ export default function MusicPage() {
   const [searches, setSearches] = useState(() => readStorage(SEARCHES_KEY));
   const [lyricsData, setLyricsData] = useState({ synced: [], plain: "", hasSynced: false, loading: false });
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
-  const [isFastForward, setIsFastForward] = useState(false);
   const [stageDragY, setStageDragY] = useState(0);
   const [isDraggingStage, setIsDraggingStage] = useState(false);
   const dragStartYRef = useRef(0);
-  const prevTempoRef = useRef(1.0);
-  const isHoldingRef = useRef(false);
-  const holdTimerRef = useRef(null);
   const touchStartYRef = useRef(0);
 
   useEffect(() => {
@@ -770,52 +624,6 @@ export default function MusicPage() {
     }
   }, [duration, position]);
 
-  /* 2X Fast Forward on Hold (>160ms) without interfering with Tap */
-  const startFastForward = useCallback((e) => {
-    isHoldingRef.current = false;
-    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
-    holdTimerRef.current = setTimeout(() => {
-      isHoldingRef.current = true;
-      prevTempoRef.current = tempoRef.current || 1.0;
-      setIsFastForward(true);
-      if (mediaElRef.current) mediaElRef.current.playbackRate = 2.0;
-      if (audioRef.current) applyRates(audioRef.current, 2.0, pitchRef.current || 1.0);
-      if (ytPlayerRef.current?.setPlaybackRate) {
-        try { ytPlayerRef.current.setPlaybackRate(2.0); } catch {}
-      }
-    }, 160);
-  }, []);
-
-  const stopFastForward = useCallback(() => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-    isHoldingRef.current = false;
-    setIsFastForward(false);
-    const orig = prevTempoRef.current || 1.0;
-    if (mediaElRef.current) mediaElRef.current.playbackRate = orig;
-    if (audioRef.current) applyRates(audioRef.current, orig, pitchRef.current || 1.0);
-    if (ytPlayerRef.current?.setPlaybackRate) {
-      try { ytPlayerRef.current.setPlaybackRate(orig); } catch {}
-    }
-  }, []);
-
-  /* Universal pointer/touch release safety to ensure 2X is never stuck on swipe down */
-  useEffect(() => {
-    const onRelease = () => stopFastForward();
-    window.addEventListener("pointerup", onRelease);
-    window.addEventListener("pointercancel", onRelease);
-    window.addEventListener("touchend", onRelease);
-    window.addEventListener("touchcancel", onRelease);
-    return () => {
-      window.removeEventListener("pointerup", onRelease);
-      window.removeEventListener("pointercancel", onRelease);
-      window.removeEventListener("touchend", onRelease);
-      window.removeEventListener("touchcancel", onRelease);
-    };
-  }, [stopFastForward]);
-
   /* Background / Lockscreen playback via MediaSession API */
   useEffect(() => {
     if (!("mediaSession" in navigator) || !nowPlaying) return;
@@ -872,13 +680,14 @@ export default function MusicPage() {
   useEffect(() => {
     if (!("mediaSession" in navigator) || !("setPositionState" in navigator.mediaSession) || !duration) return;
     try {
+      const activeRate = audioRef.current?.playbackRate || (fx.unhook ? fx.tempo : fx.pitch) || 1;
       navigator.mediaSession.setPositionState({
         duration: Math.max(0, duration),
-        playbackRate: tempo,
+        playbackRate: Math.max(0.1, Math.min(3.0, activeRate)),
         position: Math.min(Math.max(0, position), duration),
       });
     } catch {}
-  }, [position, duration, tempo]);
+  }, [position, duration, fx]);
 
   /* Global Keyboard shortcuts:
    * Left/Right arrow keys: skip 5 seconds backward/forward
@@ -931,10 +740,8 @@ export default function MusicPage() {
   const tracksRef = useRef(null);
   const queueRef = useRef([]);
   const actionsRef = useRef({});
-  const tempoRef = useRef(tempo);
-  const pitchRef = useRef(pitch);
-  tempoRef.current = tempo;
-  pitchRef.current = pitch;
+  const fxRef = useRef(DEFAULT_FX);
+  fxRef.current = fx;
 
   const searchActive = query.trim().length >= 2;
   const searchScreen = (narrow ? mobileSearch : searchFocused) && !searchActive;
@@ -953,18 +760,30 @@ export default function MusicPage() {
   useEffect(() => {
     const el = mediaElRef.current;
     if (!el) return;
-    // NOTE: Do NOT call getPitchShifter(el) eagerly here.
-    // Creating AudioContext before a user gesture causes it to stay
-    // in 'suspended' state, which silently blocks all audio playback.
-    // The PitchShifter is created lazily on first play/setSource instead.
     const engine = mediaEngine(el);
     mediaEngineRef.current = engine;
     if (nowPlaying?.streamUrl) {
       audioRef.current = engine;
     }
+    const syncRates = () => {
+      applySoundFX(el, ytPlayerRef.current, fxRef.current);
+    };
     const handlers = [
-      ["play", () => { setPlaying(true); setBuffering(false); }],
-      ["playing", () => { setPlaying(true); setBuffering(false); }],
+      ["play", () => {
+        setPlaying(true);
+        setBuffering(false);
+        syncRates();
+      }],
+      ["playing", () => {
+        setPlaying(true);
+        setBuffering(false);
+        syncRates();
+      }],
+      ["ratechange", syncRates],
+      ["loadedmetadata", () => {
+        setDuration(el.duration || 0);
+        syncRates();
+      }],
       ["timeupdate", () => {
         if (el && typeof el.currentTime === "number" && !Number.isNaN(el.currentTime)) {
           setPosition(el.currentTime);
@@ -972,7 +791,6 @@ export default function MusicPage() {
       }],
       ["pause", () => setPlaying(false)],
       ["waiting", () => setBuffering(true)],
-      ["loadedmetadata", () => setDuration(el.duration || 0)],
       ["durationchange", () => setDuration(el.duration || 0)],
       ["ended", () => actionsRef.current.ended?.()],
       ["error", () => setBuffering(false)],
@@ -983,13 +801,10 @@ export default function MusicPage() {
     };
   }, [nowPlaying?.streamUrl]);
 
-  /* Synchronize DSP Preset & Reverb with active PitchShifter */
+  /* Continuous single-source-of-truth synchronization for FX */
   useEffect(() => {
-    if (globalPitchShifter) {
-      globalPitchShifter.setEffectPreset(soundEffect);
-      globalPitchShifter.setReverb(reverb);
-    }
-  }, [soundEffect, reverb]);
+    applySoundFX(mediaElRef.current, ytPlayerRef.current, fx);
+  }, [fx]);
 
   /* Initialize YouTube Iframe Player */
   useEffect(() => {
@@ -1025,6 +840,7 @@ export default function MusicPage() {
             onReady: (event) => {
               if (!active) return;
               ytReadyRef.current = true;
+              ytPlayerRef.current = event.target;
               const yt = youtubeEngine(event.target);
               ytEngineRef.current = yt;
               if (!nowPlaying?.streamUrl) {
@@ -1032,8 +848,7 @@ export default function MusicPage() {
               }
               try {
                 event.target.setVolume(Math.round(volume * 100));
-                const applied = nearestRate(YT_RATES, tempoRef.current);
-                event.target.setPlaybackRate(applied);
+                applySoundFX(mediaElRef.current, event.target, fxRef.current);
               } catch {}
             },
             onStateChange: (event) => {
@@ -1044,10 +859,7 @@ export default function MusicPage() {
                 setPlaying(true);
                 setBuffering(false);
                 try {
-                  const applied = nearestRate(YT_RATES, tempoRef.current);
-                  if (event.target && typeof event.target.setPlaybackRate === "function") {
-                    event.target.setPlaybackRate(applied);
-                  }
+                  applySoundFX(mediaElRef.current, event.target, fxRef.current);
                   const dur = event.target.getDuration();
                   if (dur && dur > 0) setDuration(dur);
                 } catch {}
@@ -1291,22 +1103,6 @@ export default function MusicPage() {
     };
   }, [track, duration]);
 
-  /* MediaSession position state */
-  useEffect(() => {
-    const session = navigator.mediaSession;
-    if (!session) return;
-    session.playbackState = playing ? "playing" : "paused";
-    try {
-      if (duration > 0 && typeof session.setPositionState === "function") {
-        session.setPositionState({
-          duration,
-          position: Math.min(position, duration),
-          playbackRate: audioRef.current?.playbackRate || 1,
-        });
-      }
-    } catch {}
-  }, [playing, position, duration]);
-
   /* Background audio keepalive on screen lock / tab switch */
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -1380,12 +1176,7 @@ export default function MusicPage() {
       } catch {}
       if (engine) {
         engine.setSource(t.streamUrl, { autoplay: true });
-        // Always apply current user settings to every new track
-        applyRates(engine, tempo, engine.canPitch ? pitch : 1, soundEffect, reverb);
-        if (globalPitchShifter) {
-          globalPitchShifter.setEffectPreset(soundEffect);
-          globalPitchShifter.setReverb(reverb);
-        }
+        applySoundFX(mediaElRef.current, ytPlayerRef.current, fxRef.current);
       }
     } else {
       // Pause HTML5 audio if playing
@@ -1396,12 +1187,12 @@ export default function MusicPage() {
       if (id) {
         if (ytEngineRef.current) {
           ytEngineRef.current.setSource(id, { autoplay: true });
-          // Always apply current tempo settings to every new track
-          applyRates(ytEngineRef.current, tempo, pitch);
+          applySoundFX(mediaElRef.current, ytPlayerRef.current, fxRef.current);
         } else if (ytPlayerRef.current?.loadVideoById) {
           try {
             ytPlayerRef.current.loadVideoById(id);
             ytPlayerRef.current.playVideo?.();
+            applySoundFX(mediaElRef.current, ytPlayerRef.current, fxRef.current);
           } catch {}
         }
       }
@@ -1419,7 +1210,7 @@ export default function MusicPage() {
       .catch(() => {
         setQueue([t, ...(tracksRef.current || []).filter((x) => (x.sourceId || x.id) !== (t.sourceId || t.id))]);
       });
-  }, [selectEngine, tempo, pitch, soundEffect, reverb]);
+  }, [selectEngine, narrow]);
 
   const resume = useCallback(() => {
     setAutoplay(true);
@@ -1522,87 +1313,24 @@ export default function MusicPage() {
     onPointerCancel: scrubEnd,
   };
 
-  /* Tempo / Pitch / Listener FX */
-  const commitRates = (nextTempo, nextPitch, effectName, reverbVal) => {
-    const wantTempo = clampRate(nextTempo);
-    const wantPitch = clampRate(nextPitch);
+  /* Clean Single-Source-of-Truth FX controls */
+  const updateFX = useCallback((patch) => {
+    resumeAudioFXContext();
+    setFx((prev) => {
+      const next = { ...prev, ...patch };
+      fxRef.current = next;
+      applySoundFX(mediaElRef.current, ytPlayerRef.current, next);
+      return next;
+    });
+  }, []);
 
-    const fxName = effectName !== undefined ? effectName : soundEffect;
-    const fxReverb = reverbVal !== undefined ? reverbVal : reverb;
-
-    setTempo(wantTempo);
-    setPitch(wantPitch);
-    tempoRef.current = wantTempo;
-    pitchRef.current = wantPitch;
-
-    if (effectName !== undefined) setSoundEffect(effectName);
-    if (reverbVal !== undefined) setReverb(reverbVal);
-
-    if (audioRef.current) {
-      applyRates(audioRef.current, wantTempo, wantPitch, fxName, fxReverb, unhook);
-    }
-    if (ytPlayerRef.current?.setPlaybackRate) {
-      try {
-        const applied = nearestRate(YT_RATES, wantTempo);
-        ytPlayerRef.current.setPlaybackRate(applied);
-      } catch {}
-    }
-  };
-
-  const onTempoChange = (value) => {
-    try {
-      if (globalAudioCtx && globalAudioCtx.state === "suspended") {
-        globalAudioCtx.resume().catch(() => {});
-      }
-    } catch {}
-    const nextVal = clampRate(value);
-    if (!unhook) {
-      return commitRates(nextVal, nextVal);
-    }
-    return commitRates(nextVal, pitch);
-  };
-
-  const onPitchChange = (value) => {
-    try {
-      if (globalAudioCtx && globalAudioCtx.state === "suspended") {
-        globalAudioCtx.resume().catch(() => {});
-      }
-    } catch {}
-    const nextVal = clampRate(value);
-    if (!unhook) {
-      return commitRates(nextVal, nextVal);
-    }
-    return commitRates(tempo, nextVal);
-  };
-
-  const onUnhookChange = (on) => {
-    setUnhook(on);
-    if (!on) {
-      commitRates(tempo, tempo);
-    }
-  };
+  const resetFX = useCallback(() => {
+    updateFX(DEFAULT_FX);
+  }, [updateFX]);
 
   const openRates = () => {
-    try {
-      if (globalAudioCtx && globalAudioCtx.state === "suspended") {
-        globalAudioCtx.resume().catch(() => {});
-      }
-    } catch {}
-    setRatesBefore({ tempo, pitch, unhook, soundEffect, reverb });
+    resumeAudioFXContext();
     setRatesOpen(true);
-  };
-
-  const cancelRates = () => {
-    if (ratesBefore) {
-      setUnhook(ratesBefore.unhook);
-      commitRates(ratesBefore.tempo, ratesBefore.pitch, ratesBefore.soundEffect, ratesBefore.reverb);
-    }
-    closeDrawer();
-  };
-
-  const resetRates = () => {
-    setUnhook(false);
-    commitRates(1.0, 1.0, "clean", 0.0);
   };
 
   const setVolumeLevel = (level) => {
@@ -1654,7 +1382,11 @@ export default function MusicPage() {
   const shownPosition = scrubbing ?? position;
   const progress = duration > 0 ? (shownPosition / duration) * 100 : 0;
   const list = searchActive && searchMode === "albums" ? albums : tracks;
-  const ratesTouched = !sameRate(tempo, 1) || !sameRate(pitch, 1);
+  const ratesTouched =
+    Math.abs(fx.tempo - 1) >= 0.005 ||
+    Math.abs(fx.pitch - 1) >= 0.005 ||
+    fx.reverb > 0.01 ||
+    fx.preset !== "studio";
 
   const activeLyricIndex = React.useMemo(() => {
     if (!lyricsData.synced?.length) return -1;
@@ -2271,7 +2003,6 @@ export default function MusicPage() {
             dragStartYRef.current = e.touches[0].clientY;
             setIsDraggingStage(false);
             setStageDragY(0);
-            stopFastForward();
           }}
           onTouchMove={(e) => {
             if (!dragStartYRef.current) return;
@@ -2280,7 +2011,6 @@ export default function MusicPage() {
               // Pulling down in real-time
               setIsDraggingStage(true);
               setStageDragY(delta);
-              stopFastForward();
             } else if (delta < -30) {
               // Swiping up -> open Up Next
               setMobileQueueOpen(true);
@@ -2292,7 +2022,6 @@ export default function MusicPage() {
               // Dragged down past threshold -> close smoothly!
               setIsDraggingStage(false);
               setStageDragY(0);
-              stopFastForward();
               setExpanded(false);
             } else {
               // Snap back smoothly
@@ -2342,7 +2071,6 @@ export default function MusicPage() {
           <div className="relative flex items-center justify-between px-6 pt-5 pb-2">
             <button
               onClick={() => {
-                stopFastForward();
                 setExpanded(false);
               }}
               aria-label="Collapse"
@@ -2393,13 +2121,7 @@ export default function MusicPage() {
                 {displayMode === "song" ? (
                   /* YouTube Music Style Square Poster Artwork */
                   <div
-                    onPointerDown={startFastForward}
-                    onPointerUp={stopFastForward}
-                    onPointerCancel={stopFastForward}
-                    onPointerLeave={stopFastForward}
-                    onClick={() => {
-                      if (!isHoldingRef.current) toggle();
-                    }}
+                    onClick={toggle}
                     className="rounded-2xl cursor-pointer overflow-hidden border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.95)] relative flex items-center justify-center select-none active:scale-98 transition-transform"
                     style={{
                       width: "min(290px, 76vw)",
@@ -2427,21 +2149,14 @@ export default function MusicPage() {
                       }}
                     />
 
-                    {/* 2X Speed Overlay when Holding Poster, or Pause Icon when Paused */}
-                    {isFastForward ? (
-                      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fade-in">
-                        <div className="px-4 py-2 rounded-full bg-purple-600 text-white font-black text-sm tracking-wider shadow-xl shadow-purple-600/70">
-                          2X SPEED
-                        </div>
-                        <span className="text-xs text-white/80 font-semibold mt-1.5">Holding to speed up</span>
-                      </div>
-                    ) : !playing ? (
+                    {/* Pause Icon when Paused */}
+                    {!playing && (
                       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-10">
                         <div className="w-16 h-16 rounded-full bg-black/60 border border-white/25 flex items-center justify-center text-white shadow-2xl">
                           <Pause size={28} />
                         </div>
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 ) : (
                   /* Premium Synced Lyrics Mode */
@@ -3049,6 +2764,9 @@ export default function MusicPage() {
             style={{ background: "transparent" }}
           />
           <div
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
             style={{
               position: "fixed",
               right: narrow ? 12 : 20,
@@ -3094,21 +2812,19 @@ export default function MusicPage() {
 
             {/* Sound FX Presets */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 12 }}>
-              {[
-                { id: "clean", label: "Studio", tempo: 1.0, pitch: 1.0, reverb: 0.0, unhook: false },
-                { id: "slowed_reverb", label: "🌙 Slowed", tempo: 0.88, pitch: pitchFromSemitones(-2.5), reverb: 0.45, unhook: true },
-                { id: "nightcore", label: "⚡ Nightcore", tempo: 1.15, pitch: pitchFromSemitones(3.5), reverb: 0.12, unhook: true },
-                { id: "concert", label: "🏟️ 8D", tempo: 1.0, pitch: 1.0, reverb: 0.55, unhook: false },
-                { id: "bass_boost", label: "🔊 Bass", tempo: 1.0, pitch: 1.0, reverb: 0.0, unhook: false },
-                { id: "vocal", label: "🎤 Vocal", tempo: 1.0, pitch: 1.0, reverb: 0.15, unhook: false },
-              ].map((preset) => {
-                const isSelected = soundEffect === preset.id;
+              {FX_PRESETS.map((preset) => {
+                const isSelected = fx.preset === preset.id;
                 return (
                   <button
                     key={preset.id}
                     onClick={() => {
-                      setUnhook(preset.unhook);
-                      commitRates(preset.tempo, preset.pitch, preset.id, preset.reverb);
+                      updateFX({
+                        tempo: preset.tempo,
+                        pitch: preset.pitch,
+                        reverb: preset.reverb,
+                        unhook: preset.unhook,
+                        preset: preset.id,
+                      });
                     }}
                     style={{
                       padding: "6px 4px",
@@ -3135,11 +2851,11 @@ export default function MusicPage() {
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: 600 }}>Tempo</span>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.95)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{tempo.toFixed(2)}x</span>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.95)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fx.tempo.toFixed(2)}x</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <button
-                    onClick={() => onTempoChange(tempo - rateStep)}
+                    onClick={() => updateFX({ tempo: clampFXRate(fx.tempo - FX_RATE_STEP) })}
                     style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
                     className="active:scale-90"
                     aria-label="Decrease tempo"
@@ -3148,18 +2864,19 @@ export default function MusicPage() {
                   </button>
                   <input
                     type="range"
-                    min={RATE_MIN}
-                    max={RATE_MAX}
+                    min={FX_RATE_MIN}
+                    max={FX_RATE_MAX}
                     step={0.01}
-                    value={tempo}
-                    onChange={(e) => onTempoChange(Number(e.target.value))}
+                    value={fx.tempo}
+                    onChange={(e) => updateFX({ tempo: clampFXRate(e.target.value) })}
+                    onInput={(e) => updateFX({ tempo: clampFXRate(e.target.value) })}
                     className="onion-rate flex-1"
                     style={{
-                      background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${((tempo - RATE_MIN) / (RATE_MAX - RATE_MIN)) * 100}%, rgba(255,255,255,0.18) ${((tempo - RATE_MIN) / (RATE_MAX - RATE_MIN)) * 100}%, rgba(255,255,255,0.18) 100%)`,
+                      background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${((fx.tempo - FX_RATE_MIN) / (FX_RATE_MAX - FX_RATE_MIN)) * 100}%, rgba(255,255,255,0.18) ${((fx.tempo - FX_RATE_MIN) / (FX_RATE_MAX - FX_RATE_MIN)) * 100}%, rgba(255,255,255,0.18) 100%)`,
                     }}
                   />
                   <button
-                    onClick={() => onTempoChange(tempo + rateStep)}
+                    onClick={() => updateFX({ tempo: clampFXRate(fx.tempo + FX_RATE_STEP) })}
                     style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
                     className="active:scale-90"
                     aria-label="Increase tempo"
@@ -3174,13 +2891,13 @@ export default function MusicPage() {
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: 600 }}>Pitch</span>
-                    <span style={{ fontSize: 10.5, padding: "2px 6px", borderRadius: 6, background: "rgba(168,85,247,0.2)", color: "#d8b4fe", border: "1px solid rgba(168,85,247,0.3)", fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>{semitonesFromPitch(pitch)}</span>
+                    <span style={{ fontSize: 10.5, padding: "2px 6px", borderRadius: 6, background: "rgba(168,85,247,0.2)", color: "#d8b4fe", border: "1px solid rgba(168,85,247,0.3)", fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>{semitonesFromPitch(fx.pitch)}</span>
                   </div>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.95)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{Math.round(pitch * 100)}%</span>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.95)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{Math.round(fx.pitch * 100)}%</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <button
-                    onClick={() => onPitchChange(pitch - rateStep)}
+                    onClick={() => updateFX({ pitch: clampFXRate(fx.pitch - FX_RATE_STEP) })}
                     style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
                     className="active:scale-90"
                     aria-label="Decrease pitch"
@@ -3189,18 +2906,19 @@ export default function MusicPage() {
                   </button>
                   <input
                     type="range"
-                    min={RATE_MIN}
-                    max={RATE_MAX}
+                    min={FX_RATE_MIN}
+                    max={FX_RATE_MAX}
                     step={0.01}
-                    value={pitch}
-                    onChange={(e) => onPitchChange(Number(e.target.value))}
+                    value={fx.pitch}
+                    onChange={(e) => updateFX({ pitch: clampFXRate(e.target.value) })}
+                    onInput={(e) => updateFX({ pitch: clampFXRate(e.target.value) })}
                     className="onion-rate flex-1"
                     style={{
-                      background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${((pitch - RATE_MIN) / (RATE_MAX - RATE_MIN)) * 100}%, rgba(255,255,255,0.18) ${((pitch - RATE_MIN) / (RATE_MAX - RATE_MIN)) * 100}%, rgba(255,255,255,0.18) 100%)`,
+                      background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${((fx.pitch - FX_RATE_MIN) / (FX_RATE_MAX - FX_RATE_MIN)) * 100}%, rgba(255,255,255,0.18) ${((fx.pitch - FX_RATE_MIN) / (FX_RATE_MAX - FX_RATE_MIN)) * 100}%, rgba(255,255,255,0.18) 100%)`,
                     }}
                   />
                   <button
-                    onClick={() => onPitchChange(pitch + rateStep)}
+                    onClick={() => updateFX({ pitch: clampFXRate(fx.pitch + FX_RATE_STEP) })}
                     style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
                     className="active:scale-90"
                     aria-label="Increase pitch"
@@ -3214,15 +2932,11 @@ export default function MusicPage() {
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", fontWeight: 600 }}>Reverb & Ambience</span>
-                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.95)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{Math.round(reverb * 100)}%</span>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.95)", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{Math.round(fx.reverb * 100)}%</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <button
-                    onClick={() => {
-                      const next = Math.max(0, Number((reverb - 0.05).toFixed(2)));
-                      setReverb(next);
-                      if (globalPitchShifter) globalPitchShifter.setReverb(next);
-                    }}
+                    onClick={() => updateFX({ reverb: Math.max(0, Number((fx.reverb - 0.05).toFixed(2))) })}
                     style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
                     className="active:scale-90"
                     aria-label="Decrease reverb"
@@ -3233,23 +2947,16 @@ export default function MusicPage() {
                     type="range"
                     min="0"
                     max="100"
-                    value={Math.round(reverb * 100)}
-                    onChange={(e) => {
-                      const val = Number(e.target.value) / 100;
-                      setReverb(val);
-                      if (globalPitchShifter) globalPitchShifter.setReverb(val);
-                    }}
+                    value={Math.round(fx.reverb * 100)}
+                    onChange={(e) => updateFX({ reverb: Number(e.target.value) / 100 })}
+                    onInput={(e) => updateFX({ reverb: Number(e.target.value) / 100 })}
                     className="onion-rate flex-1"
                     style={{
-                      background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${reverb * 100}%, rgba(255,255,255,0.18) ${reverb * 100}%, rgba(255,255,255,0.18) 100%)`,
+                      background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${fx.reverb * 100}%, rgba(255,255,255,0.18) ${fx.reverb * 100}%, rgba(255,255,255,0.18) 100%)`,
                     }}
                   />
                   <button
-                    onClick={() => {
-                      const next = Math.min(1, Number((reverb + 0.05).toFixed(2)));
-                      setReverb(next);
-                      if (globalPitchShifter) globalPitchShifter.setReverb(next);
-                    }}
+                    onClick={() => updateFX({ reverb: Math.min(1, Number((fx.reverb + 0.05).toFixed(2))) })}
                     style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
                     className="active:scale-90"
                     aria-label="Increase reverb"
@@ -3262,11 +2969,11 @@ export default function MusicPage() {
               {/* Unhook Toggle */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {unhook ? <Unlink size={12} style={{ color: "rgba(255,255,255,0.5)" }} /> : <Link2 size={12} style={{ color: "rgba(255,255,255,0.3)" }} />}
+                  {fx.unhook ? <Unlink size={12} style={{ color: "rgba(255,255,255,0.5)" }} /> : <Link2 size={12} style={{ color: "rgba(255,255,255,0.3)" }} />}
                   <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>Unhook Pitch</span>
                 </div>
                 <button
-                  onClick={() => onUnhookChange(!unhook)}
+                  onClick={() => updateFX({ unhook: !fx.unhook })}
                   style={{
                     padding: "4px 10px",
                     borderRadius: 20,
@@ -3275,16 +2982,16 @@ export default function MusicPage() {
                     border: "none",
                     cursor: "pointer",
                     transition: "all 0.15s",
-                    background: unhook ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
-                    color: unhook ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.3)",
+                    background: fx.unhook ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+                    color: fx.unhook ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.3)",
                     display: "flex",
                     alignItems: "center",
                     gap: 5,
                     letterSpacing: "0.06em",
                   }}
                 >
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: unhook ? "#e2e8f0" : "rgba(255,255,255,0.2)", display: "inline-block" }} />
-                  {unhook ? "ON" : "OFF"}
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: fx.unhook ? "#e2e8f0" : "rgba(255,255,255,0.2)", display: "inline-block" }} />
+                  {fx.unhook ? "ON" : "OFF"}
                 </button>
               </div>
             </div>
