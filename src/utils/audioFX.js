@@ -165,18 +165,32 @@ export function applySoundFX(mediaEl, ytPlayer, fx) {
     // 1. Apply to HTML5 Media Element
     if (mediaEl) {
       try {
-        const activePlaybackRate = unhook
-          ? (Math.abs(tempo - 1.0) >= 0.005 && Math.abs(pitch - 1.0) < 0.005 ? tempo : pitch)
-          : pitch;
+        let activeRate = 1.0;
+        let shouldPreservePitch = false;
 
-        const shouldPreservePitch = unhook && Math.abs(pitch - 1.0) < 0.005 && Math.abs(tempo - 1.0) >= 0.005;
+        if (!unhook) {
+          // Locked / Vinyl Mode: Speed and pitch change together naturally
+          activeRate = pitch || tempo || 1.0;
+          shouldPreservePitch = false;
+        } else {
+          // Unhooked Mode:
+          if (Math.abs(tempo - 1.0) >= 0.005 && Math.abs(pitch - 1.0) < 0.005) {
+            // Speed changed with natural vocal pitch
+            activeRate = tempo;
+            shouldPreservePitch = true;
+          } else {
+            // Pitch changed
+            activeRate = pitch;
+            shouldPreservePitch = false;
+          }
+        }
 
         mediaEl.preservesPitch = shouldPreservePitch;
         if ("mozPreservesPitch" in mediaEl) mediaEl.mozPreservesPitch = shouldPreservePitch;
         if ("webkitPreservesPitch" in mediaEl) mediaEl.webkitPreservesPitch = shouldPreservePitch;
 
-        mediaEl.playbackRate = activePlaybackRate;
-        mediaEl.defaultPlaybackRate = activePlaybackRate;
+        mediaEl.playbackRate = activeRate;
+        mediaEl.defaultPlaybackRate = activeRate;
 
         // Lazy-init DSP graph when presets or reverb are used
         if (reverb > 0 || preset !== "studio") {

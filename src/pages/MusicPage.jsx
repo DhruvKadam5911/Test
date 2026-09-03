@@ -1324,6 +1324,33 @@ export default function MusicPage() {
     });
   }, []);
 
+  const onTempoSlide = useCallback((val) => {
+    const nextVal = clampFXRate(val);
+    if (!fxRef.current.unhook) {
+      updateFX({ tempo: nextVal, pitch: nextVal });
+    } else {
+      updateFX({ tempo: nextVal });
+    }
+  }, [updateFX]);
+
+  const onPitchSlide = useCallback((val) => {
+    const nextVal = clampFXRate(val);
+    if (!fxRef.current.unhook) {
+      updateFX({ tempo: nextVal, pitch: nextVal });
+    } else {
+      updateFX({ pitch: nextVal });
+    }
+  }, [updateFX]);
+
+  const onToggleUnhook = useCallback(() => {
+    const nextUnhook = !fxRef.current.unhook;
+    if (!nextUnhook) {
+      updateFX({ unhook: false, pitch: fxRef.current.tempo });
+    } else {
+      updateFX({ unhook: true });
+    }
+  }, [updateFX]);
+
   const resetFX = useCallback(() => {
     updateFX(DEFAULT_FX);
   }, [updateFX]);
@@ -2855,7 +2882,7 @@ export default function MusicPage() {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <button
-                    onClick={() => updateFX({ tempo: clampFXRate(fx.tempo - FX_RATE_STEP) })}
+                    onClick={() => onTempoSlide(fx.tempo - FX_RATE_STEP)}
                     style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
                     className="active:scale-90"
                     aria-label="Decrease tempo"
@@ -2868,15 +2895,15 @@ export default function MusicPage() {
                     max={FX_RATE_MAX}
                     step={0.01}
                     value={fx.tempo}
-                    onChange={(e) => updateFX({ tempo: clampFXRate(e.target.value) })}
-                    onInput={(e) => updateFX({ tempo: clampFXRate(e.target.value) })}
+                    onChange={(e) => onTempoSlide(e.target.value)}
+                    onInput={(e) => onTempoSlide(e.target.value)}
                     className="onion-rate flex-1"
                     style={{
                       background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${((fx.tempo - FX_RATE_MIN) / (FX_RATE_MAX - FX_RATE_MIN)) * 100}%, rgba(255,255,255,0.18) ${((fx.tempo - FX_RATE_MIN) / (FX_RATE_MAX - FX_RATE_MIN)) * 100}%, rgba(255,255,255,0.18) 100%)`,
                     }}
                   />
                   <button
-                    onClick={() => updateFX({ tempo: clampFXRate(fx.tempo + FX_RATE_STEP) })}
+                    onClick={() => onTempoSlide(fx.tempo + FX_RATE_STEP)}
                     style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
                     className="active:scale-90"
                     aria-label="Increase tempo"
@@ -2897,7 +2924,7 @@ export default function MusicPage() {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <button
-                    onClick={() => updateFX({ pitch: clampFXRate(fx.pitch - FX_RATE_STEP) })}
+                    onClick={() => onPitchSlide(fx.pitch - FX_RATE_STEP)}
                     style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
                     className="active:scale-90"
                     aria-label="Decrease pitch"
@@ -2910,15 +2937,15 @@ export default function MusicPage() {
                     max={FX_RATE_MAX}
                     step={0.01}
                     value={fx.pitch}
-                    onChange={(e) => updateFX({ pitch: clampFXRate(e.target.value) })}
-                    onInput={(e) => updateFX({ pitch: clampFXRate(e.target.value) })}
+                    onChange={(e) => onPitchSlide(e.target.value)}
+                    onInput={(e) => onPitchSlide(e.target.value)}
                     className="onion-rate flex-1"
                     style={{
                       background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${((fx.pitch - FX_RATE_MIN) / (FX_RATE_MAX - FX_RATE_MIN)) * 100}%, rgba(255,255,255,0.18) ${((fx.pitch - FX_RATE_MIN) / (FX_RATE_MAX - FX_RATE_MIN)) * 100}%, rgba(255,255,255,0.18) 100%)`,
                     }}
                   />
                   <button
-                    onClick={() => updateFX({ pitch: clampFXRate(fx.pitch + FX_RATE_STEP) })}
+                    onClick={() => onPitchSlide(fx.pitch + FX_RATE_STEP)}
                     style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "transform 0.1s" }}
                     className="active:scale-90"
                     aria-label="Increase pitch"
@@ -2973,7 +3000,7 @@ export default function MusicPage() {
                   <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>Unhook Pitch</span>
                 </div>
                 <button
-                  onClick={() => updateFX({ unhook: !fx.unhook })}
+                  onClick={onToggleUnhook}
                   style={{
                     padding: "4px 10px",
                     borderRadius: 20,
