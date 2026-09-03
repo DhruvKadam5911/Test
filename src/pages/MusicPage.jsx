@@ -2084,8 +2084,8 @@ export default function MusicPage() {
           className="fixed inset-0 flex flex-col"
           style={{
             background: colors.bg,
-            zIndex: 55,
-            paddingBottom: 0,
+            zIndex: 65,
+            paddingBottom: "max(16px, env(safe-area-inset-bottom, 16px))",
             transform: !stageIn
               ? "translateY(100%)"
               : isDraggingStage
@@ -2170,7 +2170,7 @@ export default function MusicPage() {
                     onClick={toggle}
                     className="rounded-2xl cursor-pointer overflow-hidden border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.95)] relative flex items-center justify-center select-none active:scale-98 transition-transform"
                     style={{
-                      width: "min(290px, 76vw)",
+                      width: "min(240px, 60vw)",
                       aspectRatio: "1 / 1",
                       background: colors.bgElevated,
                     }}
@@ -2569,16 +2569,18 @@ export default function MusicPage() {
           className="fixed left-0 right-0 flex items-center gap-4 px-4 md:px-8"
           style={{
             bottom: narrow ? NAV_HEIGHT : 0,
-            transform: !expanded && barVisible ? "translateY(0)" : `translateY(${BAR_HEIGHT + (narrow ? NAV_HEIGHT + 10 : 20)}px)`,
-            opacity: !expanded && barVisible ? 1 : 0,
-            pointerEvents: !expanded && barVisible ? "auto" : "none",
+            transform: (!narrow ? (expanded || barVisible) : (!expanded && barVisible))
+              ? "translateY(0)"
+              : `translateY(${BAR_HEIGHT + (narrow ? NAV_HEIGHT + 10 : 20)}px)`,
+            opacity: (!narrow ? (expanded || barVisible) : (!expanded && barVisible)) ? 1 : 0,
+            pointerEvents: (!narrow ? (expanded || barVisible) : (!expanded && barVisible)) ? "auto" : "none",
             transition: "transform 280ms cubic-bezier(0.16, 1, 0.3, 1), opacity 220ms ease",
             height: BAR_HEIGHT,
             background: "rgba(18,12,28,0.94)",
             backdropFilter: "blur(16px)",
             WebkitBackdropFilter: "blur(16px)",
             borderTop: `1px solid ${colors.ring}`,
-            zIndex: 58,
+            zIndex: expanded && !narrow ? 70 : 58,
           }}
         >
           {/* Scrubber on top edge */}
@@ -2798,7 +2800,7 @@ export default function MusicPage() {
       )}
 
       {/* Mobile Bottom Navigation Bar (Explore centered) */}
-      {narrow && (
+      {!expanded && narrow && (
         <div
           className="fixed left-0 right-0 bottom-0 flex items-stretch"
           style={{ height: NAV_HEIGHT, background: colors.bg, borderTop: `1px solid ${colors.ring}`, zIndex: 59 }}
