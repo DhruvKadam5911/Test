@@ -554,6 +554,8 @@ export default function MusicPage() {
   const [stageMounted, setStageMounted] = useState(false);
   const [stageIn, setStageIn] = useState(false);
   const [barVisible, setBarVisible] = useState(true);
+  const [volHovered, setVolHovered] = useState(false);
+  const volTimeoutRef = useRef(null);
 
   const [narrow, setNarrow] = useState(
     () => typeof window !== "undefined" && window.matchMedia?.(NARROW).matches
@@ -2713,12 +2715,45 @@ export default function MusicPage() {
                   <ThumbsUp size={18} fill={isLiked(track) ? colors.accentLight : "none"} />
                 </button>
 
-                {/* High-visibility filled volume slider */}
-                <div className="hidden sm:flex items-center gap-2 group/vol">
-                  <button onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"} className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-0">
+                {/* Auto-collapsing / Hover-expand volume slider */}
+                <div
+                  className="hidden sm:flex items-center"
+                  onMouseEnter={() => {
+                    if (volTimeoutRef.current) clearTimeout(volTimeoutRef.current);
+                    setVolHovered(true);
+                  }}
+                  onMouseLeave={() => {
+                    volTimeoutRef.current = setTimeout(() => setVolHovered(false), 350);
+                  }}
+                  onFocus={() => {
+                    if (volTimeoutRef.current) clearTimeout(volTimeoutRef.current);
+                    setVolHovered(true);
+                  }}
+                  onBlur={() => {
+                    volTimeoutRef.current = setTimeout(() => setVolHovered(false), 350);
+                  }}
+                >
+                  <button
+                    onClick={toggleMute}
+                    aria-label={muted ? "Unmute" : "Mute"}
+                    className="bg-transparent border-none cursor-pointer text-neutral-400 hover:text-white p-1 flex items-center transition-colors"
+                  >
                     {muted || volume === 0 ? <VolumeX size={19} /> : <Volume2 size={19} />}
                   </button>
-                  <div className="relative flex items-center w-24">
+
+                  <div
+                    style={{
+                      width: volHovered ? 124 : 0,
+                      opacity: volHovered ? 1 : 0,
+                      marginLeft: volHovered ? 6 : 0,
+                      pointerEvents: volHovered ? "auto" : "none",
+                      transition: "width 240ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease, margin-left 240ms ease",
+                      overflow: "hidden",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
                     <input
                       type="range"
                       min={0}
@@ -2732,15 +2767,15 @@ export default function MusicPage() {
                         if (audioRef.current) audioRef.current.volume = v;
                         if (muted) setMuted(false);
                       }}
-                      className="w-full h-1.5 rounded-full cursor-pointer appearance-none bg-white/20 accent-purple-500"
+                      className="w-20 h-1.5 rounded-full cursor-pointer appearance-none bg-white/20 accent-purple-500 flex-shrink-0"
                       style={{
                         background: `linear-gradient(to right, #a855f7 0%, #a855f7 ${(muted ? 0 : volume) * 100}%, rgba(255,255,255,0.25) ${(muted ? 0 : volume) * 100}%, rgba(255,255,255,0.25) 100%)`,
                       }}
                     />
+                    <span className="text-[11px] font-mono text-neutral-400 w-6 text-right flex-shrink-0">
+                      {muted ? 0 : Math.round(volume * 100)}%
+                    </span>
                   </div>
-                  <span className="text-[11px] font-mono text-neutral-400 w-7 text-right">
-                    {muted ? 0 : Math.round(volume * 100)}%
-                  </span>
                 </div>
 
                 <button
