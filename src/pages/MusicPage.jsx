@@ -2404,7 +2404,7 @@ export default function MusicPage() {
                     style={{
                       height: "min(420px, 48vh)",
                       aspectRatio: "1 / 1",
-                      animation: playing ? `vinyl-spin ${Math.max(1.5, 20 / tempo)}s linear infinite` : "none",
+                      animation: playing ? `vinyl-spin ${Math.max(1.5, 20 / fx.tempo)}s linear infinite` : "none",
                       background: track?.artworkUrl
                         ? `radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.3) 100%), url(${track.artworkUrl}) center/cover no-repeat`
                         : colors.bgElevated,
@@ -2697,7 +2697,7 @@ export default function MusicPage() {
                   style={{ color: ratesTouched ? colors.accentLight : colors.textMuted }}
                 >
                   <Gauge size={17} />
-                  <span className="font-mono">{tempo.toFixed(2)}x</span>
+                  <span className="font-mono">{fx.tempo.toFixed(2)}x</span>
                 </button>
 
                 <button onClick={() => setRepeat((v) => !v)} className="hidden sm:flex bg-transparent border-none cursor-pointer" style={{ color: repeat ? colors.accentLight : colors.textMuted }}>
