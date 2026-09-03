@@ -10,6 +10,7 @@ const BROWSER_VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".m4v", ".mov"]);
 
 let WebTorrentCtor = null;
 let client = null;
+const pendingLoads = new Map();
 
 function isServerlessRuntime() {
   return Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -69,19 +70,31 @@ export async function loadTorrent(magnet) {
   }
 
   const wt = await getClient();
-  const existing = await wt.get(magnet);
-  if (existing) return existing;
+  if (pendingLoads.has(magnet)) return pendingLoads.get(magnet);
 
-  return new Promise((resolve, reject) => {
+  const existing = await wt.get(magnet);
+  if (existing?.files?.length) return existing;
+
+  const loadPromise = new Promise((resolve, reject) => {
     let settled = false;
+    let addedTorrent = null;
+
+    const cleanupFailedTorrent = () => {
+      if (!addedTorrent) return;
+      wt.remove(addedTorrent.infoHash || magnet).catch(() => {});
+    };
 
     const finish = (error, torrent) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
 
-      if (error) reject(error);
-      else resolve(torrent);
+      if (error) {
+        cleanupFailedTorrent();
+        reject(error);
+      } else {
+        resolve(torrent);
+      }
     };
 
     const timer = setTimeout(() => {
@@ -91,7 +104,7 @@ export async function loadTorrent(magnet) {
     }, METADATA_TIMEOUT_MS);
 
     try {
-      const addedTorrent = wt.add(magnet, (torrent) => finish(null, torrent));
+      addedTorrent = wt.add(magnet, (torrent) => finish(null, torrent));
       addedTorrent.once("error", (error) => finish(error));
       addedTorrent.on("noPeers", (type) => {
         console.warn(`Torrent has no peers via ${type}`);
@@ -100,6 +113,13 @@ export async function loadTorrent(magnet) {
       finish(error);
     }
   });
+
+  pendingLoads.set(magnet, loadPromise);
+  try {
+    return await loadPromise;
+  } finally {
+    pendingLoads.delete(magnet);
+  }
 }
 
 export function serializeFiles(torrent) {
@@ -194,6 +214,25 @@ export async function prepareMagnetPlayback(magnet) {
   };
 }
 
+function pipeFileStream(res, stream) {
+  const destroy = () => {
+    try {
+      stream.destroy();
+    } catch {
+      // Ignore cleanup errors.
+    }
+  };
+
+  res.once("close", destroy);
+  stream.once("end", () => res.removeListener("close", destroy));
+  stream.once("error", (error) => {
+    res.removeListener("close", destroy);
+    if (!res.headersSent) res.status(500).end();
+    else res.destroy(error);
+  });
+  stream.pipe(res);
+}
+
 export async function streamTorrentFile(req, res) {
   const torrent = await getLoadedTorrent(req.params.infoHash);
   if (!torrent) {
@@ -217,14 +256,7 @@ export async function streamTorrentFile(req, res) {
   if (!range) {
     res.status(200);
     res.setHeader("Content-Length", total);
-    const stream = file.createReadStream();
-    req.on("close", () => stream.destroy());
-    stream.on("error", (error) => {
-      if (!res.headersSent) res.status(500).end();
-      else res.destroy(error);
-    });
-    stream.pipe(res);
-    return;
+    return pipeFileStream(res, file.createReadStream());
   }
 
   const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
@@ -262,13 +294,7 @@ export async function streamTorrentFile(req, res) {
   res.setHeader("Content-Range", `bytes ${start}-${end}/${total}`);
   res.setHeader("Content-Length", chunkSize);
 
-  const stream = file.createReadStream({ start, end });
-  req.on("close", () => stream.destroy());
-  stream.on("error", (error) => {
-    if (!res.headersSent) res.status(500).end();
-    else res.destroy(error);
-  });
-  stream.pipe(res);
+  return pipeFileStream(res, file.createReadStream({ start, end }));
 }
 
 export async function getTorrentStatus(infoHash) {
@@ -298,6 +324,7 @@ export async function removeTorrent(infoHash) {
 }
 
 export async function destroyTorrentClient() {
+  pendingLoads.clear();
   if (!client || client.destroyed) return;
   await client.destroy();
   client = null;
