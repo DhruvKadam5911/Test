@@ -2161,16 +2161,20 @@ export default function MusicPage() {
 
           {/* Main Stage Content */}
           {narrow ? (
-            <div className="relative flex-1 min-h-0 flex flex-col justify-between px-5 pb-3 overflow-hidden select-none">
+            <div
+              className="relative flex-1 min-h-0 flex flex-col justify-between px-6 overflow-hidden select-none"
+              style={{ paddingBottom: "max(32px, calc(env(safe-area-inset-bottom, 0px) + 24px))" }}
+            >
               {/* Artwork or Lyrics Container */}
-              <div className="flex-1 min-h-0 flex items-center justify-center py-2 relative">
+              <div className="flex-1 min-h-0 flex items-center justify-center py-1 relative">
                 {displayMode === "song" ? (
                   /* YouTube Music Style Square Poster Artwork */
                   <div
                     onClick={toggle}
                     className="rounded-2xl cursor-pointer overflow-hidden border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.95)] relative flex items-center justify-center select-none active:scale-98 transition-transform"
                     style={{
-                      width: "min(240px, 60vw)",
+                      width: "min(200px, 50vw)",
+                      maxHeight: 200,
                       aspectRatio: "1 / 1",
                       background: colors.bgElevated,
                     }}
@@ -2261,8 +2265,8 @@ export default function MusicPage() {
               </div>
 
               {/* Title & Artist */}
-              <div className="text-center mt-1">
-                <div style={{ fontFamily: displayFont, fontSize: 18, fontWeight: 700, color: colors.text }} className="line-clamp-1">
+              <div className="text-center mt-2 mb-1">
+                <div style={{ fontFamily: displayFont, fontSize: 19, fontWeight: 700, color: colors.text }} className="line-clamp-1">
                   {track?.title || "Nothing playing"}
                 </div>
                 <div style={{ fontSize: 13, color: colors.textMuted, marginTop: 2 }} className="truncate">
@@ -2271,7 +2275,7 @@ export default function MusicPage() {
               </div>
 
               {/* Scrubber */}
-              <div className="mt-2.5">
+              <div className="my-2">
                 <div {...scrubHandlers} className="py-2 cursor-pointer touch-none">
                   <div className="relative h-1.5 bg-white/20 rounded-full">
                     <div className="h-full bg-white rounded-full" style={{ width: `${progress}%` }} />
@@ -2288,7 +2292,7 @@ export default function MusicPage() {
               </div>
 
               {/* Transport Buttons */}
-              <div className="flex items-center justify-between mt-2 px-2">
+              <div className="flex items-center justify-between my-2 px-2">
                 <button onClick={() => setShuffle((v) => !v)} className="p-2 bg-transparent border-none cursor-pointer" style={{ color: shuffle ? colors.accentLight : colors.textMuted }}>
                   <Shuffle size={20} />
                 </button>
@@ -2320,7 +2324,7 @@ export default function MusicPage() {
               </div>
 
               {/* Mobile Up Next Bottom Bar (Tap or Swipe Up to reveal queue) */}
-              <div className="mt-2.5 pt-2 border-t border-white/10">
+              <div className="mt-2 pt-2 border-t border-white/10">
                 <button
                   onClick={() => setMobileQueueOpen(true)}
                   onTouchStart={(e) => { touchStartYRef.current = e.touches[0].clientY; }}
